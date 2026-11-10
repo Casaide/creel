@@ -3,6 +3,7 @@
 // the unit tests can check it. Views only: floats, never read by the sim.
 
 let LEVEL_PX = 20.0     // canvas px a level (Iso.LEVEL_PX); art px: x 1.5
+let MAX_LEVEL = 9       // the highest ground a map can have (its "heights": 0 to 9, ramps a to i)
 var relief = []::float  // per cell: corner heights (levels): top, right, bottom, left
 
 def corner_heights():
@@ -45,7 +46,7 @@ def lift_at(x:float, y:float) -> float:
 // The sim point under an art-px point, on raised ground (Iso.pick): the highest ground drawn there wins.
 def pick_milli(p:float2) -> float2:
     if not relief.length: return iso_inv(p)
-    var lv = 3
+    var lv = MAX_LEVEL
     while lv >= 1:
         var m = iso_inv(p + float2 { 0.0, float(lv) * LEVEL_PX * 1.5 })
         let l = lift_at(m.x, m.y)

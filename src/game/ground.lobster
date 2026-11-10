@@ -9,7 +9,7 @@ let MASK_K = 4   // mask samples per tile
 let MASK_CH = 6  // build_masks' channels: the masks' four and the props' two
 let OCCLUDE_BACK = 2
 let OCCLUDE_SORT = 6.0
-var relief_faces = []::resource<mesh>?  // per level group 1..3
+var relief_faces = []::resource<mesh>?  // per level group 1..MAX_LEVEL
 var relief_tops = []::resource<mesh>?
 var relief_rims = []::resource<mesh>?
 class Occluder:
@@ -310,7 +310,7 @@ SHADER cliff
         UNIFORMS mvp
         gl_Position = mvp * apos;
         iface = atc;
-        iinfo = vec4(acolor.r * 3.0, acolor.g, acolor.b * 3.0, 0.0);   // the rim's height, which way it faces, the foot's height
+        iinfo = vec4(acolor.r * 9.0, acolor.g, acolor.b * 9.0, 0.0);   // the rim's height, which way it faces, the foot's height
     PIXEL
         INPUTS iface:2 iinfo:4
         UNIFORM float art_px
@@ -582,7 +582,7 @@ def face_of(out:MeshParts, ax:float, ay:float, bx:float, by:float, ha:float, hb:
         let q = quad[k]
         out.pos.push(float3 { q[0], q[1] - q[2] * LEVEL_PX * 1.5, 0.0 })
         out.tc.push(float2 { q[3], q[2] })
-        out.col.push(float4 { q[4] / 3.0, side, q[5] / 3.0, 1.0 })
+        out.col.push(float4 { q[4] / float(MAX_LEVEL), side, q[5] / float(MAX_LEVEL), 1.0 })
 
 def near_back_edge(x:int, y:int, top:float) -> bool:
     var dy = -OCCLUDE_BACK
@@ -609,9 +609,9 @@ def build_relief():
     occluders = []
     if not has_heights: return
     corner_heights()
-    let faces = map(4): MeshParts {}
-    let tops = map(4): MeshParts {}
-    let rims = map(4): MeshParts {}
+    let faces = map(MAX_LEVEL + 1): MeshParts {}
+    let tops = map(MAX_LEVEL + 1): MeshParts {}
+    let rims = map(MAX_LEVEL + 1): MeshParts {}
     let rows = dictionary<int, MeshParts>(256)
     let row_rims = dictionary<int, MeshParts>(256)
     let row_cells = dictionary<int, [int]>(256)
@@ -641,7 +641,7 @@ def build_relief():
                     else: row_cells.set(d, [ c ])
                     if rr: rims_of(rr, x, y, c)
     var g = 1
-    while g < 4:
+    while g <= MAX_LEVEL:
         relief_faces.push(parts_mesh(faces[g]))
         relief_tops.push(parts_mesh(tops[g]))
         relief_rims.push(parts_mesh(rims[g]))
