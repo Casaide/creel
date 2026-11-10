@@ -12,6 +12,18 @@ let ATMO_MIN = [ -1.0, -1.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
 let ATMO_MAX = [ 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 1.0, 4.0, 1.0 ]
 // A mood's colours ("#rrggbb").
 let ATMO_COLS = [ "shadow_tint", "highlight_tint", "haze_colour" ]
+// The sun's knobs, each one optional (left out: 0, and its colour white). The ground's shadows are drawn into a shade
+// buffer of their own (atmo_shade_begin) instead of onto the world, so they join into one shade where they overlap
+// instead of piling up black, and everything standing in them is shaded too: sun_shade is how deep that shade is (its
+// colour shade_colour, multiplied in), sun how much the sun's colour (sun_colour) warms what's lit. shafts is light in
+// the air: the sun's rays through the gaps in the shade, toward the sun (atmo_sun_dir), shaft_length how far they reach
+// (a share of the screen's height), in shaft_colour. mist is a low haze laid over the shade only (the dark woods go
+// blue and soft, the lit ground stays clear), in the haze's colour. deep darkens the frame's top, where the far woods are.
+// woods darkens and greys what has a lot of shade a good way round it (deep in a wood; a clearing stays lit), and
+// shade_grey is how much colour the shade loses.
+let ATMO_OPT = [ "sun_shade", "sun", "shafts", "shaft_length", "mist", "deep", "woods", "shade_grey" ]
+let ATMO_OPT_MAX = [ 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0 ]
+let ATMO_OPT_COLS = [ "shade_colour", "sun_colour", "shaft_colour" ]
 // The glows the game knows how to place (game/glows.lobster), and each one's knobs: colour ("#rrggbb", or "own": the
 // thing's own colour), radius (canvas px), strength (0 to 4) and flicker (0 to 1).
 let ATMO_SOURCES = [ "building_fire", "ruin_fire", "window", "flash", "shot" ]
@@ -27,6 +39,11 @@ var atmo_on = false  // a mood is set and the pass runs (atmosphere:off, or no m
 var atmo_mood = ""
 var atmo_nums = []::float
 var atmo_cols = []::float3
+var atmo_opt = []::float
+var atmo_opt_cols = []::float3
+var atmo_sun_dir = float2 { -0.6, 0.8 }  // towards the sun on the screen (y up), for the shafts: the game sets it from its sun
+var atmo_shade:resource<texture>? = nil  // the ground's shadows this frame, at half the size (red: 1 in shade)
+var atmo_shade_used = false              // the game drew shadows into it this frame
 var atmo_glows = []::AtmoGlow  // by ATMO_SOURCES; strength 0: the data doesn't name it
 var atmo_world:resource<texture>? = nil
 var atmo_light:resource<texture>? = nil
@@ -49,6 +66,30 @@ PIXELFUNCTIONS
         return mix(mix(atmo_hash(i), atmo_hash(i + vec2(1, 0)), f.x), mix(atmo_hash(i + vec2(0, 1)), atmo_hash(i + vec2(1, 1)), f.x), f.y);
     }
 
+SHADER atmo_shade_cast
+    VERTEX
+        INPUTS apos:4 atc:2 acolor:4
+        UNIFORMS mvp
+        gl_Position = mvp * apos;
+        itc = atc;
+    PIXEL
+        INPUTS itc:2
+        UNIFORMS tex0
+        if (texture(tex0, itc).a < 0.02) discard;
+        frag_color = vec4(1.0, 0.0, 0.0, 1.0);
+SHADER atmo_shade_clear
+    VERTEX
+        INPUTS apos:4 atc:2 acolor:4
+        UNIFORMS mvp
+        gl_Position = mvp * apos;
+        itc = atc;
+        icolor = acolor;
+    PIXEL
+        INPUTS itc:2 icolor:4
+        UNIFORMS tex0
+        float a = texture(tex0, itc).a * icolor.r;
+        if (a < 0.02) discard;
+        frag_color = vec4(0.0, 0.0, 0.0, a);
 SHADER atmo_glow
     VERTEX
         INPUTS apos:4 atc:2 acolor:4
@@ -111,8 +152,21 @@ SHADER atmo_pass
         UNIFORMS mvp
         gl_Position = mvp * apos;
     PIXEL
-        UNIFORMS tex0 tex1 tex2
+        UNIFORMS tex0 tex1 tex2 tex3
         UNIFORM vec2 screen
+        UNIFORM float sun_shade
+        UNIFORM float sun
+        UNIFORM float shafts
+        UNIFORM float shaft_length
+        UNIFORM float mist
+        UNIFORM float deep
+        UNIFORM float woods
+        UNIFORM float shade_grey
+        UNIFORM vec3 shade_colour
+        UNIFORM vec3 sun_colour
+        UNIFORM vec3 shaft_colour
+        UNIFORM vec2 sun_dir
+        UNIFORM float shade_soft
         UNIFORM float exposure
         UNIFORM float contrast
         UNIFORM float saturation
@@ -132,6 +186,49 @@ SHADER atmo_pass
         const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
         vec2 uv = gl_FragCoord.xy / screen;
         vec3 c = texelFetch(tex0, ivec2(gl_FragCoord.xy), 0).rgb;
+        // the sun: what's in the ground's shade takes its colour, what's lit the sun's
+        // (a soft edge, a baked pixel or so across: the art's stepped shadow edges blur into a penumbra)
+        vec2 hp = shade_soft / screen;
+        float sh = texture(tex3, uv).r * 0.2;
+        sh += (texture(tex3, uv + vec2(hp.x, 0.0)).r + texture(tex3, uv - vec2(hp.x, 0.0)).r +
+               texture(tex3, uv + vec2(0.0, hp.y)).r + texture(tex3, uv - vec2(0.0, hp.y)).r) * 0.12;
+        sh += (texture(tex3, uv + hp * 0.7).r + texture(tex3, uv - hp * 0.7).r +
+               texture(tex3, uv + vec2(hp.x, -hp.y) * 0.7).r + texture(tex3, uv - vec2(hp.x, -hp.y) * 0.7).r) * 0.08;
+        sh *= 1.0 - clamp(dot(texture(tex2, uv).rgb, LUM) * glow * 3.0, 0.0, 1.0);  // (a fire's light: no shade by it)
+        float inshade = sh * sun_shade;
+        // the woods round a place: how much shade there is a good way round it (a wide ring of taps). Deep in a wood
+        // it all goes darker and greyer, so a lit clearing stands out of it as the mock-ups' does
+        float wood = 0.0;
+        if (woods > 0.0) {
+            for (int i = 0; i < 8; i++) {
+                float a = float(i) * 0.7854 + 0.39;
+                wood += texture(tex3, uv + vec2(cos(a) * screen.y / screen.x, sin(a)) * 0.09).r;
+                wood += texture(tex3, uv + vec2(cos(a + 0.39) * screen.y / screen.x, sin(a + 0.39)) * 0.17).r;
+            }
+            wood = smoothstep(0.25, 0.9, wood / 16.0);
+        }
+        float yl = dot(c, LUM);
+        c = mix(c, vec3(yl), clamp(inshade * shade_grey + wood * woods * 0.5, 0.0, 1.0));  // (shade and deep woods lose their colour first)
+        c *= mix(mix(vec3(1.0), sun_colour, sun), shade_colour, inshade);
+        c *= 1.0 - woods * wood * (0.35 + 0.65 * sh);
+        // light in the air: the lit share of the ground between here and the sun, a few taps along its way
+        float air = 0.0;
+        if (shafts > 0.0) {
+            vec2 st = sun_dir * vec2(screen.y / screen.x, 1.0) * shaft_length / 12.0;
+            float lit = 0.0;
+            float wsum = 0.0;
+            for (int i = 1; i <= 12; i++) {
+                float w = 1.0 - float(i) / 13.0;
+                vec2 at = uv + st * float(i);
+                if (at.x < 0.0 || at.y < 0.0 || at.x > 1.0 || at.y > 1.0) break;  // (off the screen: no clamped edge smeared into rays)
+                lit += (1.0 - texture(tex3, at).r) * w;
+                wsum += w;
+            }
+            lit = wsum > 0.0 ? lit / wsum : 1.0 - sh;
+            // (rays show where light and shade meet along the way: a lit gap in dark woods, not the open clearing)
+            float n = atmo_noise(vec2(dot(gl_FragCoord.xy / screen.y, vec2(sun_dir.y, -sun_dir.x)) * 9.0, 0.5));
+            air = lit * (0.55 + 0.45 * n) * shafts * (0.35 + 0.65 * sh);
+        }
         vec3 l = texture(tex2, uv).rgb * glow;
         c = c * (1.0 + l) + l * glow_air;
         c += texture(tex1, uv).rgb * bloom;
@@ -147,6 +244,9 @@ SHADER atmo_pass
         float n = texture(tex2, uv).a;
         float h = haze * mix(0.12, 1.0, pow(smoothstep(haze_start, 1.0, uv.y), 1.4)) * (1.0 + haze_drift * (n * 2.0 - 1.0));
         c = mix(c, haze_colour, clamp(h, 0.0, 1.0));
+        c = mix(c, haze_colour * 0.55, clamp(mist * sh * (0.6 + 0.4 * n) * (0.5 + 0.5 * uv.y), 0.0, 1.0));
+        c += shaft_colour * air * (0.5 + 0.5 * uv.y);
+        c *= 1.0 - deep * smoothstep(0.55, 1.0, uv.y) * (0.4 + 0.6 * sh);
         vec2 d = (uv - 0.5) * vec2(screen.x / screen.y, 1.0);
         c *= 1.0 - vignette * smoothstep(vignette_radius, vignette_radius + 0.6, length(d));
         frag_color = vec4(c, 1.0);
@@ -170,7 +270,13 @@ def atmo_mood_problems(name:string, m:JV) -> [string]:
     let out = []::string
     if m.kind != J_OBJ: return [ "mood {name} isn\'t an object" ]
     for(m.keys) k:
-        if not has_s(ATMO_NUMS, k) and not has_s(ATMO_COLS, k) and not starts_with(k, "_"): out.push("mood {name}: no knob \'{k}\'")
+        if not has_s(ATMO_NUMS, k) and not has_s(ATMO_COLS, k) and not has_s(ATMO_OPT, k) and not has_s(ATMO_OPT_COLS, k) and not starts_with(k, "_"): out.push("mood {name}: no knob \'{k}\'")
+    for(ATMO_OPT) k, i:
+        let v = get(m, k)
+        if v and (not atmo_is_num(v) or as_float(v) < 0.0 or as_float(v) > ATMO_OPT_MAX[i]): out.push("mood {name}: \'{k}\' must be a number from 0 to {ATMO_OPT_MAX[i]}")
+    for(ATMO_OPT_COLS) k:
+        let v = get(m, k)
+        if v and (v.kind != J_STR or not atmo_hex_ok(v.s)): out.push("mood {name}: \'{k}\' must be a colour, \"#rrggbb\"")
     for(ATMO_NUMS) k, i:
         let v = get(m, k)
         if not v: out.push("mood {name}: no \'{k}\'")
@@ -224,6 +330,8 @@ def atmo_set(j:JV, mood:string) -> string:
     if bad.length: return bad[0]
     atmo_nums = map(ATMO_NUMS) k: as_float(at(m, k))
     atmo_cols = map(ATMO_COLS) k: atmo_hex(gstr(m, k, ""))
+    atmo_opt = map(ATMO_OPT) k: (if get(m, k): as_float(at(m, k)) else: 0.0)
+    atmo_opt_cols = map(ATMO_OPT_COLS) k: (if get(m, k): atmo_hex(gstr(m, k, "")) else: float3_1)
     let glows = gobj(j, "glows")
     atmo_glows = map(ATMO_SOURCES) s:
         let g = get(glows, s)
@@ -237,6 +345,23 @@ def atmo_set(j:JV, mood:string) -> string:
     return ""
 
 def atmo_num(k:string) -> float: return atmo_nums[find(ATMO_NUMS) n: n == k]
+def atmo_opt_num(k:string) -> float: return atmo_opt[find(ATMO_OPT) n: n == k]
+
+// Whether the ground's shadows go into the shade buffer this mood (else the game draws them onto the world as before).
+def atmo_shading() -> bool: return atmo_on and atmo_opt_num("sun_shade") > 0.0
+
+// The shade buffer is drawn into from here (cleared to lit), placed as the world is (its camera and zoom): the game draws
+// its ground shadows with atmo_shade_cast, then what stands up out of them (trees, rocks: not the men, who stand in the
+// shade) with atmo_shade_clear, its colour's red how much of it shows. Before atmo_begin.
+def atmo_shade_begin():
+    let ws = gl.window_size()
+    let hs = int2 { max(1, ws.x / 2), max(1, ws.y / 2) }
+    if not atmo_shade or ws != atmo_size:
+        atmo_shade = atmo_target(hs, false)
+    gl.switch_to_framebuffer(atmo_shade)
+    gl.ortho()
+    gl.clear(float4 { 0.0, 0.0, 0.0, 1.0 })
+    atmo_shade_used = true
 
 // A source's index (ATMO_SOURCES), for atmo_glow.
 def atmo_source(name:string) -> int: return find(ATMO_SOURCES) s: s == name
@@ -283,6 +408,10 @@ def atmo_begin(col:float4) -> bool:
         atmo_light_used = true  // (a new buffer: cleared before it's read)
         atmo_bloom_a = atmo_target(q, false)
         atmo_bloom_b = atmo_target(q, false)
+        if not atmo_shade:  // (a game that never draws shade: a lit one, read as none)
+            atmo_shade = atmo_target(int2 { max(1, ws.x / 2), max(1, ws.y / 2) }, false)
+            gl.switch_to_framebuffer(atmo_shade)
+            gl.clear(float4 { 0.0, 0.0, 0.0, 1.0 })
         gl.switch_to_framebuffer(atmo_bloom_a)  // (read with bloom 0: black)
         gl.clear(float4 { 0.0, 0.0, 0.0, 1.0 })
     atmo_gpos = []
@@ -353,6 +482,13 @@ def atmo_end(cam:float2, zoom:float, canvas:float):
     gl.set_uniform("screen", float(atmo_size))
     for(ATMO_NUMS) k, i: gl.set_uniform(k, atmo_nums[i])
     for(ATMO_COLS) k, i: gl.set_uniform(k, atmo_cols[i])
+    let shaded = atmo_shade_used and atmo_shade != nil
+    for(ATMO_OPT) k, i: gl.set_uniform(k, if not shaded and (k == "sun_shade" or k == "shafts" or k == "mist" or k == "woods"): 0.0 else: atmo_opt[i])
+    for(ATMO_OPT_COLS) k, i: gl.set_uniform(k, atmo_opt_cols[i])
+    gl.set_uniform("sun_dir", normalize(atmo_sun_dir))
+    gl.set_uniform("shade_soft", zoom * 1.6)
+    atmo_shade_used = false
+    gl.set_primitive_texture(3, assert atmo_shade)
     gl.set_primitive_texture(0, assert atmo_world)
     gl.set_primitive_texture(1, assert atmo_bloom_a)
     gl.set_primitive_texture(2, assert atmo_light)
