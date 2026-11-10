@@ -222,10 +222,12 @@ var b_idx = []::int
 var b_sheet = -1
 var sprite_snap = 1.0  // device px a world art px while the world is drawn: a sprite lands on a whole one (#358)
 
+var sprite_shader = "sprite"  // what flush_sprites draws with (the atmosphere's shade buffer draws the same sprites through its own)
+
 def flush_sprites():
     ui_batch_flush()  // (fills batched before these sprites go under them; and out before a bust's framebuffer)
     if b_pos.length:
-        gl.set_shader("sprite")
+        gl.set_shader(sprite_shader)
         gl.set_primitive_texture(0, sheet_texture(b_sheet))
         gl.draw_mesh("PCT", b_pos, b_col, []::float3, b_tc, []::float2, b_idx)
     b_pos = []::float3

@@ -156,6 +156,11 @@ let VG_DIRS = map([ int3 { 1, 0, 0 }, int3 { -1, 0, 0 }, int3 { 0, 1, 0 }, int3 
                     int3 { 1, 1, 1 }, int3 { -1, 1, 1 }, int3 { 1, -1, 1 }, int3 { -1, -1, 1 }, int3 { 1, 1, -1 }, int3 { -1, 1, -1 },
                     int3 { 1, -1, -1 }, int3 { -1, -1, -1 } ]) d: normalize(float(d))
 
+// How much each voxel's light is jittered before it's banded (1: Age of Anything's speckled, painterly look; near 0: crisp
+// bands with hard edges between them), and how many bands a leaf's light has. A game sets them before it bakes.
+var vg_dither = 1.0
+var vg_leaf_tones = 5.0
+
 // The grid as a sprite in world_bake's frame (as voxel_bake's): RGBA bytes, rows top down, its size, the origin on it.
 def vg_sprite(g:vgrid, shadow:bool) -> string, int, int, float2:
     // the voxels that show somewhere: those with an empty side
@@ -214,13 +219,13 @@ def vg_sprite(g:vgrid, shadow:bool) -> string, int, int, float2:
         let light = (if look.tree: 0.30 else: 0.42) + 0.80 * diff * ao + 0.12 * ao + 0.10 * rim
         let tn = float(g.tone[i]) / 127.5 - 1.0
         let speck = vg_hash(g.seed + 1, x, y, z)
-        let jitter = (speck - 0.5) * 0.18
+        let jitter = (speck - 0.5) * 0.18 * vg_dither
         let dz = c.z / k + float(g.lo.z) / k  // height, design units
         let shady = n.x * to_light.x + n.y * to_light.y < -0.3 * magnitude(float2 { to_light.x, to_light.y })
         var col = float3_0
         if m == VG_LEAF:
             let lv = clamp(light, 0.0, 1.25) / 1.25
-            let q = floor(clamp(lv + jitter, 0.0, 1.0) * 5.0 + 0.5) / 5.0
+            let q = floor(clamp(lv + jitter, 0.0, 1.0) * vg_leaf_tones + 0.5) / vg_leaf_tones
             let sun = look.leaf[0]
             let mid = look.leaf[1]
             let shade = look.leaf[2]
@@ -238,7 +243,7 @@ def vg_sprite(g:vgrid, shadow:bool) -> string, int, int, float2:
             col = float3 { 0.80, 0.66, 0.44 } * (0.55 + 0.45 * clamp(light, 0.0, 1.2) + grain)
         else:
             let rt = vg_at(tones, c.x, c.y, c.z)
-            var lq = clamp((light - 0.25) / 1.0 + (rt - 0.5) * 0.25 + (speck - 0.5) * 0.12, 0.0, 0.999)
+            var lq = clamp((light - 0.25) / 1.0 + (rt - 0.5) * 0.25 + (speck - 0.5) * 0.12 * vg_dither, 0.0, 0.999)
             if m == VG_CUT: lq = min(lq + 0.18, 0.999)
             col = look.rock[int(lq * float(look.rock.length))]
             if speck > 0.965: col *= 1.18  // quartz
