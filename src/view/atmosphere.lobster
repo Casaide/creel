@@ -1,0 +1,361 @@
+// The atmosphere (#411): the world drawn into a texture, then to the screen through one pass that grades its colour
+// (a cool shadow tint, a warm highlight tint, exposure, contrast, saturation), lays air over it (haze by screen height,
+// drifting slowly), darkens the corners and adds a soft bloom. Glows (fires, lit windows, flashes) are drawn into a
+// light buffer at a quarter of the size, which the pass uses to light what they fall on. Every value is a mood's in
+// data/atmosphere.json (a mod's merges over it); a mood of zeros is the frame drawn straight. No game rules here: the
+// game says where the glows are (game/glows.lobster).
+
+// A mood's numbers, each with its range: the pass's uniforms of the same names.
+let ATMO_NUMS = [ "exposure", "contrast", "saturation", "shadow", "highlight", "haze", "haze_start", "haze_drift", "vignette",
+                  "vignette_radius", "bloom", "bloom_threshold", "glow", "glow_air" ]
+let ATMO_MIN = [ -1.0, -1.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 ]
+let ATMO_MAX = [ 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 1.0, 4.0, 1.0 ]
+// A mood's colours ("#rrggbb").
+let ATMO_COLS = [ "shadow_tint", "highlight_tint", "haze_colour" ]
+// The glows the game knows how to place (game/glows.lobster), and each one's knobs: colour ("#rrggbb", or "own": the
+// thing's own colour), radius (canvas px), strength (0 to 4) and flicker (0 to 1).
+let ATMO_SOURCES = [ "building_fire", "ruin_fire", "window", "flash", "shot" ]
+
+class AtmoGlow:
+    col:float3
+    own:bool
+    radius:float
+    strength:float
+    flicker:float
+
+var atmo_on = false  // a mood is set and the pass runs (atmosphere:off, or no mood: the frame is drawn straight)
+var atmo_mood = ""
+var atmo_nums = []::float
+var atmo_cols = []::float3
+var atmo_glows = []::AtmoGlow  // by ATMO_SOURCES; strength 0: the data doesn't name it
+var atmo_world:resource<texture>? = nil
+var atmo_light:resource<texture>? = nil
+var atmo_bloom_a:resource<texture>? = nil
+var atmo_bloom_b:resource<texture>? = nil
+var atmo_size = int2_0
+var atmo_light_used = true  // the light buffer had something in it last frame
+var atmo_gpos = []::float3  // this frame's glows, as quads
+var atmo_gcol = []::float4
+var atmo_gtc = []::float2
+var atmo_gidx = []::int
+
+let ATMO_SHADERS = """
+PIXELFUNCTIONS
+    float atmo_hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float atmo_noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(atmo_hash(i), atmo_hash(i + vec2(1, 0)), f.x), mix(atmo_hash(i + vec2(0, 1)), atmo_hash(i + vec2(1, 1)), f.x), f.y);
+    }
+
+SHADER atmo_glow
+    VERTEX
+        INPUTS apos:4 atc:2 acolor:4
+        UNIFORMS mvp
+        gl_Position = mvp * apos;
+        itc = atc;
+        icolor = acolor;
+    PIXEL
+        INPUTS itc:2 icolor:4
+        float d = length(itc * 2.0 - 1.0);
+        float f = clamp(1.0 - d, 0.0, 1.0);
+        frag_color = vec4(icolor.rgb * icolor.a * 4.0 * f * f, 0.0);
+SHADER atmo_air
+    VERTEX
+        INPUTS apos:4
+        UNIFORMS mvp
+        gl_Position = mvp * apos;
+    PIXEL
+        UNIFORM vec2 screen
+        UNIFORM vec2 cam
+        UNIFORM float zoom
+        UNIFORM float time
+        vec2 sp = gl_FragCoord.xy * 4.0;
+        vec2 wp = (vec2(sp.x, screen.y - sp.y) - screen * 0.5) / zoom + cam;
+        float n = atmo_noise(wp / 520.0 + vec2(time * 0.021, time * 0.008)) * 0.65 + atmo_noise(wp / 190.0 - vec2(time * 0.034, -time * 0.012)) * 0.35;
+        frag_color = vec4(0.0, 0.0, 0.0, n);
+SHADER atmo_bright
+    VERTEX
+        INPUTS apos:4
+        UNIFORMS mvp
+        gl_Position = mvp * apos;
+    PIXEL
+        UNIFORMS tex0
+        UNIFORM float bloom_threshold
+        ivec2 p = ivec2(gl_FragCoord.xy) * 4;
+        vec3 c = (texelFetch(tex0, p + ivec2(1, 1), 0).rgb + texelFetch(tex0, p + ivec2(3, 1), 0).rgb +
+                  texelFetch(tex0, p + ivec2(1, 3), 0).rgb + texelFetch(tex0, p + ivec2(3, 3), 0).rgb) * 0.25;
+        float m = max(c.r, max(c.g, c.b));
+        float k = clamp((m - bloom_threshold) / max(1.0 - bloom_threshold, 0.001), 0.0, 1.0);
+        frag_color = vec4(c * k * k, 1.0);
+SHADER atmo_blur
+    VERTEX
+        INPUTS apos:4
+        UNIFORMS mvp
+        gl_Position = mvp * apos;
+    PIXEL
+        UNIFORMS tex0
+        UNIFORM vec2 size
+        UNIFORM vec2 dir
+        vec2 uv = gl_FragCoord.xy / size;
+        vec2 o1 = dir * 1.3846 / size;
+        vec2 o2 = dir * 3.2308 / size;
+        vec3 c = texture(tex0, uv).rgb * 0.2270;
+        c += (texture(tex0, uv + o1).rgb + texture(tex0, uv - o1).rgb) * 0.3162;
+        c += (texture(tex0, uv + o2).rgb + texture(tex0, uv - o2).rgb) * 0.0703;
+        frag_color = vec4(c, 1.0);
+SHADER atmo_pass
+    VERTEX
+        INPUTS apos:4
+        UNIFORMS mvp
+        gl_Position = mvp * apos;
+    PIXEL
+        UNIFORMS tex0 tex1 tex2
+        UNIFORM vec2 screen
+        UNIFORM float exposure
+        UNIFORM float contrast
+        UNIFORM float saturation
+        UNIFORM float shadow
+        UNIFORM float highlight
+        UNIFORM float haze
+        UNIFORM float haze_start
+        UNIFORM float haze_drift
+        UNIFORM float vignette
+        UNIFORM float vignette_radius
+        UNIFORM float bloom
+        UNIFORM float glow
+        UNIFORM float glow_air
+        UNIFORM vec3 shadow_tint
+        UNIFORM vec3 highlight_tint
+        UNIFORM vec3 haze_colour
+        const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
+        vec2 uv = gl_FragCoord.xy / screen;
+        vec3 c = texelFetch(tex0, ivec2(gl_FragCoord.xy), 0).rgb;
+        vec3 l = texture(tex2, uv).rgb * glow;
+        c = c * (1.0 + l) + l * glow_air;
+        c += texture(tex1, uv).rgb * bloom;
+        c *= 1.0 + exposure;
+        float y = dot(c, LUM);
+        vec3 st = shadow_tint / max(dot(shadow_tint, LUM), 0.01);
+        vec3 ht = highlight_tint / max(dot(highlight_tint, LUM), 0.01);
+        c *= mix(vec3(1.0), st, shadow * (1.0 - smoothstep(0.04, 0.42, y)));
+        c *= mix(vec3(1.0), ht, highlight * smoothstep(0.08, 0.55, y));
+        c = (c - 0.45) * (1.0 + contrast) + 0.45;
+        y = dot(c, LUM);
+        c = mix(vec3(y), c, 1.0 + saturation);
+        float n = texture(tex2, uv).a;
+        float h = haze * mix(0.12, 1.0, pow(smoothstep(haze_start, 1.0, uv.y), 1.4)) * (1.0 + haze_drift * (n * 2.0 - 1.0));
+        c = mix(c, haze_colour, clamp(h, 0.0, 1.0));
+        vec2 d = (uv - 0.5) * vec2(screen.x / screen.y, 1.0);
+        c *= 1.0 - vignette * smoothstep(vignette_radius, vignette_radius + 0.6, length(d));
+        frag_color = vec4(c, 1.0);
+"""
+
+def atmo_hex_ok(s:string) -> bool:
+    if s.length != 7 or s[0] != '#': return false
+    for(6) i:
+        let c = s[i + 1]
+        if not ((c >= '0' and c <= '9') or (c >= 'a' and c <= 'f') or (c >= 'A' and c <= 'F')): return false
+    return true
+
+def atmo_hex(s:string) -> float3:
+    def byte(i:int) -> float: return float(string_to_int(s.substring(i, 2), 16)) / 255.0
+    return float3 { byte(1), byte(3), byte(5) }
+
+def atmo_is_num(v:JV) -> bool: return v.kind == J_INT or v.kind == J_FLOAT
+
+// What's wrong with one mood, or [].
+def atmo_mood_problems(name:string, m:JV) -> [string]:
+    let out = []::string
+    if m.kind != J_OBJ: return [ "mood {name} isn\'t an object" ]
+    for(m.keys) k:
+        if not has_s(ATMO_NUMS, k) and not has_s(ATMO_COLS, k) and not starts_with(k, "_"): out.push("mood {name}: no knob \'{k}\'")
+    for(ATMO_NUMS) k, i:
+        let v = get(m, k)
+        if not v: out.push("mood {name}: no \'{k}\'")
+        elif not atmo_is_num(v) or as_float(v) < ATMO_MIN[i] or as_float(v) > ATMO_MAX[i]: out.push("mood {name}: \'{k}\' must be a number from {ATMO_MIN[i]} to {ATMO_MAX[i]}")
+    for(ATMO_COLS) k:
+        let v = get(m, k)
+        if not v or v.kind != J_STR or not atmo_hex_ok(v.s): out.push("mood {name}: \'{k}\' must be a colour, \"#rrggbb\"")
+    return out
+
+// What's wrong with an atmosphere.json (moods, default, maps, glows), or [].
+def atmo_problems(j:JV) -> [string]:
+    let out = []::string
+    let moods = gobj(j, "moods")
+    if not moods.keys.length: out.push("atmosphere.json has no moods")
+    for(sorted_strs(moods.keys)) name:
+        if not starts_with(name, "_"): append_into(out, atmo_mood_problems(name, at(moods, name)))
+    let def_mood = gstr(j, "default", "")
+    if not has(moods, def_mood): out.push("atmosphere.json: the default \'{def_mood}\' isn\'t a mood")
+    let maps = gobj(j, "maps")
+    for(sorted_strs(maps.keys)) id:
+        let v = at(maps, id)
+        if v.kind != J_STR or not has(moods, v.s): out.push("atmosphere.json: map {id}\'s mood isn\'t a mood")
+    let glows = gobj(j, "glows")
+    for(sorted_strs(glows.keys)) s:
+        if starts_with(s, "_"): continue
+        if not has_s(ATMO_SOURCES, s):
+            out.push("atmosphere.json: no glow source \'{s}\' (sources: {concat_string(ATMO_SOURCES, ", ")})")
+            continue
+        let g = at(glows, s)
+        let col = get(g, "colour")
+        if not col or col.kind != J_STR or not (col.s == "own" or atmo_hex_ok(col.s)): out.push("glow {s}: \'colour\' must be \"#rrggbb\" or \"own\"")
+        for([ "radius", "strength", "flicker" ]) k, i:
+            let v = get(g, k)
+            let top = [ 1000.0, 4.0, 1.0 ][i]
+            if not v or not atmo_is_num(v) or as_float(v) < 0.0 or as_float(v) > top: out.push("glow {s}: \'{k}\' must be a number from 0 to {top}")
+    return out
+
+// The mood a match on map_id gets: the asked one ("": the map's, else the default).
+def atmo_mood_for(j:JV, map_id:string, asked:string) -> string:
+    if asked != "": return asked
+    return gstr(gobj(j, "maps"), map_id, gstr(j, "default", ""))
+
+// Sets the mood (and the glows) from the data, "off" for none. Returns what's wrong ("" when it's set): an unknown mood.
+def atmo_set(j:JV, mood:string) -> string:
+    atmo_on = false
+    atmo_mood = mood
+    if mood == "off": return ""
+    let m = get(gobj(j, "moods"), mood)
+    if not m: return "no mood \'{mood}\' in atmosphere.json (moods: {concat_string(sorted_strs(filter(gobj(j, "moods").keys) k: not starts_with(k, "_")), ", ")})"
+    let bad = atmo_mood_problems(mood, m)
+    if bad.length: return bad[0]
+    atmo_nums = map(ATMO_NUMS) k: as_float(at(m, k))
+    atmo_cols = map(ATMO_COLS) k: atmo_hex(gstr(m, k, ""))
+    let glows = gobj(j, "glows")
+    atmo_glows = map(ATMO_SOURCES) s:
+        let g = get(glows, s)
+        if g:
+            let c = gstr(g, "colour", "own")
+            AtmoGlow { if c == "own": float3_1 else: atmo_hex(c), c == "own", as_float(at(g, "radius")), as_float(at(g, "strength")),
+                       as_float(at(g, "flicker")) }
+        else:
+            AtmoGlow { float3_1, true, 0.0, 0.0, 0.0 }
+    atmo_on = true
+    return ""
+
+def atmo_num(k:string) -> float: return atmo_nums[find(ATMO_NUMS) n: n == k]
+
+// A source's index (ATMO_SOURCES), for atmo_glow.
+def atmo_source(name:string) -> int: return find(ATMO_SOURCES) s: s == name
+
+// A glow of source src this frame at p (canvas px, as atmo_end is given them), its own colour col (for "own"), k its
+// share (a flash fading: below 1), seed its own flicker.
+def atmo_glow(src:int, p:float2, col:float3, k:float, seed:float):
+    if not atmo_on: return
+    let g = atmo_glows[src]
+    if g.strength <= 0.0 or k <= 0.0: return
+    let t = gl.time()
+    let wave = 0.5 + 0.5 * sin((t * 9.0 + seed) * 57.29578) * sin((t * 2.7 + seed * 1.7) * 57.29578)
+    let f = (1.0 - g.flicker * wave) * k
+    let r = g.radius * (1.0 + 0.08 * g.flicker * sin((t * 5.3 + seed * 0.6) * 57.29578))
+    let c = if g.own: col else: g.col
+    let a = min(1.0, g.strength * f / 4.0)
+    let v = atmo_gpos.length
+    for([ float2 { -1.0, -1.0 }, float2 { 1.0, -1.0 }, float2 { 1.0, 1.0 }, float2 { -1.0, 1.0 } ]) o:
+        atmo_gpos.push(float3 { p.x + o.x * r, p.y + o.y * r * 0.62, 0.0 })  // (flattened: it lies on the ground)
+        atmo_gcol.push(float4 { c.x, c.y, c.z, a })
+        atmo_gtc.push((o + float2_1) * 0.5)
+    for([ 0, 1, 2, 0, 2, 3 ]) i: atmo_gidx.push(v + i)
+
+def atmo_target(size:int2, nearest:bool) -> resource<texture>:
+    let tf = texture_format_nomipmap | texture_format_clamp | (if nearest: texture_format_nearest_mag | texture_format_nearest_min else: texture_format_none)
+    return gl.create_blank_texture(int3 { size.x, size.y, 0 }, tf)
+
+def atmo_quad(size:int2):
+    let s = float(size)
+    gl.draw_mesh("P", [ float3 { 0.0, 0.0, 0.0 }, float3 { s.x, 0.0, 0.0 }, float3 { s.x, s.y, 0.0 }, float3 { 0.0, s.y, 0.0 } ], []::float4, []::float3,
+                 []::float2, []::float2, [ 0, 2, 1, 0, 3, 2 ])
+
+def atmo_quarter() -> int2: return int2 { max(1, atmo_size.x / 4), max(1, atmo_size.y / 4) }
+
+// The world is drawn into the texture from here (cleared to col), when the pass is on. Returns whether it is.
+def atmo_begin(col:float4) -> bool:
+    if not atmo_on: return false
+    let ws = gl.window_size()
+    if ws != atmo_size or not atmo_world:
+        atmo_size = ws
+        atmo_world = atmo_target(ws, true)
+        let q = atmo_quarter()
+        atmo_light = atmo_target(q, false)
+        atmo_light_used = true  // (a new buffer: cleared before it's read)
+        atmo_bloom_a = atmo_target(q, false)
+        atmo_bloom_b = atmo_target(q, false)
+        gl.switch_to_framebuffer(atmo_bloom_a)  // (read with bloom 0: black)
+        gl.clear(float4 { 0.0, 0.0, 0.0, 1.0 })
+    atmo_gpos = []
+    atmo_gcol = []
+    atmo_gtc = []
+    atmo_gidx = []
+    gl.switch_to_framebuffer(atmo_world)
+    gl.ortho()
+    gl.clear(col)
+    return true
+
+// Back into the world's texture, as it was, after something drew into another (the still ground's picture).
+def atmo_rebind():
+    gl.switch_to_framebuffer(atmo_world)
+    gl.ortho()
+
+// The world done: the glows into the light buffer (placed as the world is: its camera and zoom, canvas px of a world
+// unit), the bloom, then the pass to the screen. The screen's ortho and blend after.
+def atmo_end(cam:float2, zoom:float, canvas:float):
+    let q = atmo_quarter()
+    let was = gl.blend(blend_none)
+    let drift = atmo_num("haze") > 0.0 and atmo_num("haze_drift") > 0.0
+    let lit = drift or atmo_gidx.length > 0
+    if lit or atmo_light_used:  // (nothing to light and nothing lit last frame: the buffer stays as it is, a switch saved)
+        gl.switch_to_framebuffer(atmo_light)
+        gl.ortho()
+        gl.clear(float4 { 0.0, 0.0, 0.0, 0.5 })  // (alpha: the haze's drift, 0.5 where it doesn't drift)
+    atmo_light_used = lit
+    if drift:  // (the drift is low in detail: worked out here, at a quarter of the pixels)
+        gl.set_shader("atmo_air")
+        gl.set_uniform("screen", float(atmo_size))
+        gl.set_uniform("cam", cam)
+        gl.set_uniform("zoom", zoom)
+        gl.set_uniform("time", gl.time())
+        atmo_quad(q)
+    if atmo_gidx.length:
+        gl.blend(blend_add)
+        gl.set_shader("atmo_glow")
+        gl.scale(float(q.x) / float(atmo_size.x)):
+            gl.translate(float(atmo_size) / 2.0):
+                gl.scale(zoom):
+                    gl.translate(-cam):
+                        gl.scale(canvas): gl.draw_mesh("PCT", atmo_gpos, atmo_gcol, []::float3, atmo_gtc, []::float2, atmo_gidx)
+        gl.blend(blend_none)
+    if atmo_num("bloom") > 0.0:
+        gl.switch_to_framebuffer(atmo_bloom_a)
+        gl.ortho()
+        gl.set_shader("atmo_bright")
+        gl.set_uniform("bloom_threshold", atmo_num("bloom_threshold"))
+        gl.set_primitive_texture(0, assert atmo_world)
+        atmo_quad(q)
+        gl.switch_to_framebuffer(atmo_bloom_b)  // (one blur, across then down, its taps spread wide: each switch makes and frees a framebuffer)
+        gl.ortho()
+        gl.set_shader("atmo_blur")
+        gl.set_uniform("size", float(q))
+        gl.set_uniform("dir", float2 { 2.5, 0.0 })
+        gl.set_primitive_texture(0, assert atmo_bloom_a)
+        atmo_quad(q)
+        gl.switch_to_framebuffer(atmo_bloom_a)
+        gl.ortho()
+        gl.set_uniform("dir", float2 { 0.0, 2.5 })
+        gl.set_primitive_texture(0, assert atmo_bloom_b)
+        atmo_quad(q)
+    gl.switch_to_framebuffer(nil)
+    gl.ortho()
+    gl.blend(blend_none)
+    gl.set_shader("atmo_pass")
+    gl.set_uniform("screen", float(atmo_size))
+    for(ATMO_NUMS) k, i: gl.set_uniform(k, atmo_nums[i])
+    for(ATMO_COLS) k, i: gl.set_uniform(k, atmo_cols[i])
+    gl.set_primitive_texture(0, assert atmo_world)
+    gl.set_primitive_texture(1, assert atmo_bloom_a)
+    gl.set_primitive_texture(2, assert atmo_light)
+    atmo_quad(atmo_size)
+    gl.blend(was)
+    gl.set_shader("color")

@@ -1,0 +1,49 @@
+// The sim, the bots and the match start, with no window: everything a headless match needs.
+// Compiled by ../../../check.sh to prove these modules need nothing from a game but its hooks.
+import from "../../../src"
+import std
+import vec
+import dictionary
+import gen.json
+import gen.sha256
+import gen.rng
+import gen.datalib
+import lib.consts
+import lib.fixed
+import lib.tokens
+import lib.state
+import lib.flow
+import lib.spatial
+import lib.orders
+import lib.movement
+import lib.steering
+import lib.fog
+import lib.map
+import lib.economy
+import lib.tech
+import lib.combat
+import lib.siege
+import lib.eco_bot
+import lib.garrison
+import lib.heal
+import lib.heroes
+import lib.match
+import lib.trade
+import lib.animals
+import lib.bridges
+import lib.walls
+import lib.abilities
+import lib.trails
+import lib.commands
+import lib.ai_cfg
+import lib.scout
+import lib.land
+import lib.expand
+import lib.bot
+import lib.walls_ai
+import lib.world
+import hooks.active
+import gen.setup
+import gen.modes
+import gen.start
+print "sim: ok"
