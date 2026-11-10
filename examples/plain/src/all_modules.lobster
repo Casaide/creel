@@ -89,5 +89,6 @@ import hooks.view
 import game.world_draw
 import game.controls
 import game.order_marks
+import game.hud_kit
 import game.cursor_images
 print "all modules: ok"
