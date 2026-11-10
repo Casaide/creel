@@ -6,16 +6,17 @@
 def akb_tile_name(look:string, links:int) -> string: return "{look}@L{links}"
 def akb_wall_tile(look:string, links:int) -> int: return -1
 
-// Cracks over building slot b when it's damaged.
-def draw_cracks_of(b:int): return
+// Paths worn between buildings: re-plan them (true if anything was rebuilt), and is this tile on one?
+def refresh_paths() -> bool: return false
+def on_path(t:float2) -> bool: return false
 
 // Town life: add to the draw list, then draw what goes over it.
 def collect_town(): return
 def draw_town(): return
 
-// Bake these cultures' buildings if they aren't yet (the tech tree page shows them); how many frames it made.
-def bake_buildings_for(archs:[string]) -> int: return 0
+// Cracks over building slot b when it's damaged.
+def draw_cracks_of(b:int): return
 
-// Paths worn between buildings: re-plan them (true if anything was rebuilt), and is this tile on one?
-def refresh_paths() -> bool: return false
-def on_path(t:float2) -> bool: return false
+// The top bar, and the HUD's scale.
+def draw_topbar(speed:float, paused:bool): return
+def hud_s() -> float: return ui()

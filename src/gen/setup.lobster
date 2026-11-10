@@ -20,7 +20,6 @@ let EVAL_ADD = [ "attack", "hp", "range", "speed" ]
 // What the setup keeps that the sim's arrays don't (the views and the lobby read some of it).
 var su_sides = []::JV  // per player: its units and what it lacks and has (the table a match is built from); a mode lifts lacks
 var su_rules = jobj()
-var su_races = []::JV  // per player: what the game made it from (the panels read its name and family)
 var su_classes = []::string
 var su_btypes = []::JV  // buildings.json entries, sorted by id (planned left out)
 var su_btype_ids = []::string
