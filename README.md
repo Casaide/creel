@@ -1,0 +1,58 @@
+# Creel
+
+An engine for classic-style real-time strategy games, written in [Lobster](https://github.com/aardappel/lobster).
+It was built for Age of Anything and split out of it so other games can stand on it.
+
+It's early. The engine runs a full game today, but it has only ever had one game on it, so expect rough edges and
+changes without notice.
+
+## What's in it
+
+- **The sim** (`src/lib`): integers only, a fixed 20 Hz tick, driven only by commands, so it plays the same on every
+  machine. Movement and flow fields, formations, fog, combat, economy, tech, sieges, walls, garrisons, trade, animals.
+- **Bots** (`src/lib`): a reference AI that plays through the same commands a player does.
+- **Packs** (`src/gen`): a game and its mods are folders of data in one format, merged in load order. Match setup from
+  a plain table of unit types.
+- **Voxel art** (`src/view`): units, buildings and props built from data or from `.vox` files, baked to sprites in
+  8 facings.
+- **Drawing** (`src/view`, `src/game`): the ground, fog, effects, a sprite batcher, a widget layer, and the atmosphere
+  pass (colour grade, haze, vignette, bloom, glow from fires, with moods per map).
+- **Network** (`src/net`): lockstep over TCP, and finding games on the local network.
+- **Sound** (`src/audio`, `src/game/audio.lobster`): an offline synth and the in-game player.
+
+## Using it
+
+A game keeps Creel beside its own code, usually as a git submodule, and starts each program with:
+
+```
+import from "../creel/src"
+```
+
+That adds Creel's folder to Lobster's search path, so `import lib.world` and the rest find it. The game brings its
+data, its main program, and the hook functions the sim calls (`examples/plain/src/hooks/active.lobster` lists them,
+doing nothing).
+
+Creel needs the `master` branch of [this Lobster fork](https://github.com/Drache93/lobster), which is upstream Lobster
+plus a few changes that are being offered upstream. `LOBSTER_VERSION` has the commit it was last tested with.
+
+```
+./check.sh    # Creel's modules compile with nothing from a game but the example's hooks
+```
+
+## Coming soon
+
+- `creel new <game>`: a new game from a template that runs on the first try.
+- `creel run`, `creel test`, `creel check`: one command over the tools that are separate scripts today.
+- `creel voxel <file>`: open a voxel model or `.vox` file in a live preview, and write one back out.
+- `creel pack`, `creel build`: zip a pack with its signature; release builds for Mac, Steam Deck, Android, Windows.
+- The window, camera and match loop as engine modules. Today they still live in Age of Anything's main program.
+- A small test pack, so the engine's tests run here without a game.
+- Docs: a tutorial, and a reference for the data files and hooks.
+
+`docs/roadmap.md` has the longer list, including what's left of the lighting and atmosphere work.
+
+## Licence
+
+Apache 2.0. See `LICENSE` and `NOTICE`.
+
+The code was written by Claude (Anthropic's AI), directed by Dominic.
