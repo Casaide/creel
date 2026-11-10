@@ -54,6 +54,7 @@ import view.facing
 import view.shot_look
 import view.node
 import view.art
+import view.png
 import view.bake_cache
 import view.atmosphere
 import net.lockstep
@@ -67,12 +68,14 @@ import game.doodads
 import game.fx
 import game.topbar_fit
 import game.ui
+import game.view_state
 import game.text_cache
 import game.levels
 import game.perf
 import game.pace
 import game.window_mode
 import game.window_switch
+import game.world_view
 import model.kit
 import model.grng
 import model.base
@@ -81,5 +84,10 @@ import view.voxel_mesh
 import view.voxel_grid
 import view.vox
 import view.voxel
+import game.voxel_units
+import hooks.view
+import game.world_draw
+import game.controls
+import game.order_marks
 import game.cursor_images
 print "all modules: ok"
