@@ -54,6 +54,7 @@ import view.facing
 import view.shot_look
 import view.node
 import view.art
+import view.png
 import view.bake_cache
 import view.atmosphere
 import net.lockstep
@@ -82,5 +83,6 @@ import view.voxel_mesh
 import view.voxel_grid
 import view.vox
 import view.voxel
+import game.voxel_units
 import game.cursor_images
 print "all modules: ok"
