@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 58" width="128" height="116" role="img" aria-label="Creel">
+  <g fill="none" stroke="#16324a" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M32 6L58 19V39L32 52L6 39V19ZM6 19L32 32L58 19M32 32V52"/>
+    <path d="M12.5 22.25v20M19 25.5v20M25.5 28.75v20M38.5 28.75v20M45 25.5v20M51.5 22.25v20M6 30L32 43L58 30"/>
+    <path d="M32 6V13.5M58 19H43M32 32V24.5M6 19H21" stroke-width="1.8"/>
+    <path d="M32 13.5L43 19L32 24.5L21 19Z" fill="#16324a" stroke="none"/>
+  </g>
+</svg>

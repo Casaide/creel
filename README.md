@@ -1,4 +1,11 @@
-# Creel
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo/creel-mark-dark.svg">
+    <img src="docs/logo/creel-mark.svg" alt="" width="96">
+  </picture>
+</p>
+
+<h1 align="center">Creel</h1>
 
 An engine for classic-style real-time strategy games, written in [Lobster](https://github.com/aardappel/lobster).
 It was built for Age of Anything and split out of it so other games can stand on it.
