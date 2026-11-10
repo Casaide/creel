@@ -51,6 +51,7 @@ import hooks.active
 import gen.setup
 import gen.modes
 import gen.start
+import gen.races
 import view.facing
 import view.shot_look
 import view.node
