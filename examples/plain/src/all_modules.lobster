@@ -67,6 +67,7 @@ import game.doodads
 import game.fx
 import game.topbar_fit
 import game.ui
+import game.view_state
 import game.text_cache
 import game.levels
 import game.perf
