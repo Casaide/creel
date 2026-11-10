@@ -359,3 +359,8 @@ def strip_edges(s:string) -> string:
     while a < b and s[a] <= ' ': a++
     while b > a and s[b - 1] <= ' ': b--
     return substring(s, a, b - a)
+
+// A snake_case id as a title ("nile" -> "Nile", "sea_folk" -> "Sea Folk").
+def capitalize(s:string) -> string:
+    let words = filter(tokenize(s, "_", " ")) w: w.length > 0
+    return concat_string(map(words) w: uppercase(substring(w, 0, 1)) + lowercase(substring(w, 1, w.length - 1)), " ")

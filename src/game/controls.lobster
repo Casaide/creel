@@ -662,6 +662,7 @@ def unit_name(k:int) -> string: return unit_names.get(k, t_slot[k])
 def bname(k:int) -> string: return building_names.get(k, bt_name[k])
 
 var end_watching = false  // the end screen put away (Keep watching)
+def end_screen_up() -> bool: return winner >= 0 and not end_watching and not menu_open
 
 def draw_hud(paused:bool, speed:float):
     gl.set_shader("color")

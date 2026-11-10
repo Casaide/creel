@@ -41,8 +41,9 @@ game. Still to come:
   names are still the ones Age of Anything used and will change as a second game shows what they should be.
 - [ ] The frame loop and the options every game wants (captures, recording, the frame budget, watch, speed). Until it
   moves, a new game copies that part of Age of Anything's main program.
-- [ ] The panels (unit panel, top bar, tech tree), pad and touch input and cursors, which lean on each other and on
-  the game's ideas (crests, age badges).
+- [x] The panels (`game/panel`, `topbar`, `techtree`, `techtree_page`), pad and touch play (`game/pad`, `touch`), the
+  cursors and research in words (`gen/effect_words`). They read `su_races` (per player, what the game made it from)
+  for a side's name and family, and still carry one game's ideas (crests, age badges, a wonder clock).
 - [ ] Names in the moved code that are a game's: the hub is still looked up as `town_center` in one capture tool.
 - [ ] Saving and loading: the code is generated from the sim's globals plus the game's. The generator moves here.
 - [ ] A small test pack (a flat map, a worker, a spear, a hub, a farm), and the engine's tests running on it here:

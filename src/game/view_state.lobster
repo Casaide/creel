@@ -39,3 +39,10 @@ var rec_clean = false  // clean: nothing over the world: no top bar, panel, mini
 var raze_at = -1.0  // raze:<seconds>: your buildings but the Town Center and walls fall then (captures of ruins)
 
 var in_net_match = false  // a network match: orders go through lockstep
+var watch = false  // the bots play every side, yours too
+
+// A line of news over the world for a few seconds (saved, loaded, a group kept, the other player left).
+var news = ""
+var news_t = -100.0
+
+var tree_hover_arg = ""  // treehover:<node key>: that node hovered on the tech tree page (captures)

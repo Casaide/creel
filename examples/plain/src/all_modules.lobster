@@ -45,6 +45,7 @@ import gen.json
 import gen.sha256
 import gen.rng
 import gen.datalib
+import gen.effect_words
 import gen.mods
 import hooks.active
 import gen.setup
@@ -88,6 +89,13 @@ import game.voxel_units
 import hooks.view
 import game.world_draw
 import game.controls
+import game.pad
+import game.techtree
+import game.panel
+import game.topbar
 import game.order_marks
+import game.touch
+import game.techtree_page
 import game.cursor_images
+import game.cursors
 print "all modules: ok"
