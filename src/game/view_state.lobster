@@ -30,3 +30,12 @@ var tree_open = false  // the tech tree page
 var typing_text = false  // a text field has the keys
 
 var touch_play = false  // touch: play by touch, through the pad's controls (game/touch.lobster; the Android build)
+
+// What captures and tests ask of the view (a game sets these from its options).
+var reveal = false  // reveal: the view shows the whole map, the fog off (view only: filming, and perf: sees every unit)
+var shot = ""
+var rec_dir = ""  // record:<dir>: from:<seconds> of play on, for:<seconds>, one PNG a frame at 30 fps, then quit (a clip of the game)
+var rec_clean = false  // clean: nothing over the world: no top bar, panel, minimap, groups, health bars or banner (a clip for showing)
+var raze_at = -1.0  // raze:<seconds>: your buildings but the Town Center and walls fall then (captures of ruins)
+
+var in_net_match = false  // a network match: orders go through lockstep

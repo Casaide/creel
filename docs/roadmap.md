@@ -36,10 +36,14 @@ speed), and too much warm haze with a strong vignette turns team colours muddy i
 Creel was one tree with Age of Anything until 2026-11-10. What moved first is every module that compiles without the
 game. Still to come:
 
-- [ ] The window, camera, world drawing, selection, orders, minimap and the match loop, which are still inside the
-  game's main program. Until they move, a new game copies that file.
-- [ ] The panels (unit panel, top bar, tech tree), pad and touch input, cursors, and the voxel unit drawing, which lean
-  on that loop's state.
+- [x] The camera, world drawing, selection, orders and minimap (`game/world_view`, `world_draw`, `controls`,
+  `voxel_units`). The game's share comes in through the functions in `examples/plain/src/hooks/view.lobster`; their
+  names are still the ones Age of Anything used and will change as a second game shows what they should be.
+- [ ] The frame loop and the options every game wants (captures, recording, the frame budget, watch, speed). Until it
+  moves, a new game copies that part of Age of Anything's main program.
+- [ ] The panels (unit panel, top bar, tech tree), pad and touch input and cursors, which lean on each other and on
+  the game's ideas (crests, age badges).
+- [ ] Names in the moved code that are a game's: the hub is still looked up as `town_center` in one capture tool.
 - [ ] Saving and loading: the code is generated from the sim's globals plus the game's. The generator moves here.
 - [ ] A small test pack (a flat map, a worker, a spear, a hub, a farm), and the engine's tests running on it here:
   determinism, saves, lockstep, pathing, movement, the frame budget.
