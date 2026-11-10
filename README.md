@@ -15,8 +15,11 @@ changes without notice.
   a plain table of unit types.
 - **Voxel art** (`src/view`): units, buildings and props built from data or from `.vox` files, baked to sprites in
   8 facings.
-- **Drawing** (`src/view`, `src/game`): the ground, fog, effects, a sprite batcher, a widget layer, and the atmosphere
-  pass (colour grade, haze, vignette, bloom, glow from fires, with moods per map).
+- **Drawing** (`src/view`, `src/game`): the world (units, buildings, walls and gates, ruins, props), the ground, fog,
+  effects, a sprite batcher, a widget layer, and the atmosphere pass (colour grade, haze, vignette, bloom, glow from
+  fires, with moods per map).
+- **Playing** (`src/game`): the camera, selection and orders, control groups, placing buildings and walls, the
+  minimap.
 - **Network** (`src/net`): lockstep over TCP, and finding games on the local network.
 - **Sound** (`src/audio`, `src/game/audio.lobster`): an offline synth and the in-game player.
 
@@ -29,8 +32,8 @@ import from "../creel/src"
 ```
 
 That adds Creel's folder to Lobster's search path, so `import lib.world` and the rest find it. The game brings its
-data, its main program, and the hook functions the sim calls (`examples/plain/src/hooks/active.lobster` lists them,
-doing nothing).
+data, its main program, and the functions Creel calls into: the sim's hooks (`examples/plain/src/hooks/active.lobster`)
+and the view's (`hooks/view.lobster`). The example's versions do nothing.
 
 Creel needs the `master` branch of [this Lobster fork](https://github.com/Drache93/lobster), which is upstream Lobster
 plus a few changes that are being offered upstream. `LOBSTER_VERSION` has the commit it was last tested with.
@@ -45,7 +48,9 @@ plus a few changes that are being offered upstream. `LOBSTER_VERSION` has the co
 - `creel run`, `creel test`, `creel check`: one command over the tools that are separate scripts today.
 - `creel voxel <file>`: open a voxel model or `.vox` file in a live preview, and write one back out.
 - `creel pack`, `creel build`: zip a pack with its signature; release builds for Mac, Steam Deck, Android, Windows.
-- The window, camera and match loop as engine modules. Today they still live in Age of Anything's main program.
+- The frame loop and the panels (unit panel, top bar, tech tree, pad and touch controls) as engine modules. The
+  camera, world drawing, selection, orders and minimap are here; the loop that runs them is still in Age of Anything's
+  main program.
 - A small test pack, so the engine's tests run here without a game.
 - Docs: a tutorial, and a reference for the data files and hooks.
 
