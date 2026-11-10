@@ -29,3 +29,5 @@ def hex_of(html:string) -> string:  // "#RRGGBB(AA)" -> "rrggbb", as Color.to_ht
     return lowercase(substring(h, 0, 6))
 
 // ---- bake keys and lookups (PartShape)
+
+var type_gen = 0  // bumped by the game when any unit type changes its look mid-match (the views rebuild)
