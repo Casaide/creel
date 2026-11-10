@@ -41,8 +41,12 @@ game. Still to come:
   names are still the ones Age of Anything used and will change as a second game shows what they should be.
 - [ ] The frame loop and the options every game wants (captures, recording, the frame budget, watch, speed). Until it
   moves, a new game copies that part of Age of Anything's main program.
-- [ ] The panels (unit panel, top bar, tech tree), pad and touch input and cursors, which lean on each other and on
-  the game's ideas (crests, age badges).
+- [x] The HUD kit (`game/hud_kit`): what a game's panels are drawn with (scale, icons, queued text, wells, frames,
+  buttons, bars, a cost row, a tooltip card). The panels themselves (top bar, command panel, tech tree) are a game's
+  and stay out of Creel.
+- [ ] Pad and touch play and the cursors. They are input, so they belong here, but today they call one game's panel
+  (its wheel of orders, where its panel and top bar are). They move once those calls are a small set of hooks.
+- [ ] A plain top bar and panel in `examples/plain`, built from the kit, for a new game to start from.
 - [ ] Names in the moved code that are a game's: the hub is still looked up as `town_center` in one capture tool.
 - [ ] Saving and loading: the code is generated from the sim's globals plus the game's. The generator moves here.
 - [ ] A small test pack (a flat map, a worker, a spear, a hub, a farm), and the engine's tests running on it here:
