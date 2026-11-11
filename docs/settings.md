@@ -36,6 +36,7 @@ All in `game/ground`, read every frame (any time).
 | `ground_bank_px` | `0.0` | The water lies this many art pixels below its banks, with a cut bank drawn above it. 0: level with the ground. |
 | `ground_shore_soft` | `0.0` | More than 0: no sand at the shore. The ground slopes down to the water over this much of the water mask, its own cover going damper and darker in steps, earth by the waterline. |
 | `ground_water_shallow`, `ground_water_deep` | a teal, a deep teal | The water's colour at its edge and where it is deep. |
+| `ground_water_ripples` | `0.0` | How many ripples the water carries. 0: a calm water's few pale glints. Toward 1: more of them, whiter, all along the water, as on a running stream. |
 | `ground_litter_fringe` | `0.0` | More than 0: the edge of the forest floor (the litter laid under trees) is scattered a pixel at a time over this much of its weight, so leaves thin out onto the grass with no drawn line. |
 
 ## Raised ground
