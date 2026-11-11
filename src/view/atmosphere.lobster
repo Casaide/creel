@@ -217,12 +217,15 @@ SHADER atmo_pass
         float unit = sg.b * unit_lift;  // (a unit the player must not lose: lifted out of the dark)
         float fire = 1.0 - clamp(dot(texture(tex2, uv).rgb, LUM) * glow * 3.0, 0.0, 1.0);  // (a fire's light: no shade by it)
         float sh = sg.r * fire * (1.0 - unit * 0.6);
-        float inshade = sh * sun_shade;
+        // (water keeps most of its light in shade: shade on a stream reads as a road. Told by its colour: blue over red)
+        float wet = smoothstep(0.06, 0.22, c.b - c.r);
+        float inshade = sh * sun_shade * (1.0 - 0.6 * wet);
         // under a closed canopy (the game's atmo_shade_canopy, pixel for pixel: no blur): deep in a wood it all goes
         // darker, greyer and misty, so a lit clearing stands out of it as the mock-ups' does
         float wood = sg.g * fire * (1.0 - unit);
         float yl = dot(c, LUM);
-        c = mix(c, vec3(yl), clamp(inshade * shade_grey + wood * woods * 0.5, 0.0, 1.0));  // (shade and deep woods lose their colour first)
+        // (shade and deep woods lose their colour first; a unit keeps its own, only darkened)
+        c = mix(c, vec3(yl), clamp((inshade * shade_grey + wood * woods * 0.5) * (1.0 - unit), 0.0, 1.0));
         c *= mix(mix(vec3(1.0), sun_colour, sun), shade_colour, inshade);
         c *= 1.0 - woods * wood * (0.35 + 0.65 * sh);
         // light in the air: the lit share of the ground between here and the sun, a few taps along its way
@@ -261,7 +264,7 @@ SHADER atmo_pass
         float n = texture(tex2, uv).a;
         float h = haze * mix(0.12, 1.0, pow(smoothstep(haze_start, 1.0, uv.y), 1.4)) * (1.0 + haze_drift * (n * 2.0 - 1.0));
         c = mix(c, haze_colour, clamp(h, 0.0, 1.0));
-        c = mix(c, haze_colour * 0.55, clamp(mist * wood * (0.8 + 0.2 * n) * (0.5 + 0.5 * uv.y), 0.0, 1.0));
+        c = mix(c, haze_colour * 0.85, clamp(mist * wood * (0.8 + 0.2 * n) * (0.5 + 0.5 * uv.y), 0.0, 1.0));
         c += shaft_colour * air * (0.5 + 0.5 * uv.y);
         c *= 1.0 - deep * smoothstep(0.55, 1.0, uv.y) * (0.4 + 0.6 * sh);
         c *= 1.0 + unit * 0.35;

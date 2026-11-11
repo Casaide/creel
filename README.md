@@ -34,6 +34,8 @@ changes without notice.
 
 - [`docs/settings.md`](docs/settings.md): the settings a game can change (the camera's angle, the ground, cliffs), kept
   up to date as they are added.
+- [`docs/atmosphere.md`](docs/atmosphere.md): the atmosphere pass in full: every mood knob and its range, mood blending,
+  glows, and the shade buffer's shaders, channels and draw order.
 - [`docs/roadmap.md`](docs/roadmap.md): what is still to move into the engine.
 
 ## Using it
