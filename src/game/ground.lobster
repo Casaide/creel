@@ -141,13 +141,14 @@ SHADER terrain
         UNIFORM float bank_px
         UNIFORM float water_edge
         UNIFORM float shore_soft
+        UNIFORM float tile_h
         UNIFORM float litter_fringe
         UNIFORM vec3 water_shallow
         UNIFORM vec3 water_deep
         vec2 world = iworld.xy;
         float ishade = iworld.z;
         float a = world.x / 32.0;
-        float b = world.y / 16.0;
+        float b = world.y / tile_h;
         vec2 t = vec2((a + b) * 0.5, (b - a) * 0.5);
         if (t.x < 0.0 || t.y < 0.0 || t.x > map_size.x || t.y > map_size.y) discard;
         // The textures are sized on the screen and pinned to the world: a texel an art px (the units' voxel; a device px
@@ -324,7 +325,7 @@ SHADER terrain
             if (bank_px > 0.0) {
                 for (int bk = 0; bk < 3; bk++) {
                     vec2 w2 = world - vec2(0.0, bank_px * (bk == 0 ? 1.0 : bk == 1 ? 0.66 : 0.3) / 1.5);
-                    vec2 t2 = vec2((w2.x / 32.0 + w2.y / 16.0) * 0.5, (w2.y / 16.0 - w2.x / 32.0) * 0.5);
+                    vec2 t2 = vec2((w2.x / 32.0 + w2.y / tile_h) * 0.5, (w2.y / tile_h - w2.x / 32.0) * 0.5);
                     float wa = texture(tex0, t2 / map_size).r + (vnoise(t2 * 2.3) * 0.6 + vnoise(t2 * 6.1) * 0.4 - 0.5) * 0.3 + edge_n * 0.06;
                     if (wa <= water_edge) {
                         float e = hs(floor(ap / vec2(2.0, 1.0)), 77u);
@@ -349,7 +350,7 @@ SHADER cliff
     PIXEL
         INPUTS iface:2 iinfo:4
         UNIFORM float art_px
-        float level_px = 20.0;
+        UNIFORM float level_px
         vec2 face = iface;
         float rim = iinfo.x;
         float foot = iinfo.z;
@@ -693,7 +694,7 @@ def build_relief():
             let tm = parts_mesh(rm)
             if tm:
                 let rr = row_rims.get(d)
-                occluders.push(Occluder { sort_y: (float(d) * 16.0 - OCCLUDE_SORT) * 1.5, tops: tm, rims: if rr: parts_mesh(rr) else: nil,
+                occluders.push(Occluder { sort_y: (float(d) * iso_k * 2000.0 / 3.0 - OCCLUDE_SORT) * 1.5, tops: tm, rims: if rr: parts_mesh(rr) else: nil,
                                           cells: row_cells.get(d) or [] })
 
 def sorted_ints_g(xs:[int]) -> [int]:
@@ -712,6 +713,7 @@ def draw_relief(art_px:float):
         if f:
             gl.set_shader("cliff")
             gl.set_uniform("art_px", art_px)
+            gl.set_uniform("level_px", LEVEL_PX)
             gl.render_mesh(f)
         let t = relief_tops[k]
         if t: draw_terrain_mesh(t, art_px)
@@ -734,6 +736,7 @@ def draw_terrain_mesh(m:resource<mesh>, art_px:float):
     gl.set_uniform("bank_px", ground_bank_px)
     gl.set_uniform("water_edge", ground_water_edge)
     gl.set_uniform("shore_soft", ground_shore_soft)
+    gl.set_uniform("tile_h", iso_k * 2000.0 / 3.0)  // (half a tile down the screen, canvas px: 16 at 30 degrees)
     gl.set_uniform("litter_fringe", ground_litter_fringe)
     gl.set_uniform("water_shallow", ground_water_shallow)
     gl.set_uniform("water_deep", ground_water_deep)
@@ -768,6 +771,7 @@ def draw_ground(art_px:float):
     gl.set_uniform("bank_px", ground_bank_px)
     gl.set_uniform("water_edge", ground_water_edge)
     gl.set_uniform("shore_soft", ground_shore_soft)
+    gl.set_uniform("tile_h", iso_k * 2000.0 / 3.0)  // (half a tile down the screen, canvas px: 16 at 30 degrees)
     gl.set_uniform("litter_fringe", ground_litter_fringe)
     gl.set_uniform("water_shallow", ground_water_shallow)
     gl.set_uniform("water_deep", ground_water_deep)

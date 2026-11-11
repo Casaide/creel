@@ -2,7 +2,7 @@
 // The hills' corner heights (from the sim's levels) and the screen points of things on the ground: no drawing, so
 // the unit tests can check it. Views only: floats, never read by the sim.
 
-let LEVEL_PX = 20.0     // canvas px a level (Iso.LEVEL_PX); art px: x 1.5
+var LEVEL_PX = 20.0     // canvas px a level (Iso.LEVEL_PX); art px: x 1.5 (a setting with the camera's angle: see view/facing)
 let MAX_LEVEL = 9       // the highest ground a map can have (its "heights": 0 to 9, ramps a to i)
 var relief = []::float  // per cell: corner heights (levels): top, right, bottom, left
 var relief_sharp = false  // true: raised ground keeps its corners (sheer cliffs that jog square); false: an outer corner is cut down to the ground below (a hill's rounded shoulder)
