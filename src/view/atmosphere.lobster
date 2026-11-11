@@ -19,8 +19,8 @@ let ATMO_COLS = [ "shadow_tint", "highlight_tint", "haze_colour" ]
 // the air: the sun's rays through the gaps in the shade, toward the sun (atmo_sun_dir), shaft_length how far they reach
 // (a share of the screen's height), in shaft_colour. mist is a low haze laid over the shade only (the dark woods go
 // blue and soft, the lit ground stays clear), in the haze's colour. deep darkens the frame's top, where the far woods are.
-// woods darkens and greys what has a lot of shade a good way round it (deep in a wood; a clearing stays lit), and
-// shade_grey is how much colour the shade loses.
+// woods darkens and greys what lies under a closed canopy (what the game drew with atmo_shade_canopy: deep in a wood; a
+// clearing stays lit), mist lays the haze over it, and shade_grey is how much colour the shade loses.
 let ATMO_OPT = [ "sun_shade", "sun", "shafts", "shaft_length", "mist", "deep", "woods", "shade_grey" ]
 let ATMO_OPT_MAX = [ 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0 ]
 let ATMO_OPT_COLS = [ "shade_colour", "sun_colour", "shaft_colour" ]
@@ -77,6 +77,18 @@ SHADER atmo_shade_cast
         UNIFORMS tex0
         if (texture(tex0, itc).a < 0.02) discard;
         frag_color = vec4(1.0, 0.0, 0.0, 1.0);
+// (the shade of a closed canopy overhead: shade, and its green says deep in a wood)
+SHADER atmo_shade_canopy
+    VERTEX
+        INPUTS apos:4 atc:2 acolor:4
+        UNIFORMS mvp
+        gl_Position = mvp * apos;
+        itc = atc;
+    PIXEL
+        INPUTS itc:2
+        UNIFORMS tex0
+        if (texture(tex0, itc).a < 0.02) discard;
+        frag_color = vec4(1.0, 1.0, 0.0, 1.0);
 SHADER atmo_shade_clear
     VERTEX
         INPUTS apos:4 atc:2 acolor:4
@@ -187,20 +199,13 @@ SHADER atmo_pass
         vec3 c = texelFetch(tex0, ivec2(gl_FragCoord.xy), 0).rgb;
         // the sun: what's in the ground's shade takes its colour, what's lit the sun's
         // (hard edged, pixel for pixel: the art is crisp, so is its shade)
-        float sh = texelFetch(tex3, ivec2(gl_FragCoord.xy), 0).r;
-        sh *= 1.0 - clamp(dot(texture(tex2, uv).rgb, LUM) * glow * 3.0, 0.0, 1.0);  // (a fire's light: no shade by it)
+        vec2 sg = texelFetch(tex3, ivec2(gl_FragCoord.xy), 0).rg;
+        float fire = 1.0 - clamp(dot(texture(tex2, uv).rgb, LUM) * glow * 3.0, 0.0, 1.0);  // (a fire's light: no shade by it)
+        float sh = sg.r * fire;
         float inshade = sh * sun_shade;
-        // the woods round a place: how much shade there is a good way round it (a wide ring of taps). Deep in a wood
-        // it all goes darker and greyer, so a lit clearing stands out of it as the mock-ups' does
-        float wood = 0.0;
-        if (woods > 0.0) {
-            for (int i = 0; i < 8; i++) {
-                float a = float(i) * 0.7854 + 0.39;
-                wood += texture(tex3, uv + vec2(cos(a) * screen.y / screen.x, sin(a)) * 0.09).r;
-                wood += texture(tex3, uv + vec2(cos(a + 0.39) * screen.y / screen.x, sin(a + 0.39)) * 0.17).r;
-            }
-            wood = smoothstep(0.25, 0.9, wood / 16.0);
-        }
+        // under a closed canopy (the game's atmo_shade_canopy, pixel for pixel: no blur): deep in a wood it all goes
+        // darker, greyer and misty, so a lit clearing stands out of it as the mock-ups' does
+        float wood = sg.g * fire;
         float yl = dot(c, LUM);
         c = mix(c, vec3(yl), clamp(inshade * shade_grey + wood * woods * 0.5, 0.0, 1.0));  // (shade and deep woods lose their colour first)
         c *= mix(mix(vec3(1.0), sun_colour, sun), shade_colour, inshade);
@@ -241,7 +246,7 @@ SHADER atmo_pass
         float n = texture(tex2, uv).a;
         float h = haze * mix(0.12, 1.0, pow(smoothstep(haze_start, 1.0, uv.y), 1.4)) * (1.0 + haze_drift * (n * 2.0 - 1.0));
         c = mix(c, haze_colour, clamp(h, 0.0, 1.0));
-        c = mix(c, haze_colour * 0.55, clamp(mist * sh * (0.6 + 0.4 * n) * (0.5 + 0.5 * uv.y), 0.0, 1.0));
+        c = mix(c, haze_colour * 0.55, clamp(mist * wood * (0.8 + 0.2 * n) * (0.5 + 0.5 * uv.y), 0.0, 1.0));
         c += shaft_colour * air * (0.5 + 0.5 * uv.y);
         c *= 1.0 - deep * smoothstep(0.55, 1.0, uv.y) * (0.4 + 0.6 * sh);
         vec2 d = (uv - 0.5) * vec2(screen.x / screen.y, 1.0);
