@@ -355,17 +355,18 @@ SHADER cliff
         UNIFORMS mvp
         gl_Position = mvp * apos;
         iface = atc;
-        iinfo = vec4(acolor.r * 9.0, acolor.g, acolor.b * 9.0, 0.0);   // the rim's height, which way it faces, the foot's height
+        iinfo = vec4(acolor.r * 9.0, acolor.g, acolor.b * 9.0, acolor.a);   // the rim's height, which way it faces (0 to 1), the foot's height, 1 on a tile's edge (0.5 off the grid)
     PIXEL
         INPUTS iface:2 iinfo:4
         UNIFORM float art_px
         UNIFORM float level_px
+        UNIFORM float snow
         vec2 face = iface;
         float rim = iinfo.x;
         float foot = iinfo.z;
         float side = iinfo.y;
         float bay = bayer(ivec2(gl_FragCoord.xy / art_px));
-        vec2 p = floor(vec2(face.x * 35.8 + side * 300.0, (rim - face.y) * level_px) / 1.5) * 1.5;
+        vec2 p = floor(vec2(face.x * 35.8 + (iinfo.w > 0.75 ? side * 300.0 : 0.0), (rim - face.y) * level_px) / 1.5) * 1.5;
         float hpx = face.y * level_px;
         float depth = max((rim - foot) * level_px, 1.0);
         float k = clamp(p.y / depth, 0.0, 1.0);
@@ -386,7 +387,7 @@ SHADER cliff
         else if (cy < 0.2) col *= 0.62;
         if (fx < 0.05 && hash(vec2(bx, course + 9.0)) > 0.35) col *= 0.55;
         if (vnoise(vec2(p.x * 0.4, p.y * 0.07) + course) > 0.84 && fx > 0.45 && fx < 0.52) col *= 0.62;
-        if (vnoise(p * 0.12 + 40.0) > 0.68 && cy > 0.45 && hash(floor(p / 1.5)) > 0.3) col = mix(col, vec3(0.36, 0.45, 0.20), 0.6);
+        if (iinfo.w > 0.75 && vnoise(p * 0.12 + 40.0) > 0.68 && cy > 0.45 && hash(floor(p / 1.5)) > 0.3) col = mix(col, vec3(0.36, 0.45, 0.20), 0.6);
         float lip = 2.0 + 2.5 * vnoise(vec2(p.x * 0.3, 2.0)) + (hash(vec2(floor(p.x / 1.5), 5.0)) > 0.8 ? 2.0 : 0.0);
         if (p.y < lip) {
             col = mix(vec3(0.31, 0.416, 0.173), vec3(0.47, 0.53, 0.23), g);
@@ -394,11 +395,18 @@ SHADER cliff
         } else if (p.y < lip + 1.5) {
             col *= 0.55;
         }
-        col *= side > 0.5 ? 1.0 : 0.74;
+        col *= mix(0.74, 1.0, clamp(side, 0.0, 1.0));
         col *= mix(1.0, 0.8, floor(clamp(k + bay * 0.2, 0.0, 0.999) * 3.0) / 2.0);
         float scree = 2.0 + 3.0 * vnoise(vec2(p.x * 0.25, 9.0));
         if (depth - p.y < scree && hash(floor(p / 1.5) + 31.0) > 0.45) col = mix(col, vec3(0.30, 0.26, 0.19), 0.6);
         if (depth - p.y < 1.6) col *= 0.55;
+        if (snow > 0.0) {  // (snow lies on the lip, on each course's top and in the scree, a few pixels at a time)
+            vec3 sn = vec3(0.84, 0.87, 0.92) * mix(0.78, 1.0, clamp(side, 0.0, 1.0));
+            float hs1 = hash(floor(p / 1.5) + 61.0);
+            if (p.y < lip && hs1 < snow * 1.2) col = sn;
+            else if (cy > lip_c - 0.06 && hs1 < snow * 0.9) col = mix(col, sn, 0.85);
+            else if (depth - p.y < scree && hs1 < snow) col = mix(col, sn, 0.75);
+        }
         frag_color = vec4(col, 1.0);
 """
 
@@ -416,6 +424,7 @@ var paths_tex:resource<texture>? = nil
 var arc_tex:resource<texture>? = nil
 var wear_tex:resource<texture>? = nil
 var ground_quad:resource<mesh>? = nil
+var relief_snow = 0.0  // 0 to 1: how much snow lies on the cliff faces' ledges, lips and scree
 var fog_mesh:resource<mesh>? = nil
 let GROUND_HZ = 15.0  // how often still ground redraws (only its water moves; a fragment shader over every pixel: the laptop ran hot)
 var ground_tex:resource<texture>? = nil
@@ -606,7 +615,79 @@ def slope_shade(m:float2, h:float) -> float:
         else: if ok_hi: hi / e else: if ok_lo: lo / e else: 0.0
     return 0.05 * h + clamp(g[0] * 0.8 + g[1] * 0.3, -1.0, 1.0) * 0.16
 
+// A cliff tile's lattice cells, nearest the back first, each cut in two triangles: steep ones facing the camera go to
+// the faces (the cliff shader, its rock in courses), ones facing away are left out (the ground in front hides them),
+// the rest go to the tops. Each triangle goes in the group of its highest point (one list of one: all in that one).
+let CLIFF_STEEP = 0.5  // levels a tile: a triangle steeper than this is rock (a face, or the scree at its foot)
+def cliff_cells(tops:[MeshParts], faces:[MeshParts], x:int, y:int, c:int):
+    let k = CLIFF_STEPS
+    let gw = W * k + 1
+    let step = 1.0 / float(k)
+    var s = 0
+    while s <= 2 * k - 2:
+        var i = max(0, s - k + 1)
+        while i <= min(s, k - 1):
+            let j = s - i
+            let o = (y * k + j) * gw + x * k + i
+            let hk = [ cliff_h[o], cliff_h[o + 1], cliff_h[o + gw + 1], cliff_h[o + gw] ]
+            let mk = [ float2 { float(x) + float(i) * step, float(y) + float(j) * step }, float2 { float(x) + float(i + 1) * step, float(y) + float(j) * step },
+                       float2 { float(x) + float(i + 1) * step, float(y) + float(j + 1) * step }, float2 { float(x) + float(i) * step, float(y) + float(j + 1) * step } ]
+            if max(max(hk[0], hk[1]), max(hk[2], hk[3])) > 0.0:
+                // (cut along the diagonal whose ends lie nearest in height: it runs along the rim, so a rim at 45
+                // degrees is drawn straight and not as a saw)
+                let cut = if abs(hk[1] - hk[3]) < abs(hk[0] - hk[2]) - 0.01: [ [ 0, 1, 3 ], [ 1, 2, 3 ] ] else: [ [ 0, 1, 2 ], [ 0, 2, 3 ] ]
+                for(cut) tri:
+                    cliff_tri(tops, faces, map(tri) v: mk[v], map(tri) v: hk[v])
+            i++
+        s++
+
+def cliff_tri(tops:[MeshParts], faces:[MeshParts], m:[float2], h:[float]):
+    let q = map(3) v: iso(m[v].x * 1000.0, m[v].y * 1000.0) - float2 { 0.0, h[v] * LEVEL_PX * 1.5 }
+    let flat = map(3) v: iso(m[v].x * 1000.0, m[v].y * 1000.0)
+    let area = (q[1].x - q[0].x) * (q[2].y - q[0].y) - (q[1].y - q[0].y) * (q[2].x - q[0].x)
+    let area0 = (flat[1].x - flat[0].x) * (flat[2].y - flat[0].y) - (flat[1].y - flat[0].y) * (flat[2].x - flat[0].x)
+    if area * area0 <= 0.0: return
+    let top = max(max(h[0], h[1]), h[2])
+    let foot = min(min(h[0], h[1]), h[2])
+    let g = max(1, min(int(ceiling(top - 0.001)), MAX_LEVEL))
+    // the slope: the plane through the three points
+    let ax = m[1].x - m[0].x
+    let ay = m[1].y - m[0].y
+    let ah = h[1] - h[0]
+    let bx = m[2].x - m[0].x
+    let by = m[2].y - m[0].y
+    let bh = h[2] - h[0]
+    let nx = ay * bh - ah * by
+    let ny = ah * bx - ax * bh
+    let nz = ax * by - ay * bx
+    let gx = -nx / nz
+    let gy = -ny / nz
+    // (a ramp climbs a level a tile: it stays ground, unless a wall cuts into it)
+    let on_ramp = ramp[clamp(int((m[0].y + m[1].y + m[2].y) / 3.0), 0, H - 1) * W + clamp(int((m[0].x + m[1].x + m[2].x) / 3.0), 0, W - 1)] == 1
+    if sqrt(gx * gx + gy * gy) > (if on_ramp: 1.6 else: CLIFF_STEEP):
+        // (a face and the scree at its foot are the rock's: their rim the level it falls from, their foot the one
+        // it falls to, so the courses, the lip and the scree run on across the triangles)
+        let rim = float(int(ceiling(top - 0.15)))
+        let base = float(int(floor(foot + 0.001)))
+        let out = faces[if faces.length == 1: 0 else: g]
+        // (which way it faces: down the slope; toward +y is lit, toward +x is in shade, as the edges' faces are)
+        let dn = abs(gx) + abs(gy)
+        let side = clamp(0.5 + 0.5 * (gx - gy) / max(dn, 0.001), 0.0, 1.0)
+        for(3) v:
+            out.pos.push(float3 { q[v].x, q[v].y, 0.0 })
+            out.tc.push(float2 { q[v].x / 48.0, h[v] })
+            out.col.push(float4 { rim / float(MAX_LEVEL), side, base / float(MAX_LEVEL), 0.5 })
+    else:
+        let out = tops[if tops.length == 1: 0 else: g]
+        for(3) v:
+            out.pos.push(float3 { q[v].x, q[v].y, 0.0 })
+            out.tc.push(float2 { h[v] * LEVEL_PX, slope_shade(m[v], h[v]) })
+            out.col.push(float4_1)
+
 def top_quad(out:MeshParts, x:int, y:int, c:int):
+    if is_cliff_tile(c):
+        cliff_cells([ out ], [ MeshParts {} ], x, y, c)
+        return
     let rough = tile_rough(c)
     let n = if rough: ROUGH_STEPS else: 1
     let step = 1.0 / float(n)
@@ -644,6 +725,7 @@ def edge_points(c:int, n:int, side:int) -> [[float]]:
         else: [ float(x) + t, float(y + 1), height_in(c, t, 1.0), height_in(n, t, 0.0) ]
 
 def rims_of(out:MeshParts, x:int, y:int, c:int):
+    if is_cliff_tile(c) or (x > 0 and is_cliff_tile(c - 1)) or (y > 0 and is_cliff_tile(c - W)): return
     let edges = []::[[float]]
     if x > 0 and not (relief[c * 4] - relief[(c - 1) * 4 + 1] < 0.5 and relief[c * 4 + 3] - relief[(c - 1) * 4 + 2] < 0.5):
         edges.push(map(edge_points(c - 1, c, 0)) p: [ p[0], p[1], p[3] ])
@@ -692,6 +774,25 @@ def near_back_edge(x:int, y:int, top:float) -> bool:
         dy++
     return false
 
+def tiles_from_back() -> [int]:
+    let out = []::int
+    for(W + H - 1) d:
+        var x = max(0, d - H + 1)
+        while x <= min(d, W - 1):
+            out.push((d - x) * W + x)
+            x++
+    return out
+
+// The highest point of cliff tile c.
+def cliff_top(c:int) -> float:
+    let k = CLIFF_STEPS
+    let gw = W * k + 1
+    var top = 0.0
+    for(k + 1) j:
+        for(k + 1) i:
+            top = max(top, cliff_h[(c / W * k + j) * gw + c % W * k + i])
+    return top
+
 def parts_mesh(m:MeshParts) -> resource<mesh>?:
     if not m.pos.length: return nil
     return gl.new_mesh("PCT", m.pos, m.col, []::float3, m.tc, []::float2, map(m.pos.length) i: i)
@@ -710,27 +811,30 @@ def build_relief():
     let rows = dictionary<int, MeshParts>(256)
     let row_rims = dictionary<int, MeshParts>(256)
     let row_cells = dictionary<int, [int]>(256)
-    for(H) y:
-        for(W) x:
-            let c = y * W + x
-            let top = max(max(relief[c * 4], relief[c * 4 + 1]), max(relief[c * 4 + 2], relief[c * 4 + 3]))
-            if top > 0.0:
-                let g = int(ceiling(top))
-                top_quad(tops[g], x, y, c)
-                rims_of(rims[g], x, y, c)
-                if x + 1 < W: face_of(faces[g], c, c + 1, 0)
-                if y + 1 < H: face_of(faces[g], c, c + W, 1)
-                if near_back_edge(x, y, top):
-                    let d = x + y
-                    if not rows.get(d): rows.set(d, MeshParts {})
-                    if not row_rims.get(d): row_rims.set(d, MeshParts {})
-                    let rm = rows.get(d)
-                    let rr = row_rims.get(d)
-                    if rm: top_quad(rm, x, y, c)
-                    let cs = row_cells.get(d)
-                    if cs: cs.push(c)
-                    else: row_cells.set(d, [ c ])
-                    if rr: rims_of(rr, x, y, c)
+    // (with cliffs, tile by tile from the back, so where the ground folds over itself the near part is drawn last)
+    let order = if cliff_tile.length: tiles_from_back() else: map(W * H) c: c
+    for(order) c:
+        let x = c % W
+        let y = c / W
+        let top = if is_cliff_tile(c): cliff_top(c) else: max(max(relief[c * 4], relief[c * 4 + 1]), max(relief[c * 4 + 2], relief[c * 4 + 3]))
+        if top > 0.0:
+            let g = min(int(ceiling(top)), MAX_LEVEL)
+            if is_cliff_tile(c): cliff_cells(tops, faces, x, y, c)
+            else: top_quad(tops[g], x, y, c)
+            rims_of(rims[g], x, y, c)
+            if x + 1 < W: face_of(faces[g], c, c + 1, 0)
+            if y + 1 < H: face_of(faces[g], c, c + W, 1)
+            if near_back_edge(x, y, top):
+                let d = x + y
+                if not rows.get(d): rows.set(d, MeshParts {})
+                if not row_rims.get(d): row_rims.set(d, MeshParts {})
+                let rm = rows.get(d)
+                let rr = row_rims.get(d)
+                if rm: top_quad(rm, x, y, c)
+                let cs = row_cells.get(d)
+                if cs: cs.push(c)
+                else: row_cells.set(d, [ c ])
+                if rr: rims_of(rr, x, y, c)
     var g = 1
     while g <= MAX_LEVEL:
         relief_faces.push(parts_mesh(faces[g]))
@@ -763,6 +867,7 @@ def draw_relief(art_px:float):
             gl.set_shader("cliff")
             gl.set_uniform("art_px", art_px)
             gl.set_uniform("level_px", LEVEL_PX)
+            gl.set_uniform("snow", relief_snow)
             gl.render_mesh(f)
         let t = relief_tops[k]
         if t: draw_terrain_mesh(t, art_px)
