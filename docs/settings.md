@@ -67,6 +67,14 @@ are all in [`atmosphere.md`](atmosphere.md). One setting there is read every fra
 | Setting | In | Default | What it does |
 |---|---|---|---|
 | `atmo_sun_dir` | `view/atmosphere` | `{ -0.6, 0.8 }` | Toward the sun on the screen (y up), for the rays in the air (`shafts`). Set it from the game's sun. |
+## Drawing sprites
+
+Read every frame (any time).
+
+| Setting | In | Default | What it does |
+|---|---|---|---|
+| `sprite_even` | `game/pack` | `false` | Every art pixel the same size at a zoom between whole numbers. Off, sprites are sampled nearest, and at a zoom of 2.75 one art pixel is drawn two screen pixels wide and the next three, so edges look jagged. On, they are sampled sharp bilinear: each art pixel is solid, and only the one screen pixel where two meet is a mix of them. At a whole-number zoom it is the same as nearest. |
+
 ## Voxel models that shade themselves
 
 Set in `view/voxel_grid` before a model is baked. A game that changes one puts it in its bake key.
