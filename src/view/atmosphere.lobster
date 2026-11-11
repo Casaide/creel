@@ -20,9 +20,10 @@ let ATMO_COLS = [ "shadow_tint", "highlight_tint", "haze_colour" ]
 // (a share of the screen's height), in shaft_colour. mist is a low haze laid over the shade only (the dark woods go
 // blue and soft, the lit ground stays clear), in the haze's colour. deep darkens the frame's top, where the far woods are.
 // woods darkens and greys what lies under a closed canopy (what the game drew with atmo_shade_canopy: deep in a wood; a
-// clearing stays lit), mist lays the haze over it, and shade_grey is how much colour the shade loses.
-let ATMO_OPT = [ "sun_shade", "sun", "shafts", "shaft_length", "mist", "deep", "woods", "shade_grey" ]
-let ATMO_OPT_MAX = [ 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0 ]
+// clearing stays lit), mist lays the haze over it, and shade_grey is how much colour the shade loses. unit_lift keeps
+// the units readable where the game marked them (atmo_shade_unit): less shade, wood and mist on them, and a little light.
+let ATMO_OPT = [ "sun_shade", "sun", "shafts", "shaft_length", "mist", "deep", "woods", "shade_grey", "unit_lift" ]
+let ATMO_OPT_MAX = [ 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 ]
 let ATMO_OPT_COLS = [ "shade_colour", "sun_colour", "shaft_colour" ]
 // The glows the game knows how to place (game/glows.lobster), and each one's knobs: colour ("#rrggbb", or "own": the
 // thing's own colour), radius (canvas px), strength (0 to 4) and flicker (0 to 1).
@@ -89,6 +90,18 @@ SHADER atmo_shade_canopy
         UNIFORMS tex0
         if (texture(tex0, itc).a < 0.02) discard;
         frag_color = vec4(1.0, 1.0, 0.0, 1.0);
+// (where a unit stands, drawn with additive blending: the buffer's blue says a unit is here, its shade kept)
+SHADER atmo_shade_unit
+    VERTEX
+        INPUTS apos:4 atc:2 acolor:4
+        UNIFORMS mvp
+        gl_Position = mvp * apos;
+        itc = atc;
+    PIXEL
+        INPUTS itc:2
+        UNIFORMS tex0
+        if (texture(tex0, itc).a < 0.02) discard;
+        frag_color = vec4(0.0, 0.0, 1.0, 1.0);
 SHADER atmo_shade_clear
     VERTEX
         INPUTS apos:4 atc:2 acolor:4
@@ -174,6 +187,7 @@ SHADER atmo_pass
         UNIFORM float deep
         UNIFORM float woods
         UNIFORM float shade_grey
+        UNIFORM float unit_lift
         UNIFORM vec3 shade_colour
         UNIFORM vec3 sun_colour
         UNIFORM vec3 shaft_colour
@@ -199,13 +213,14 @@ SHADER atmo_pass
         vec3 c = texelFetch(tex0, ivec2(gl_FragCoord.xy), 0).rgb;
         // the sun: what's in the ground's shade takes its colour, what's lit the sun's
         // (hard edged, pixel for pixel: the art is crisp, so is its shade)
-        vec2 sg = texelFetch(tex3, ivec2(gl_FragCoord.xy), 0).rg;
+        vec3 sg = texelFetch(tex3, ivec2(gl_FragCoord.xy), 0).rgb;
+        float unit = sg.b * unit_lift;  // (a unit the player must not lose: lifted out of the dark)
         float fire = 1.0 - clamp(dot(texture(tex2, uv).rgb, LUM) * glow * 3.0, 0.0, 1.0);  // (a fire's light: no shade by it)
-        float sh = sg.r * fire;
+        float sh = sg.r * fire * (1.0 - unit * 0.6);
         float inshade = sh * sun_shade;
         // under a closed canopy (the game's atmo_shade_canopy, pixel for pixel: no blur): deep in a wood it all goes
         // darker, greyer and misty, so a lit clearing stands out of it as the mock-ups' does
-        float wood = sg.g * fire;
+        float wood = sg.g * fire * (1.0 - unit);
         float yl = dot(c, LUM);
         c = mix(c, vec3(yl), clamp(inshade * shade_grey + wood * woods * 0.5, 0.0, 1.0));  // (shade and deep woods lose their colour first)
         c *= mix(mix(vec3(1.0), sun_colour, sun), shade_colour, inshade);
@@ -249,6 +264,7 @@ SHADER atmo_pass
         c = mix(c, haze_colour * 0.55, clamp(mist * wood * (0.8 + 0.2 * n) * (0.5 + 0.5 * uv.y), 0.0, 1.0));
         c += shaft_colour * air * (0.5 + 0.5 * uv.y);
         c *= 1.0 - deep * smoothstep(0.55, 1.0, uv.y) * (0.4 + 0.6 * sh);
+        c *= 1.0 + unit * 0.35;
         vec2 d = (uv - 0.5) * vec2(screen.x / screen.y, 1.0);
         c *= 1.0 - vignette * smoothstep(vignette_radius, vignette_radius + 0.6, length(d));
         frag_color = vec4(c, 1.0);
@@ -344,6 +360,25 @@ def atmo_set(j:JV, mood:string) -> string:
         else:
             AtmoGlow { float3_1, true, 0.0, 0.0, 0.0 }
     atmo_on = true
+    return ""
+
+// Between two moods: a's light turning into b's, t of the way (0 a .. 1 b), so the day moves through dawn, day, dusk
+// and night without a jump. Every number and colour is mixed; the glows are the file's, as atmo_set's. Returns why not.
+def atmo_set_between(j:JV, a:string, b:string, t:float) -> string:
+    if t <= 0.0 or a == b: return atmo_set(j, a)
+    if t >= 1.0: return atmo_set(j, b)
+    let why = atmo_set(j, b)
+    if why != "" or not atmo_on: return why
+    let nb = atmo_nums
+    let cb = atmo_cols
+    let ob = atmo_opt
+    let pb = atmo_opt_cols
+    let why_a = atmo_set(j, a)
+    if why_a != "" or not atmo_on: return why_a
+    atmo_nums = map(atmo_nums) v, i: lerp(v, nb[i], t)
+    atmo_cols = map(atmo_cols) v, i: lerp(v, cb[i], t)
+    atmo_opt = map(atmo_opt) v, i: lerp(v, ob[i], t)
+    atmo_opt_cols = map(atmo_opt_cols) v, i: lerp(v, pb[i], t)
     return ""
 
 def atmo_num(k:string) -> float: return atmo_nums[find(ATMO_NUMS) n: n == k]
@@ -484,7 +519,7 @@ def atmo_end(cam:float2, zoom:float, canvas:float):
     for(ATMO_NUMS) k, i: gl.set_uniform(k, atmo_nums[i])
     for(ATMO_COLS) k, i: gl.set_uniform(k, atmo_cols[i])
     let shaded = atmo_shade_used and atmo_shade != nil
-    for(ATMO_OPT) k, i: gl.set_uniform(k, if not shaded and (k == "sun_shade" or k == "shafts" or k == "mist" or k == "woods"): 0.0 else: atmo_opt[i])
+    for(ATMO_OPT) k, i: gl.set_uniform(k, if not shaded and (k == "sun_shade" or k == "shafts" or k == "mist" or k == "woods" or k == "unit_lift"): 0.0 else: atmo_opt[i])
     for(ATMO_OPT_COLS) k, i: gl.set_uniform(k, atmo_opt_cols[i])
     gl.set_uniform("sun_dir", normalize(atmo_sun_dir))
     atmo_shade_used = false
