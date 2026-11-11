@@ -141,6 +141,7 @@ SHADER terrain
         UNIFORM float bank_px
         UNIFORM float water_edge
         UNIFORM float shore_soft
+        UNIFORM float litter_fringe
         UNIFORM vec3 water_shallow
         UNIFORM vec3 water_deep
         vec2 world = iworld.xy;
@@ -180,7 +181,7 @@ SHADER terrain
         col *= 0.94 + 0.12 * zn(t * 0.35 + 70.0);  // (and of tone, within a zone)
         float grass = 1.0;  // (how much of the top is grass, for the tufts)
         // the ground under props: a forest floor under the woods, scree about stone and gold
-        float w_forest = pm.r * 1.5 - 0.1 + edge_n * 0.35;
+        float w_forest = pm.r * 1.5 - 0.1 + edge_n * 0.35 + (hash(ap) - 0.5) * litter_fringe;  // (litter_fringe: the floor's edge scattered a pixel at a time)
         if (w_forest > 0.35) {
             splat(col, h, ground(tex4, 10, ap), w_forest);
             grass *= 1.0 - smoothstep(0.45, 0.55, w_forest);
@@ -394,6 +395,7 @@ SHADER cliff
 var mask_tex:resource<texture>? = nil
 var ground_bank_px = 0.0     // the water lies this many art px below its banks (0: level with the ground)
 var ground_water_edge = 0.5  // where on its mask the water begins (more: narrower than its tiles)
+var ground_litter_fringe = 0.0  // more than 0: the forest floor's edge is scattered a pixel at a time over this much of its weight (leaves strewn out onto the grass)
 var ground_shore_soft = 0.0  // more than 0: no sand at the shore, the ground slopes down to the water over this much of the mask
 var ground_water_shallow = float3 { 0.310, 0.541, 0.549 }  // the water's colour at its edge, and where it's deep
 var ground_water_deep = float3 { 0.141, 0.314, 0.416 }
@@ -732,6 +734,7 @@ def draw_terrain_mesh(m:resource<mesh>, art_px:float):
     gl.set_uniform("bank_px", ground_bank_px)
     gl.set_uniform("water_edge", ground_water_edge)
     gl.set_uniform("shore_soft", ground_shore_soft)
+    gl.set_uniform("litter_fringe", ground_litter_fringe)
     gl.set_uniform("water_shallow", ground_water_shallow)
     gl.set_uniform("water_deep", ground_water_deep)
     gl.set_mesh_texture(m, 0, 0, mt)
@@ -765,6 +768,7 @@ def draw_ground(art_px:float):
     gl.set_uniform("bank_px", ground_bank_px)
     gl.set_uniform("water_edge", ground_water_edge)
     gl.set_uniform("shore_soft", ground_shore_soft)
+    gl.set_uniform("litter_fringe", ground_litter_fringe)
     gl.set_uniform("water_shallow", ground_water_shallow)
     gl.set_uniform("water_deep", ground_water_deep)
     gl.set_mesh_texture(gq, 0, 0, mt)
