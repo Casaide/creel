@@ -54,7 +54,7 @@ These act on the **shade buffer** (below). They do nothing while the game draws 
 | `shaft_colour` | colour | The rays' colour. |
 | `deep` | 0 to 1 | Darkens the top of the frame, where the far woods are. |
 | `woods` | 0 to 1 | Darkens and greys what lies under a closed canopy (the buffer's green). A clearing stays lit. |
-| `mist` | 0 to 1 | Lays the haze (at 85% of `haze_colour`) over what lies under a closed canopy. |
+| `mist` | 0 to 1 | Lays the haze (at 85% of `haze_colour`) over what lies under a closed canopy. It takes the haze's colour but never lightens: shade under a closed canopy stays at least as dark as one lone tree's. |
 | `unit_lift` | 0 to 1 | Keeps marked units (the buffer's blue) readable: less shade, deep wood, mist and haze on them, their own colour kept (the grade desaturates them less), and a little light. |
 | `unit_rim` | 0 to 1 | Lights a marked unit's edge toward the sun (`atmo_sun_dir`), one art pixel wide, so it stands out of the shade behind it. Crisp, with no blur. |
 

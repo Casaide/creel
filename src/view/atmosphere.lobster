@@ -18,7 +18,8 @@ let ATMO_COLS = [ "shadow_tint", "highlight_tint", "haze_colour" ]
 // colour shade_colour, multiplied in), sun how much the sun's colour (sun_colour) warms what's lit. shafts is light in
 // the air: the sun's rays through the gaps in the shade, toward the sun (atmo_sun_dir), shaft_length how far they reach
 // (a share of the screen's height), in shaft_colour. mist is a low haze laid over the shade only (the dark woods go
-// blue and soft, the lit ground stays clear), in the haze's colour. deep darkens the frame's top, where the far woods are.
+// blue and soft, the lit ground stays clear), in the haze's colour, never lighter than the shade it lies on. deep
+// darkens the frame's top, where the far woods are.
 // woods darkens and greys what lies under a closed canopy (what the game drew with atmo_shade_canopy: deep in a wood; a
 // clearing stays lit), mist lays the haze over it, and shade_grey is how much colour the shade loses. unit_lift keeps
 // the units readable where the game marked them (atmo_shade_unit): less shade, wood, mist and haze on them, and a little
@@ -300,7 +301,13 @@ SHADER atmo_pass
         float n = texture(tex2, uv).a;
         float h = haze * mix(0.12, 1.0, pow(smoothstep(haze_start, 1.0, uv.y), 1.4)) * (1.0 + haze_drift * (n * 2.0 - 1.0));
         c = mix(c, haze_colour, clamp(h * (1.0 - unit * 0.6), 0.0, 1.0));
-        c = mix(c, haze_colour * 0.85, clamp(mist * wood * (0.8 + 0.2 * n) * (0.5 + 0.5 * uv.y), 0.0, 1.0));
+        // (the mist takes the haze's colour but never lightens: where shade overlaps under a closed canopy it must stay
+        // at least as dark as one lone tree's shade, never a pale grey)
+        float mk = clamp(mist * wood * (0.8 + 0.2 * n) * (0.5 + 0.5 * uv.y), 0.0, 1.0);
+        if (mk > 0.0) {
+            vec3 misty = mix(c, haze_colour * 0.85, mk);
+            c = misty * clamp(max(dot(c, LUM), 0.0) / max(dot(misty, LUM), 0.0001), 0.0, 1.0);
+        }
         c += shaft_colour * air * (0.5 + 0.5 * uv.y);
         c *= 1.0 - deep * smoothstep(0.55, 1.0, uv.y) * (0.4 + 0.6 * sh) * (1.0 - unit);
         c *= 1.0 + unit * 0.35;
