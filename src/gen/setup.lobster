@@ -142,11 +142,11 @@ def load_heights(rows:[string]):
         for(W) x:
             let c = y * W + x
             let ch = row[x]
-            if ch >= 'a' and ch <= 'c':
+            if ch >= 'a' and ch <= 'i':
                 level[c] = ch - 'a'
                 ramp[c] = 1
             else:
-                assert ch >= '0' and ch <= '3'
+                assert ch >= '0' and ch <= '9'
                 level[c] = ch - '0'
     for(H) y:
         for(W) x:

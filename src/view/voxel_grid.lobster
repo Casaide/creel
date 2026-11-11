@@ -158,6 +158,11 @@ let VG_DIRS = map([ int3 { 1, 0, 0 }, int3 { -1, 0, 0 }, int3 { 0, 1, 0 }, int3 
 
 // How much each voxel's light is jittered before it's banded (1: Age of Anything's speckled, painterly look; near 0: crisp
 // bands with hard edges between them), and how many bands a leaf's light has. A game sets them before it bakes.
+// A model's own shadow from a picture of it seen from the sun (each voxel is lit only if nothing lies nearer the sun on
+// its line), not from a march in steps of the lighting unit, which steps over twigs and thin boughs. Hard-edged and
+// exact to a voxel: a crown shades its own boughs and trunk. Off by default (the march is what older bakes were made by).
+var vg_sun_shadow = false
+var vg_shade = 0.0  // how much of its sky light a voxel in that shadow loses too (0: none, as before)
 var vg_dither = 1.0
 var vg_leaf_tones = 5.0
 
@@ -192,6 +197,19 @@ def vg_sprite(g:vgrid, shadow:bool) -> string, int, int, float2:
             if (if leaf_only: leafy(c + d * r) else: solid(c + d * r)): hit++
             if (if leaf_only: leafy(c + d * r * 2.0) else: solid(c + d * r * 2.0)): hit++
         return float(hit) / float(VG_DIRS.length * 2)
+    // the model seen from the sun: for each line of light, how near the sun its nearest voxel lies
+    let lu = normalize(cross(to_light, float3 { 0.0, 0.0, 1.0 }))
+    let lw = cross(to_light, lu)
+    let far = float(g.n.x + g.n.y + g.n.z)
+    let sw = int(far) * 2 + 2
+    let sun_depth = if vg_sun_shadow: map(sw * sw): -1000000.0 else: []
+    def sun_at(c:float3) -> int: return (int(dot(c, lw) + far) * sw) + int(dot(c, lu) + far)
+    if vg_sun_shadow:
+        for(cell) i:
+            let c = float3 { float(i % g.n.x), float((i / g.n.x) % g.n.y), float(i / (g.n.x * g.n.y)) } + float3_1 * 0.5
+            let at = sun_at(c)
+            let d = dot(c, to_light)
+            if d > sun_depth[at]: sun_depth[at] = d
     return vm_draw(sh, shadow) slot:
         let i = cell[slot]
         let x = i % g.n.x
@@ -208,15 +226,18 @@ def vg_sprite(g:vgrid, shadow:bool) -> string, int, int, float2:
         let n = if magnitude(nsum) > 0.0: normalize(nsum) else: float3 { 0.0, 0.0, 1.0 }
         // its own shadow: anything between it and the sun
         var dark = 0.0
-        var r = c + n * 1.2 * k
-        for(40):
-            if solid(r): dark = 1.0
-            r += to_light * 1.5 * k
+        if vg_sun_shadow:
+            if sun_depth[sun_at(c)] > dot(c, to_light) + 2.5: dark = 1.0
+        else:
+            var r = c + n * 1.2 * k
+            for(40):
+                if solid(r): dark = 1.0
+                r += to_light * 1.5 * k
         var diff = clamp(dot(n, to_light), 0.0, 1.0) * (1.0 - 0.8 * dark)
         if look.tree: diff *= 1.0 - clamp(share(c, 5.0 * k, true) - 0.25, 0.0, 1.0) * 1.6
         let ao = 1.0 - clamp(share(c, 3.0 * k, false) - 0.35, 0.0, 1.0) * 0.9
         let rim = pow(clamp(1.0 - abs(dot(n, to_eye)), 0.0, 1.0), 3.0) * (if n.z > -0.2: 1.0 else: 0.0)
-        let light = (if look.tree: 0.30 else: 0.42) + 0.80 * diff * ao + 0.12 * ao + 0.10 * rim
+        let light = ((if look.tree: 0.30 else: 0.42) + 0.12 * ao + 0.10 * rim) * (1.0 - vg_shade * dark) + 0.80 * diff * ao
         let tn = float(g.tone[i]) / 127.5 - 1.0
         let speck = vg_hash(g.seed + 1, x, y, z)
         let jitter = (speck - 0.5) * 0.18 * vg_dither
