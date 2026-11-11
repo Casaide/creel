@@ -5,7 +5,7 @@
 // splatted with a depth test, banded light and self-shadows, fur flecked by a hash of the voxel, a dark outline, a
 // ground shadow of its own. game/voxel_units.lobster bakes a match's units; voxel_proto.lobster draws a sheet.
 
-let vx_ELEV = 30.0                                                      // the camera's elevation, degrees
+var vx_ELEV = 30.0                                                      // the camera's elevation, degrees (a setting: see view/facing)
 var vx_RES = 2.0                                                        // voxels a body unit (a body unit is about a world pixel; a voxel a baked pixel)
 var vx_CELL = int2 { int(100.0 * vx_RES), int(170.0 * vx_RES) }         // a sprite cell (room for a siege tower; each is cropped to what's drawn)
 var vx_ANCHOR = int2 { vx_CELL.x / 2, vx_CELL.y - int(40.0 * vx_RES) }  // the ground under the unit, in its cell (room in front: a cart's puller, a trunk)

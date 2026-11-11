@@ -140,10 +140,15 @@ SHADER terrain
         UNIFORM float time
         UNIFORM float bank_px
         UNIFORM float water_edge
+        UNIFORM float shore_soft
+        UNIFORM float tile_h
+        UNIFORM float litter_fringe
+        UNIFORM vec3 water_shallow
+        UNIFORM vec3 water_deep
         vec2 world = iworld.xy;
         float ishade = iworld.z;
         float a = world.x / 32.0;
-        float b = world.y / 16.0;
+        float b = world.y / tile_h;
         vec2 t = vec2((a + b) * 0.5, (b - a) * 0.5);
         if (t.x < 0.0 || t.y < 0.0 || t.x > map_size.x || t.y > map_size.y) discard;
         // The textures are sized on the screen and pinned to the world: a texel an art px (the units' voxel; a device px
@@ -177,7 +182,7 @@ SHADER terrain
         col *= 0.94 + 0.12 * zn(t * 0.35 + 70.0);  // (and of tone, within a zone)
         float grass = 1.0;  // (how much of the top is grass, for the tufts)
         // the ground under props: a forest floor under the woods, scree about stone and gold
-        float w_forest = pm.r * 1.5 - 0.1 + edge_n * 0.35;
+        float w_forest = pm.r * 1.5 - 0.1 + edge_n * 0.35 + (hash(ap) - 0.5) * litter_fringe;  // (litter_fringe: the floor's edge scattered a pixel at a time)
         if (w_forest > 0.35) {
             splat(col, h, ground(tex4, 10, ap), w_forest);
             grass *= 1.0 - smoothstep(0.45, 0.55, w_forest);
@@ -278,7 +283,21 @@ SHADER terrain
         col *= 0.93 + 0.13 * lit;
         // the shore: a sand fringe, a darker wet band, then water (deep to shallow), its foam, the sky and fine ripples
         float water = m.r + (n - 0.5) * 0.3 + edge_n * 0.06;
-        if (water > water_edge - 0.22) {
+        if (shore_soft > 0.0) {
+            // (shore_soft: no sand, the ground slopes down to the water over this much of the mask: its own cover goes
+            // on down the slope, damper and darker in ragged steps, earth showing through by the waterline; the slope
+            // turned to the sun, up and left of the screen, is lit, the one turned from it in shade)
+            float wn = m.r + (n - 0.5) * 0.1 + edge_n * 0.04;
+            float sl = clamp((wn - (water_edge - shore_soft)) / shore_soft, 0.0, 1.0);
+            if (sl > 0.0) {
+                float sd = sl + (hs(ap, 61u) - 0.5) * 0.16;
+                float face = clamp((texture(tex0, (t + vec2(-0.2, 0.0)) / map_size).r - m.r) * 6.0, -1.0, 1.0);
+                vec3 earth = mix(vec3(0.36, 0.27, 0.17), vec3(0.24, 0.18, 0.12), smoothstep(0.5, 1.0, sd));
+                col = mix(col, earth, smoothstep(0.45, 0.95, sd) * 0.8);
+                col *= 1.0 - 0.26 * floor(clamp(sd, 0.0, 0.999) * 5.0) / 4.0 * (face < 0.0 ? 1.0 : 0.4);
+                col *= 1.0 + 0.1 * max(face, 0.0) * sl;
+            }
+        } else if (water > water_edge - 0.22) {
             float lift = 0.93 + 0.13 * lit;
             splat(col, h, ground(tex4, 6, ap) * vec4(lift, lift, lift, 1.0), water - (water_edge - 0.14) + 0.5);
             if (water > water_edge - 0.1) splat(col, h, ground(tex4, 7, ap) * vec4(lift, lift, lift, 1.0), water - (water_edge - 0.04) + 0.5);
@@ -286,7 +305,7 @@ SHADER terrain
         // (water_edge: where on the mask the water begins: 0.5 fills its tiles, more makes a stream narrower than them)
         if (water > water_edge) {
             float depth = smoothstep(water_edge, 1.0, m.r + (n - 0.5) * 0.12);
-            col = mix(vec3(0.310, 0.541, 0.549), vec3(0.141, 0.314, 0.416), depth);
+            col = mix(water_shallow, water_deep, depth);
             col *= 0.96 + 0.08 * fbm(t * 0.5 + 12.0);
             if (depth < 0.18) col = mix(col, vec3(0.50, 0.50, 0.40), (0.18 - depth) * 2.4);
             vec2 sp = vec2(world.x * 0.018, world.y * 0.16);
@@ -306,7 +325,7 @@ SHADER terrain
             if (bank_px > 0.0) {
                 for (int bk = 0; bk < 3; bk++) {
                     vec2 w2 = world - vec2(0.0, bank_px * (bk == 0 ? 1.0 : bk == 1 ? 0.66 : 0.3) / 1.5);
-                    vec2 t2 = vec2((w2.x / 32.0 + w2.y / 16.0) * 0.5, (w2.y / 16.0 - w2.x / 32.0) * 0.5);
+                    vec2 t2 = vec2((w2.x / 32.0 + w2.y / tile_h) * 0.5, (w2.y / tile_h - w2.x / 32.0) * 0.5);
                     float wa = texture(tex0, t2 / map_size).r + (vnoise(t2 * 2.3) * 0.6 + vnoise(t2 * 6.1) * 0.4 - 0.5) * 0.3 + edge_n * 0.06;
                     if (wa <= water_edge) {
                         float e = hs(floor(ap / vec2(2.0, 1.0)), 77u);
@@ -331,7 +350,7 @@ SHADER cliff
     PIXEL
         INPUTS iface:2 iinfo:4
         UNIFORM float art_px
-        float level_px = 20.0;
+        UNIFORM float level_px
         vec2 face = iface;
         float rim = iinfo.x;
         float foot = iinfo.z;
@@ -377,6 +396,10 @@ SHADER cliff
 var mask_tex:resource<texture>? = nil
 var ground_bank_px = 0.0     // the water lies this many art px below its banks (0: level with the ground)
 var ground_water_edge = 0.5  // where on its mask the water begins (more: narrower than its tiles)
+var ground_litter_fringe = 0.0  // more than 0: the forest floor's edge is scattered a pixel at a time over this much of its weight (leaves strewn out onto the grass)
+var ground_shore_soft = 0.0  // more than 0: no sand at the shore, the ground slopes down to the water over this much of the mask
+var ground_water_shallow = float3 { 0.310, 0.541, 0.549 }  // the water's colour at its edge, and where it's deep
+var ground_water_deep = float3 { 0.141, 0.314, 0.416 }
 var prop_tex:resource<texture>? = nil  // the ground under props (prop_channel)
 var mask_bytes = []::int               // the masks as Godot's image holds them (RGBA bytes, MASK_K a tile)
 var paths_tex:resource<texture>? = nil
@@ -671,7 +694,7 @@ def build_relief():
             let tm = parts_mesh(rm)
             if tm:
                 let rr = row_rims.get(d)
-                occluders.push(Occluder { sort_y: (float(d) * 16.0 - OCCLUDE_SORT) * 1.5, tops: tm, rims: if rr: parts_mesh(rr) else: nil,
+                occluders.push(Occluder { sort_y: (float(d) * iso_k * 2000.0 / 3.0 - OCCLUDE_SORT) * 1.5, tops: tm, rims: if rr: parts_mesh(rr) else: nil,
                                           cells: row_cells.get(d) or [] })
 
 def sorted_ints_g(xs:[int]) -> [int]:
@@ -690,6 +713,7 @@ def draw_relief(art_px:float):
         if f:
             gl.set_shader("cliff")
             gl.set_uniform("art_px", art_px)
+            gl.set_uniform("level_px", LEVEL_PX)
             gl.render_mesh(f)
         let t = relief_tops[k]
         if t: draw_terrain_mesh(t, art_px)
@@ -711,6 +735,11 @@ def draw_terrain_mesh(m:resource<mesh>, art_px:float):
     gl.set_uniform("time", ground_step())
     gl.set_uniform("bank_px", ground_bank_px)
     gl.set_uniform("water_edge", ground_water_edge)
+    gl.set_uniform("shore_soft", ground_shore_soft)
+    gl.set_uniform("tile_h", iso_k * 2000.0 / 3.0)  // (half a tile down the screen, canvas px: 16 at 30 degrees)
+    gl.set_uniform("litter_fringe", ground_litter_fringe)
+    gl.set_uniform("water_shallow", ground_water_shallow)
+    gl.set_uniform("water_deep", ground_water_deep)
     gl.set_mesh_texture(m, 0, 0, mt)
     gl.set_mesh_texture(m, 0, 1, pt)
     gl.set_mesh_texture(m, 0, 2, wt)
@@ -741,6 +770,11 @@ def draw_ground(art_px:float):
     gl.set_uniform("time", ground_step())
     gl.set_uniform("bank_px", ground_bank_px)
     gl.set_uniform("water_edge", ground_water_edge)
+    gl.set_uniform("shore_soft", ground_shore_soft)
+    gl.set_uniform("tile_h", iso_k * 2000.0 / 3.0)  // (half a tile down the screen, canvas px: 16 at 30 degrees)
+    gl.set_uniform("litter_fringe", ground_litter_fringe)
+    gl.set_uniform("water_shallow", ground_water_shallow)
+    gl.set_uniform("water_deep", ground_water_deep)
     gl.set_mesh_texture(gq, 0, 0, mt)
     gl.set_mesh_texture(gq, 0, 1, pt)
     gl.set_mesh_texture(gq, 0, 2, wt)
