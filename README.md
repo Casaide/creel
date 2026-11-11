@@ -61,6 +61,8 @@ plus a few changes that are being offered upstream. `LOBSTER_VERSION` has the co
 - A small test pack, so the engine's tests run here without a game.
 - Docs: a tutorial, and a reference for the data files and hooks.
 
+[`docs/atmosphere.md`](docs/atmosphere.md) documents the atmosphere pass: moods and their knobs, the shade buffer, and the baker's light settings.
+
 `docs/roadmap.md` has the longer list, including what's left of the lighting and atmosphere work.
 
 ## Licence
