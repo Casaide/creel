@@ -140,6 +140,9 @@ SHADER terrain
         UNIFORM float time
         UNIFORM float bank_px
         UNIFORM float water_edge
+        UNIFORM float shore_soft
+        UNIFORM vec3 water_shallow
+        UNIFORM vec3 water_deep
         vec2 world = iworld.xy;
         float ishade = iworld.z;
         float a = world.x / 32.0;
@@ -278,7 +281,21 @@ SHADER terrain
         col *= 0.93 + 0.13 * lit;
         // the shore: a sand fringe, a darker wet band, then water (deep to shallow), its foam, the sky and fine ripples
         float water = m.r + (n - 0.5) * 0.3 + edge_n * 0.06;
-        if (water > water_edge - 0.22) {
+        if (shore_soft > 0.0) {
+            // (shore_soft: no sand, the ground slopes down to the water over this much of the mask: its own cover goes
+            // on down the slope, damper and darker in ragged steps, earth showing through by the waterline; the slope
+            // turned to the sun, up and left of the screen, is lit, the one turned from it in shade)
+            float wn = m.r + (n - 0.5) * 0.1 + edge_n * 0.04;
+            float sl = clamp((wn - (water_edge - shore_soft)) / shore_soft, 0.0, 1.0);
+            if (sl > 0.0) {
+                float sd = sl + (hs(ap, 61u) - 0.5) * 0.16;
+                float face = clamp((texture(tex0, (t + vec2(-0.2, 0.0)) / map_size).r - m.r) * 6.0, -1.0, 1.0);
+                vec3 earth = mix(vec3(0.36, 0.27, 0.17), vec3(0.24, 0.18, 0.12), smoothstep(0.5, 1.0, sd));
+                col = mix(col, earth, smoothstep(0.45, 0.95, sd) * 0.8);
+                col *= 1.0 - 0.26 * floor(clamp(sd, 0.0, 0.999) * 5.0) / 4.0 * (face < 0.0 ? 1.0 : 0.4);
+                col *= 1.0 + 0.1 * max(face, 0.0) * sl;
+            }
+        } else if (water > water_edge - 0.22) {
             float lift = 0.93 + 0.13 * lit;
             splat(col, h, ground(tex4, 6, ap) * vec4(lift, lift, lift, 1.0), water - (water_edge - 0.14) + 0.5);
             if (water > water_edge - 0.1) splat(col, h, ground(tex4, 7, ap) * vec4(lift, lift, lift, 1.0), water - (water_edge - 0.04) + 0.5);
@@ -286,7 +303,7 @@ SHADER terrain
         // (water_edge: where on the mask the water begins: 0.5 fills its tiles, more makes a stream narrower than them)
         if (water > water_edge) {
             float depth = smoothstep(water_edge, 1.0, m.r + (n - 0.5) * 0.12);
-            col = mix(vec3(0.310, 0.541, 0.549), vec3(0.141, 0.314, 0.416), depth);
+            col = mix(water_shallow, water_deep, depth);
             col *= 0.96 + 0.08 * fbm(t * 0.5 + 12.0);
             if (depth < 0.18) col = mix(col, vec3(0.50, 0.50, 0.40), (0.18 - depth) * 2.4);
             vec2 sp = vec2(world.x * 0.018, world.y * 0.16);
@@ -377,6 +394,9 @@ SHADER cliff
 var mask_tex:resource<texture>? = nil
 var ground_bank_px = 0.0     // the water lies this many art px below its banks (0: level with the ground)
 var ground_water_edge = 0.5  // where on its mask the water begins (more: narrower than its tiles)
+var ground_shore_soft = 0.0  // more than 0: no sand at the shore, the ground slopes down to the water over this much of the mask
+var ground_water_shallow = float3 { 0.310, 0.541, 0.549 }  // the water's colour at its edge, and where it's deep
+var ground_water_deep = float3 { 0.141, 0.314, 0.416 }
 var prop_tex:resource<texture>? = nil  // the ground under props (prop_channel)
 var mask_bytes = []::int               // the masks as Godot's image holds them (RGBA bytes, MASK_K a tile)
 var paths_tex:resource<texture>? = nil
@@ -711,6 +731,9 @@ def draw_terrain_mesh(m:resource<mesh>, art_px:float):
     gl.set_uniform("time", ground_step())
     gl.set_uniform("bank_px", ground_bank_px)
     gl.set_uniform("water_edge", ground_water_edge)
+    gl.set_uniform("shore_soft", ground_shore_soft)
+    gl.set_uniform("water_shallow", ground_water_shallow)
+    gl.set_uniform("water_deep", ground_water_deep)
     gl.set_mesh_texture(m, 0, 0, mt)
     gl.set_mesh_texture(m, 0, 1, pt)
     gl.set_mesh_texture(m, 0, 2, wt)
@@ -741,6 +764,9 @@ def draw_ground(art_px:float):
     gl.set_uniform("time", ground_step())
     gl.set_uniform("bank_px", ground_bank_px)
     gl.set_uniform("water_edge", ground_water_edge)
+    gl.set_uniform("shore_soft", ground_shore_soft)
+    gl.set_uniform("water_shallow", ground_water_shallow)
+    gl.set_uniform("water_deep", ground_water_deep)
     gl.set_mesh_texture(gq, 0, 0, mt)
     gl.set_mesh_texture(gq, 0, 1, pt)
     gl.set_mesh_texture(gq, 0, 2, wt)

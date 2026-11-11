@@ -5,6 +5,7 @@
 let LEVEL_PX = 20.0     // canvas px a level (Iso.LEVEL_PX); art px: x 1.5
 let MAX_LEVEL = 9       // the highest ground a map can have (its "heights": 0 to 9, ramps a to i)
 var relief = []::float  // per cell: corner heights (levels): top, right, bottom, left
+var relief_sharp = false  // true: raised ground keeps its corners (sheer cliffs that jog square); false: an outer corner is cut down to the ground below (a hill's rounded shoulder)
 
 def corner_heights():
     relief = map(W * H * 4): 0.0
@@ -18,7 +19,7 @@ def corner_heights():
                 let cx = x + corners[k].x
                 let cy = y + corners[k].y
                 let around = [ int2 { cx - 1, cy - 1 }, int2 { cx, cy - 1 }, int2 { cx - 1, cy }, int2 { cx, cy } ]
-                if ramp[c] == 0 and lv > 0:
+                if ramp[c] == 0 and lv > 0 and not relief_sharp:
                     var below = -1
                     for(around) n:
                         if below != -2 and not (n.x == x and n.y == y) and n.x >= 0 and n.y >= 0 and n.x < W and n.y < H:
