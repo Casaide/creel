@@ -44,6 +44,15 @@ All in `game/ground`, read every frame (any time).
 |---|---|---|---|
 | `relief_sharp` | `game/relief` | `false` | `false`: an outer corner of raised ground is cut down to the ground below, a hill's rounded shoulder. `true`: corners are kept, for sheer cliffs several levels high that jog square. Set it before the map's relief is built. |
 
+## Voxel models that shade themselves
+
+Set in `view/voxel_grid` before a model is baked. A game that changes one puts it in its bake key.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `vg_sun_shadow` | `false` | `true`: a voxel the sun cannot see, because another voxel of the same model stands in the way, gets no direct light. A crown then shades its own trunk and lower boughs. |
+| `vg_shade` | `0.0` | How much of its sky light a voxel in that shadow loses as well, from 0 (none) to 1 (all). Only read when `vg_sun_shadow` is on. |
+
 ## Features a game switches on from its data
 
 - **Map bridges** (`lib/bridges`): a map's `"bridges"` (tile rectangles `x0, y0, x1, y1`) are timber decks over water
