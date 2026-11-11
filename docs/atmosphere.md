@@ -55,7 +55,8 @@ These act on the **shade buffer** (below). They do nothing while the game draws 
 | `deep` | 0 to 1 | Darkens the top of the frame, where the far woods are. |
 | `woods` | 0 to 1 | Darkens and greys what lies under a closed canopy (the buffer's green). A clearing stays lit. |
 | `mist` | 0 to 1 | Lays the haze (at 85% of `haze_colour`) over what lies under a closed canopy. |
-| `unit_lift` | 0 to 1 | Keeps marked units (the buffer's blue) readable: less shade, deep wood and mist on them, their own colour kept, and a little light. |
+| `unit_lift` | 0 to 1 | Keeps marked units (the buffer's blue) readable: less shade, deep wood, mist and haze on them, their own colour kept (the grade desaturates them less), and a little light. |
+| `unit_rim` | 0 to 1 | Lights a marked unit's edge toward the sun (`atmo_sun_dir`), one art pixel wide, so it stands out of the shade behind it. Crisp, with no blur. |
 
 Water keeps most of its light in shade. It is told by its colour (blue over red), so a stream in shade
 doesn't read as a road.
