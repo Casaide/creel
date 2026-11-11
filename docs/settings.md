@@ -44,6 +44,26 @@ All in `game/ground`, read every frame (any time).
 |---|---|---|---|
 | `relief_sharp` | `game/relief` | `false` | `false`: an outer corner of raised ground is cut down to the ground below, a hill's rounded shoulder. `true`: corners are kept, for sheer cliffs several levels high that jog square. Set it before the map's relief is built. |
 
+## The light
+
+The baker's light, set before the first bake. Put each one in the bake cache's key, because they change the baked art.
+
+| Setting | In | Default | What it does |
+|---|---|---|---|
+| `VM_SUN` | `view/voxel_mesh` | `{ -48, -58, 0 }` | The direction the buildings and props are lit from. A lower first angle is a lower sun, with longer shadows. |
+| `vx_SUN` | `view/voxel` | upper left | Toward the sun as the camera sees it, for the units and their shadows. Set it to match `VM_SUN`. |
+| `vg_dither` | `view/voxel_grid` | `1.0` | How much each voxel's light is jittered before it is banded. 1 is Age of Anything's painterly speckle; low (Smyana: 0.15) is crisp. |
+| `vg_leaf_tones` | `view/voxel_grid` | `5.0` | How many hard bands of light a leaf has. |
+
+The rest of the light is data, not settings: a game's `atmosphere.json` moods. Each mood's knobs (grade, haze, bloom,
+glow, and the sun's optional `sun_shade`, `shade_colour`, `shade_grey`, `woods`, `mist`, `deep`, `unit_lift` and others),
+moving between moods with `atmo_set_between`, and the shade buffer a game draws its shadows, canopy and units into
+are all in [`atmosphere.md`](atmosphere.md). One setting there is read every frame (any time):
+
+| Setting | In | Default | What it does |
+|---|---|---|---|
+| `atmo_sun_dir` | `view/atmosphere` | `{ -0.6, 0.8 }` | Toward the sun on the screen (y up), for the rays in the air (`shafts`). Set it from the game's sun. |
+
 ## Features a game switches on from its data
 
 - **Map bridges** (`lib/bridges`): a map's `"bridges"` (tile rectangles `x0, y0, x1, y1`) are timber decks over water
