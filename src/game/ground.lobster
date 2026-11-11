@@ -96,13 +96,17 @@ PIXELFUNCTIONS
     }
 
     // A texel of the ground atlas (data/ground/atlas.png, src/ground_textures.lobster): tile k, at p art px, wrapping.
-    vec4 gtex(sampler2D atlas, int k, vec2 p) {
+    // Where a second atlas is turning in over the first (nmix above 0: ground_atlas_mix), each texel is the one or the
+    // other, never a mix of the two, so the ground stays as crisp as its art: the next atlas comes in a texel at a time,
+    // in small patches (half of a texel's turn is its own, half its patch's).
+    vec4 gtex(sampler2D atlas, sampler2D next, float nmix, int k, vec2 p) {
         ivec2 q = ivec2(mod(floor(p), 256.0)) + ivec2(k % 4, k / 4) * 256;
+        if (nmix > 0.0 && hs(vec2(q), 91u) * 0.5 + hs(floor(vec2(q) / 5.0), 92u) * 0.5 < nmix) return texelFetch(next, q, 0);
         return texelFetch(atlas, q, 0);
     }
     // One terrain's texture with no repeat to see: two grids of big cells half a cell apart, each cell offsetting the
     // texture its own way, faded towards its edges, the higher texel of the two showing where both are strong.
-    vec4 ground(sampler2D atlas, int k, vec2 ap) {
+    vec4 ground(sampler2D atlas, sampler2D next, float nmix, int k, vec2 ap) {
         vec2 g = ap / 150.0;
         vec2 c1 = floor(g);
         vec2 c2 = floor(g + 0.5);
@@ -111,8 +115,8 @@ PIXELFUNCTIONS
         float w1 = min(min(f1.x, 1.0 - f1.x), min(f1.y, 1.0 - f1.y));
         float w2 = min(min(f2.x, 1.0 - f2.x), min(f2.y, 1.0 - f2.y));
         uint s = uint(k) * 7u + 3u;
-        vec4 a = gtex(atlas, k, ap + vec2(hs(c1, s), hs(c1, s + 1u)) * 256.0);
-        vec4 b = gtex(atlas, k, ap + vec2(hs(c2, s + 2u), hs(c2, s + 3u)) * 256.0 + 128.0);
+        vec4 a = gtex(atlas, next, nmix, k, ap + vec2(hs(c1, s), hs(c1, s + 1u)) * 256.0);
+        vec4 b = gtex(atlas, next, nmix, k, ap + vec2(hs(c2, s + 2u), hs(c2, s + 3u)) * 256.0 + 128.0);
         return mix(a, b, smoothstep(-0.05, 0.05, (b.a - a.a) * 0.25 + (w2 - w1) * 1.5));
     }
     // A layer laid over the ground where its weight w passes 0.5, its edge ragged by the two heights: the higher shows
@@ -133,7 +137,8 @@ SHADER terrain
         iworld = vec3(apos.xy / 1.5 + vec2(0.0, atc.x), 1.0 + atc.y);   // canvas units (64 x 32 a tile) on the base plane (raised ground says how far it was lifted), and a shade
     PIXEL
         INPUTS iworld:3
-        UNIFORMS tex0 tex1 tex2 tex3 tex4 tex5
+        UNIFORMS tex0 tex1 tex2 tex3 tex4 tex5 tex6
+        UNIFORM float atlas_mix
         UNIFORM vec2 map_size
         UNIFORM float art_px
         UNIFORM float dev_px
@@ -163,43 +168,43 @@ SHADER terrain
         // raised ground, flowered meadows, patches of bare earth; each laid over the last along its own ragged edge
         float lush = smoothstep(0.04, 0.35, m.r);
         float raised = clamp((ishade - 1.0) * 4.0, 0.0, 1.0);
-        vec4 s = ground(tex4, 0, ap);
+        vec4 s = ground(tex4, tex6, atlas_mix, 0, ap);
         vec3 col = s.rgb;
         float h = s.a;
         float w_olive = (zn(t * 0.22 + 80.0) - 0.5) * 1.6 + 0.5 + edge_n * 0.3;  // (a second and third grass mixed in over a few tiles)
-        if (w_olive > 0.35) splat(col, h, ground(tex4, 12, ap), w_olive);
+        if (w_olive > 0.35) splat(col, h, ground(tex4, tex6, atlas_mix, 12, ap), w_olive);
         float w_worn = (zn(t * 0.45 + 95.0) - 0.5) * 1.6 + 0.24 + edge_n * 0.3;
-        if (w_worn > 0.35) splat(col, h, ground(tex4, 13, ap), w_worn);
+        if (w_worn > 0.35) splat(col, h, ground(tex4, tex6, atlas_mix, 13, ap), w_worn);
         float w_dark = max(m.b * 1.3, smoothstep(0.62, 0.8, zn(t * 0.05 + 7.0)) * 0.9) + edge_n * 0.35;
-        if (w_dark > 0.35) splat(col, h, ground(tex4, 2, ap), w_dark);
+        if (w_dark > 0.35) splat(col, h, ground(tex4, tex6, atlas_mix, 2, ap), w_dark);
         float dry_zone = smoothstep(0.42, 0.68, zn(t * 0.06 + 17.0));
         float w_dry = dry_zone * (1.0 - lush) * (1.0 - m.b) + raised * 0.35 + edge_n * 0.35;
-        if (w_dry > 0.35) splat(col, h, ground(tex4, 1, ap), w_dry);
+        if (w_dry > 0.35) splat(col, h, ground(tex4, tex6, atlas_mix, 1, ap), w_dry);
         float w_meadow = smoothstep(0.6, 0.75, zn(t * 0.09 + 30.0)) * (1.0 - m.b) + edge_n * 0.3;
-        if (w_meadow > 0.35) splat(col, h, ground(tex4, 3, ap), w_meadow);
+        if (w_meadow > 0.35) splat(col, h, ground(tex4, tex6, atlas_mix, 3, ap), w_meadow);
         float w_earth = smoothstep(0.6, 0.88, zn(t * 0.16 + 50.0)) * (0.55 + 0.45 * dry_zone) * (1.0 - lush) * (1.0 - m.b) + edge_n * 0.3;
-        if (w_earth > 0.35) splat(col, h, ground(tex4, 9, ap), w_earth);
+        if (w_earth > 0.35) splat(col, h, ground(tex4, tex6, atlas_mix, 9, ap), w_earth);
         col *= mix(vec3(1.06, 1.0, 0.86), vec3(0.92, 1.0, 1.08), zn(t * 0.12 + 61.0));  // (a drift of hue from region to region)
         col *= 0.94 + 0.12 * zn(t * 0.35 + 70.0);  // (and of tone, within a zone)
         float grass = 1.0;  // (how much of the top is grass, for the tufts)
         // the ground under props: a forest floor under the woods, scree about stone and gold
         float w_forest = pm.r * 1.5 - 0.1 + edge_n * 0.35 + (hash(ap) - 0.5) * litter_fringe;  // (litter_fringe: the floor's edge scattered a pixel at a time)
         if (w_forest > 0.35) {
-            splat(col, h, ground(tex4, 10, ap), w_forest);
+            splat(col, h, ground(tex4, tex6, atlas_mix, 10, ap), w_forest);
             grass *= 1.0 - smoothstep(0.45, 0.55, w_forest);
         }
         float w_scree = pm.g * 1.7 - 0.05 + edge_n * 0.6;
         if (w_scree > 0.35) {
-            splat(col, h, ground(tex4, 11, ap), w_scree);
+            splat(col, h, ground(tex4, tex6, atlas_mix, 11, ap), w_scree);
             grass *= 1.0 - smoothstep(0.45, 0.55, w_scree);
         }
         // swamp: mud with standing pools between reeds
         float w_mud = m.g + (n - 0.5) * 0.3 + edge_n * 0.3;
         bool pool_here = false;
         if (w_mud > 0.35) {
-            splat(col, h, ground(tex4, 8, ap), w_mud);
+            splat(col, h, ground(tex4, tex6, atlas_mix, 8, ap), w_mud);
             float hummock = (zn(t * 0.7 + 90.0) - 0.5) * 1.4 + 0.5 + edge_n * 0.3;  // (tussocks of bog grass in the mud)
-            if (hummock > 0.35) splat(col, h, ground(tex4, 2, ap) * vec4(0.9, 0.92, 0.8, 1.0), hummock);
+            if (hummock > 0.35) splat(col, h, ground(tex4, tex6, atlas_mix, 2, ap) * vec4(0.9, 0.92, 0.8, 1.0), hummock);
             float pool = vnoise(t * 0.55 + 13.0) * 0.75 + vnoise(t * 2.0 + 3.0) * 0.25 + (h - 0.4) * 0.05;
             if (w_mud > 0.5 && pool > 0.6) {
                 col = mix(vec3(0.17, 0.27, 0.24), vec3(0.22, 0.33, 0.29), smoothstep(0.6, 0.75, pool)) * (0.97 + 0.06 * h);
@@ -212,7 +217,7 @@ SHADER terrain
         // rock: weathered stone through the grass
         float w_rock = m.a + (n - 0.5) * 0.3 + edge_n * 0.3;
         if (w_rock > 0.35) {
-            splat(col, h, ground(tex4, 5, ap), w_rock);
+            splat(col, h, ground(tex4, tex6, atlas_mix, 5, ap), w_rock);
             grass *= 1.0 - smoothstep(0.45, 0.55, w_rock);
         }
         // the paths (game/paths.lobster: a channel a style) and the trails worn by walkers
@@ -231,7 +236,7 @@ SHADER terrain
         float paved = max(st_cob, st_road);
         float w_dirt = max(st_trail, paved + 0.08 + edge_n * 0.15);  // (a dirt fringe along a paved road)
         if (w_dirt > 0.35) {
-            splat(col, h, ground(tex4, 4, ap), w_dirt);
+            splat(col, h, ground(tex4, tex6, atlas_mix, 4, ap), w_dirt);
             grass *= 1.0 - smoothstep(0.45, 0.55, w_dirt);
         }
         float u = texture(tex3, t / map_size).r * 9.0;  // (boards a ninth of a tile wide, their seams a device px: the slope out here, where every pixel takes it)
@@ -300,8 +305,8 @@ SHADER terrain
             }
         } else if (water > water_edge - 0.22) {
             float lift = 0.93 + 0.13 * lit;
-            splat(col, h, ground(tex4, 6, ap) * vec4(lift, lift, lift, 1.0), water - (water_edge - 0.14) + 0.5);
-            if (water > water_edge - 0.1) splat(col, h, ground(tex4, 7, ap) * vec4(lift, lift, lift, 1.0), water - (water_edge - 0.04) + 0.5);
+            splat(col, h, ground(tex4, tex6, atlas_mix, 6, ap) * vec4(lift, lift, lift, 1.0), water - (water_edge - 0.14) + 0.5);
+            if (water > water_edge - 0.1) splat(col, h, ground(tex4, tex6, atlas_mix, 7, ap) * vec4(lift, lift, lift, 1.0), water - (water_edge - 0.04) + 0.5);
         }
         // (water_edge: where on the mask the water begins: 0.5 fills its tiles, more makes a stream narrower than them)
         if (water > water_edge) {
@@ -420,6 +425,12 @@ var ground_tex_zoom = 0.0
 var ground_tex_step = -1.0
 var ground_stale = true                        // a texture its shader reads was rebuilt
 var ground_atlas_tex:resource<texture>? = nil  // the ground's textures (data/ground/atlas.png: src/ground_textures.lobster)
+// A second atlas turning in over the first, for a ground that changes while you watch (a season coming on): at
+// ground_atlas_mix 0 the ground is all ground_atlas_tex, at 1 all ground_atlas_next, and between them each texel is
+// one or the other, the next coming in a texel at a time in small patches. A game that moves the mix says so with
+// ground_stale = true (the ground is kept in a texture between changes).
+var ground_atlas_next:resource<texture>? = nil
+var ground_atlas_mix = 0.0
 
 def ground_atlas() -> resource<texture>:
     if not ground_atlas_tex:
@@ -746,12 +757,14 @@ def draw_terrain_mesh(m:resource<mesh>, art_px:float):
     gl.set_uniform("water_shallow", ground_water_shallow)
     gl.set_uniform("water_deep", ground_water_deep)
     gl.set_uniform("water_ripples", ground_water_ripples)
+    gl.set_uniform("atlas_mix", if ground_atlas_next: ground_atlas_mix else: 0.0)
     gl.set_mesh_texture(m, 0, 0, mt)
     gl.set_mesh_texture(m, 0, 1, pt)
     gl.set_mesh_texture(m, 0, 2, wt)
     gl.set_mesh_texture(m, 0, 3, at)
     gl.set_mesh_texture(m, 0, 4, ground_atlas())
     gl.set_mesh_texture(m, 0, 5, assert prop_tex)
+    gl.set_mesh_texture(m, 0, 6, ground_atlas_next or ground_atlas())
     gl.render_mesh(m)
 
 def draw_occluder(o:Occluder, art_px:float):
@@ -782,12 +795,14 @@ def draw_ground(art_px:float):
     gl.set_uniform("water_shallow", ground_water_shallow)
     gl.set_uniform("water_deep", ground_water_deep)
     gl.set_uniform("water_ripples", ground_water_ripples)
+    gl.set_uniform("atlas_mix", if ground_atlas_next: ground_atlas_mix else: 0.0)
     gl.set_mesh_texture(gq, 0, 0, mt)
     gl.set_mesh_texture(gq, 0, 1, pt)
     gl.set_mesh_texture(gq, 0, 2, wt)
     gl.set_mesh_texture(gq, 0, 3, at)
     gl.set_mesh_texture(gq, 0, 4, ground_atlas())
     gl.set_mesh_texture(gq, 0, 5, assert prop_tex)
+    gl.set_mesh_texture(gq, 0, 6, ground_atlas_next or ground_atlas())
     gl.render_mesh(gq)
 
 // The time the terrain shader sees: in steps, so the water moves only when the still ground is redrawn.

@@ -54,7 +54,7 @@ These act on the **shade buffer** (below). They do nothing while the game draws 
 | `shaft_colour` | colour | The rays' colour. |
 | `deep` | 0 to 1 | Darkens the top of the frame, where the far woods are. |
 | `woods` | 0 to 1 | Darkens and greys what lies under a closed canopy (the buffer's green). A clearing stays lit. |
-| `mist` | 0 to 1 | Lays the haze (at 85% of `haze_colour`) over what lies under a closed canopy. |
+| `mist` | 0 to 1 | Lays the haze (at 85% of `haze_colour`) over what lies under a closed canopy. It takes the haze's colour but never lightens: shade under a closed canopy stays at least as dark as one lone tree's. |
 | `unit_lift` | 0 to 1 | Keeps marked units (the buffer's blue) readable: less shade, deep wood, mist and haze on them, their own colour kept (the grade desaturates them less), and a little light. |
 | `unit_rim` | 0 to 1 | Lights a marked unit's edge toward the sun (`atmo_sun_dir`), one art pixel wide, so it stands out of the shade behind it. Crisp, with no blur. |
 
@@ -100,6 +100,24 @@ Each frame, before `atmo_begin`:
 | `atmo_shade_canopy` | red and green: in shade, under a closed canopy | The canopy's shade (deep wood). Blending off. |
 | `atmo_shade_clear` | clears all channels, by the colour's red | What stands up out of the shade (trees, rocks), so it is lit by its own bake. Alpha blending. |
 | `atmo_shade_unit` | blue: a unit stands here (its shade kept) | Units the player must not lose. Additive blending. |
+| `atmo_shade_stand` | red and green from the ground at the unit's foot, blue: a unit | Units, in place of `atmo_shade_unit`, after `atmo_shade_standing()`. Blending off. Colour from `atmo_stand_colour(foot)`. |
+
+### A unit takes the shade where it stands
+
+The buffer is a picture of the screen, so with `atmo_shade_unit` a unit keeps the shade of whatever ground lies
+behind it on the screen: a tree's shadow on the ground further back is painted flat across a horse's body. To give a
+unit the shade of the ground at its own feet instead:
+
+1. Draw the ground's shade (casts, canopy) as above.
+2. Call `atmo_shade_standing()`. It keeps a copy of the ground's shade and binds it for `atmo_shade_stand`. It resets
+   the drawing transform, so set the camera again after it.
+3. Draw each unit with the `atmo_shade_stand` shader, blending off, with the colour `atmo_stand_colour(foot)`, where
+   `foot` is where the unit stands on the screen in pixels from the top left. The whole unit takes the ground's shade
+   there, read at five places across its feet, so it goes into a shadow by degrees. Its blue is set, as
+   `atmo_shade_unit` sets it. Read the ground a few pixels behind the feet, toward the sun: the unit's own shadow
+   falls the other way.
+
+Smyana does this for its men, horses and mules.
 
 Draw the clears and the unit marks **back to front, interleaved**. Then a tree in front of a man wipes
 his mark, and a tree behind him doesn't. A sunfleck (a spot of light through the canopy) is just a
