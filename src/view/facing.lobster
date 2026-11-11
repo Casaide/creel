@@ -1,11 +1,16 @@
 // ------------------------------------------------------------------ which way a walking unit faces
 // Shared by the game and test_formations. View only: floats, never read by the sim.
 
-def iso(x:float, y:float) -> float2: return float2 { (x - y) * 0.048, (x + y) * 0.024 }
+// The camera's elevation is a setting (30 degrees unless a game says otherwise): a game that wants another sets
+// these before anything is baked or drawn, all from the one angle e: iso_k = 0.048 * sin(e) here, vx_ELEV = e
+// (view/voxel), VM_VIEW.x = -e (view/voxel_mesh), LEVEL_PX = 20 * cos(e) / cos(30) (game/relief).
+var iso_k = 0.024  // how far down the screen a milli-tile along x or y goes (0.048 across: a tile is 2:1 at 30 degrees)
+
+def iso(x:float, y:float) -> float2: return float2 { (x - y) * 0.048, (x + y) * iso_k }
 
 def iso_inv(p:float2) -> float2:
     let a = p.x / 0.048
-    let b = p.y / 0.024
+    let b = p.y / iso_k
     return float2 { (a + b) / 2.0, (b - a) / 2.0 }
 
 def dir_of(v:float2) -> int:

@@ -210,7 +210,7 @@ let VM_AO_TAPS = [ int3 { 2, 0, 0 }, int3 { -2, 0, 0 }, int3 { 0, 2, 0 }, int3 {
                    int3 { 2, 2, -2 }, int3 { -2, 2, -2 }, int3 { 2, -2, -2 }, int3 { -2, -2, -2 } ]
 
 let VM_SPLAT = [ int2 { 0, 0 }, int2 { 1, 0 }, int2 { 0, 1 }, int2 { 1, 1 } ]
-let VM_VIEW = float3 { -30.0, 45.0, 0.0 }  // the camera's turn
+var VM_VIEW = float3 { -30.0, 45.0, 0.0 }  // the camera's turn (its x is a setting: see view/facing)
 var VM_SUN = float3 { -48.0, -58.0, 0.0 }  // the light's (a game may lower it before it bakes: a low sun casts long shadows)
 
 // A model as a voxel sprite in world_bake's frame: RGBA bytes, rows top down, its size, the world origin on it.
