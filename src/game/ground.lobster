@@ -145,6 +145,7 @@ SHADER terrain
         UNIFORM float litter_fringe
         UNIFORM vec3 water_shallow
         UNIFORM vec3 water_deep
+        UNIFORM float water_ripples
         vec2 world = iworld.xy;
         float ishade = iworld.z;
         float a = world.x / 32.0;
@@ -315,8 +316,11 @@ SHADER terrain
             float rip = vnoise(rp) * 0.7 + vnoise(rp * 2.1 + 7.0) * 0.3;
             float above = vnoise(rp - vec2(0.0, 0.42)) * 0.7 + vnoise((rp - vec2(0.0, 0.42)) * 2.1 + 7.0) * 0.3;
             float gate = vnoise(ap * vec2(0.02, 0.1) + vec2(-time * 0.2, 4.0));
-            if (rip > 0.74 && gate > 0.45) col = mix(col, vec3(0.66, 0.80, 0.80), 0.4);
-            else if (above > 0.74 && gate > 0.45) col *= 0.9;
+            // (water_ripples: 0 a calm lake's few glints; toward 1 a running stream's white dabs all along it)
+            float rip_at = 0.74 - 0.16 * water_ripples;
+            float gate_at = 0.45 - 0.3 * water_ripples;
+            if (rip > rip_at && gate > gate_at) col = mix(col, mix(vec3(0.66, 0.80, 0.80), vec3(0.90, 0.95, 0.97), water_ripples), 0.4 + 0.35 * water_ripples);
+            else if (above > rip_at && gate > gate_at) col *= 0.9;
             float foam = water_edge + 0.015 + 0.01 * sin(time * 1.1 + n * 9.0);
             if (water < foam && hs(ap, 91u) > 0.3) col = mix(col, vec3(0.78, 0.84, 0.80), 0.55);
             else if (water < foam + 0.025) col *= 0.88;
@@ -400,6 +404,7 @@ var ground_litter_fringe = 0.0  // more than 0: the forest floor's edge is scatt
 var ground_shore_soft = 0.0  // more than 0: no sand at the shore, the ground slopes down to the water over this much of the mask
 var ground_water_shallow = float3 { 0.310, 0.541, 0.549 }  // the water's colour at its edge, and where it's deep
 var ground_water_deep = float3 { 0.141, 0.314, 0.416 }
+var ground_water_ripples = 0.0  // 0: a calm water's few glints; toward 1: a running stream's white dabs all along it
 var prop_tex:resource<texture>? = nil  // the ground under props (prop_channel)
 var mask_bytes = []::int               // the masks as Godot's image holds them (RGBA bytes, MASK_K a tile)
 var paths_tex:resource<texture>? = nil
@@ -740,6 +745,7 @@ def draw_terrain_mesh(m:resource<mesh>, art_px:float):
     gl.set_uniform("litter_fringe", ground_litter_fringe)
     gl.set_uniform("water_shallow", ground_water_shallow)
     gl.set_uniform("water_deep", ground_water_deep)
+    gl.set_uniform("water_ripples", ground_water_ripples)
     gl.set_mesh_texture(m, 0, 0, mt)
     gl.set_mesh_texture(m, 0, 1, pt)
     gl.set_mesh_texture(m, 0, 2, wt)
@@ -775,6 +781,7 @@ def draw_ground(art_px:float):
     gl.set_uniform("litter_fringe", ground_litter_fringe)
     gl.set_uniform("water_shallow", ground_water_shallow)
     gl.set_uniform("water_deep", ground_water_deep)
+    gl.set_uniform("water_ripples", ground_water_ripples)
     gl.set_mesh_texture(gq, 0, 0, mt)
     gl.set_mesh_texture(gq, 0, 1, pt)
     gl.set_mesh_texture(gq, 0, 2, wt)
