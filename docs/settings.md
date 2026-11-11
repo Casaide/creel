@@ -63,6 +63,14 @@ are all in [`atmosphere.md`](atmosphere.md). One setting there is read every fra
 | Setting | In | Default | What it does |
 |---|---|---|---|
 | `atmo_sun_dir` | `view/atmosphere` | `{ -0.6, 0.8 }` | Toward the sun on the screen (y up), for the rays in the air (`shafts`). Set it from the game's sun. |
+## Voxel models that shade themselves
+
+Set in `view/voxel_grid` before a model is baked. A game that changes one puts it in its bake key.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `vg_sun_shadow` | `false` | `false`: a model's own shadow is found by marching toward the sun in steps of the lighting unit, which steps over twigs and thin boughs. `true`: it is found from a picture of the model seen from the sun, exact to a voxel and hard-edged, so a crown shades its own boughs and trunk. |
+| `vg_shade` | `0.0` | How much of its sky light a voxel in that shadow loses as well, from 0 (none) to 1 (all). Only read when `vg_sun_shadow` is on. |
 
 ## Features a game switches on from its data
 
