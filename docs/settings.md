@@ -45,6 +45,8 @@ All in `game/ground`, read every frame (any time).
 | Setting | In | Default | What it does |
 |---|---|---|---|
 | `relief_sharp` | `game/relief` | `false` | `false`: an outer corner of raised ground is cut down to the ground below, a hill's rounded shoulder. `true`: corners are kept, for sheer cliffs several levels high that jog square. Set it before the map's relief is built. |
+| `relief_rough` | `game/relief` | `0.0` | Levels. More than 0: wherever the height changes (a cliff, a step, a ramp), the raised ground about it rises and falls by up to this much on a smooth noise, and those tiles are drawn in strips (4 each way) so a rim wanders and bends instead of running ruled along a tile's edge. Flat ground (level 0) and ground away from any change of height stay flat. Units stand on it (`lift_at` includes it), and the light on raised ground is found per corner from the slope, so it runs smoothly over the strips and turns sharply only at a rim. About 1 makes a stepped rock wall read as broken rock. Set it before the map's relief is built. |
+| `relief_rough_size` | `game/relief` | `1.5` | Tiles: the size of the rough's broad swells. A finer ripple a third the size rides on them. Set it with `relief_rough`. |
 
 ## The light
 

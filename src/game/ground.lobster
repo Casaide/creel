@@ -562,7 +562,7 @@ def fog_cell(pos:[float3], col:[float4], idx:[int], c:int, dark:[float], corner:
     pos.push(float3 { m.x, m.y, 0.0 })
     col.push(float4 { 0.0, 0.0, 0.0, dark[c] })
     for([ int2 { 0, 0 }, int2 { 1, 0 }, int2 { 1, 1 }, int2 { 0, 1 } ]) d:
-        let p = iso(float((cx + d.x) * 1000), float((cy + d.y) * 1000)) - float2 { 0.0, (if relief.length: relief[c * 4 + (if d.y == 0: d.x else: 3 - d.x)] else: 0.0) * LEVEL_PX * 1.5 }
+        let p = iso(float((cx + d.x) * 1000), float((cy + d.y) * 1000)) - float2 { 0.0, (if relief.length: height_in(c, float(d.x), float(d.y)) else: 0.0) * LEVEL_PX * 1.5 }
         pos.push(float3 { p.x, p.y, 0.0 })
         col.push(float4 { 0.0, 0.0, 0.0, corner[(cy + d.y) * (W + 1) + cx + d.x] })
     for([ 0, 2, 1, 0, 3, 2, 0, 4, 3, 0, 1, 4 ]) v: idx.push(n + v)
@@ -592,18 +592,38 @@ class MeshParts:
 
 def corner_px(x:int, y:int) -> float2: return iso(float(x * 1000), float(y * 1000))
 
+// The light on raised ground at m (tiles), height h (levels) there: lit as it faces the sun, a little with its height.
+// The slope is found on either side of the point, a side across a drop left out, so the light runs smoothly over a
+// rough top and down a ramp, and turns sharply only at a rim.
+def slope_shade(m:float2, h:float) -> float:
+    let e = 0.25
+    let g = map([ float2 { 1.0, 0.0 }, float2 { 0.0, 1.0 } ]) d:
+        let hi = lift_at((m.x + d.x * e) * 1000.0, (m.y + d.y * e) * 1000.0) / LEVEL_PX - h
+        let lo = h - lift_at((m.x - d.x * e) * 1000.0, (m.y - d.y * e) * 1000.0) / LEVEL_PX
+        let ok_hi = abs(hi) < e * 1.6
+        let ok_lo = abs(lo) < e * 1.6
+        if ok_hi and ok_lo: (hi + lo) / (2.0 * e)
+        else: if ok_hi: hi / e else: if ok_lo: lo / e else: 0.0
+    return 0.05 * h + clamp(g[0] * 0.8 + g[1] * 0.3, -1.0, 1.0) * 0.16
+
 def top_quad(out:MeshParts, x:int, y:int, c:int):
-    let corners = [ int2 { x, y }, int2 { x + 1, y }, int2 { x + 1, y + 1 }, int2 { x, y + 1 } ]
-    let hk = [ relief[c * 4], relief[c * 4 + 1], relief[c * 4 + 2], relief[c * 4 + 3] ]
-    let gx = (hk[1] + hk[2] - hk[0] - hk[3]) * 0.5
-    let gy = (hk[2] + hk[3] - hk[0] - hk[1]) * 0.5
-    let shade = 0.05 * (hk[0] + hk[1] + hk[2] + hk[3]) * 0.25 + clamp(gx * 0.8 + gy * 0.3, -1.0, 1.0) * 0.16
-    for([ 0, 1, 2, 0, 2, 3 ]) k:
-        let lift = hk[k] * LEVEL_PX
-        let q = corner_px(corners[k].x, corners[k].y) - float2 { 0.0, lift * 1.5 }
-        out.pos.push(float3 { q.x, q.y, 0.0 })
-        out.tc.push(float2 { lift, shade })
-        out.col.push(float4_1)
+    let rough = tile_rough(c)
+    let n = if rough: ROUGH_STEPS else: 1
+    let step = 1.0 / float(n)
+    let sub = [ float2 { 0.0, 0.0 }, float2 { 1.0, 0.0 }, float2 { 1.0, 1.0 }, float2 { 0.0, 1.0 } ]
+    for(n) j:
+        for(n) i:
+            let hk = map(sub) s: height_in(c, (float(i) + s.x) * step, (float(j) + s.y) * step)
+            let gx = (hk[1] + hk[2] - hk[0] - hk[3]) * 0.5
+            let gy = (hk[2] + hk[3] - hk[0] - hk[1]) * 0.5
+            let flat = 0.05 * (hk[0] + hk[1] + hk[2] + hk[3]) * 0.25 + clamp(gx * 0.8 + gy * 0.3, -1.0, 1.0) * 0.16
+            for([ 0, 1, 2, 0, 2, 3 ]) k:
+                let lift = hk[k] * LEVEL_PX
+                let m = float2 { float(x) + (float(i) + sub[k].x) * step, float(y) + (float(j) + sub[k].y) * step }
+                let q = iso(m.x * 1000.0, m.y * 1000.0) - float2 { 0.0, lift * 1.5 }
+                out.pos.push(float3 { q.x, q.y, 0.0 })
+                out.tc.push(float2 { lift, if rough: slope_shade(m, hk[k]) else: flat })
+                out.col.push(float4_1)
 
 def band(out:MeshParts, a:float2, b:float2, y0:float, y1:float, col:float4):
     let q = [ a + float2 { 0.0, y0 }, b + float2 { 0.0, y0 }, b + float2 { 0.0, y1 }, a + float2 { 0.0, y1 } ]
@@ -612,35 +632,52 @@ def band(out:MeshParts, a:float2, b:float2, y0:float, y1:float, col:float4):
         out.tc.push(float2_0)
         out.col.push(col)
 
+// The points along the edge tile c shares with tile n (side 0: c's right-hand edge, n beside it; 1: c's lower edge,
+// n below it), each as the tile coordinate, c's height there and n's: one segment a tile, or strips when rough.
+def edge_points(c:int, n:int, side:int) -> [[float]]:
+    let x = c % W
+    let y = c / W
+    let k = if tile_rough(c) or tile_rough(n): ROUGH_STEPS else: 1
+    return map(k + 1) i:
+        let t = float(i) / float(k)
+        if side == 0: [ float(x + 1), float(y) + t, height_in(c, 1.0, t), height_in(n, 0.0, t) ]
+        else: [ float(x) + t, float(y + 1), height_in(c, t, 1.0), height_in(n, t, 0.0) ]
+
 def rims_of(out:MeshParts, x:int, y:int, c:int):
-    let edges = []::[float]
-    if x > 0:
-        let n = c - 1
-        edges.push([ float(x), float(y), float(x), float(y + 1), relief[c * 4], relief[c * 4 + 3], relief[n * 4 + 1], relief[n * 4 + 2] ])
-    if y > 0:
-        let n = c - W
-        edges.push([ float(x), float(y), float(x + 1), float(y), relief[c * 4], relief[c * 4 + 1], relief[n * 4 + 3], relief[n * 4 + 2] ])
+    let edges = []::[[float]]
+    if x > 0 and not (relief[c * 4] - relief[(c - 1) * 4 + 1] < 0.5 and relief[c * 4 + 3] - relief[(c - 1) * 4 + 2] < 0.5):
+        edges.push(map(edge_points(c - 1, c, 0)) p: [ p[0], p[1], p[3] ])
+    if y > 0 and not (relief[c * 4] - relief[(c - W) * 4 + 3] < 0.5 and relief[c * 4 + 1] - relief[(c - W) * 4 + 2] < 0.5):
+        edges.push(map(edge_points(c - W, c, 1)) p: [ p[0], p[1], p[3] ])
     for(edges) e:
-        if not (e[4] - e[6] < 0.5 and e[5] - e[7] < 0.5):
-            let a = iso(e[0] * 1000.0, e[1] * 1000.0) - float2 { 0.0, e[4] * LEVEL_PX * 1.5 }
-            let b = iso(e[2] * 1000.0, e[3] * 1000.0) - float2 { 0.0, e[5] * LEVEL_PX * 1.5 }
+        for(e.length - 1) i:
+            let a = iso(e[i][0] * 1000.0, e[i][1] * 1000.0) - float2 { 0.0, e[i][2] * LEVEL_PX * 1.5 }
+            let b = iso(e[i + 1][0] * 1000.0, e[i + 1][1] * 1000.0) - float2 { 0.0, e[i + 1][2] * LEVEL_PX * 1.5 }
             band(out, a, b, -1.6 * 1.5, 0.0, float4 { 0.12, 0.10, 0.06, 0.5 })
             band(out, a, b, 0.0, 1.2 * 1.5, float4 { 0.55, 0.66, 0.30, 0.9 })
 
-def face_of(out:MeshParts, ax:float, ay:float, bx:float, by:float, ha:float, hb:float, na0:float, nb0:float, side:float):
-    let na = min(na0, ha)
-    let nb = min(nb0, hb)
-    if ha - na < 0.01 and hb - nb < 0.01: return
-    let pa = iso(ax * 1000.0, ay * 1000.0)
-    let pb = iso(bx * 1000.0, by * 1000.0)
-    let along_a = if side == 0.0: ay else: ax
-    let along_b = if side == 0.0: by else: bx
-    let quad = [ [ pa.x, pa.y, ha, along_a, ha, na ], [ pb.x, pb.y, hb, along_b, hb, nb ], [ pb.x, pb.y, nb, along_b, hb, nb ], [ pa.x, pa.y, na, along_a, ha, na ] ]
-    for([ 0, 1, 2, 0, 2, 3 ]) k:
-        let q = quad[k]
-        out.pos.push(float3 { q[0], q[1] - q[2] * LEVEL_PX * 1.5, 0.0 })
-        out.tc.push(float2 { q[3], q[2] })
-        out.col.push(float4 { q[4] / float(MAX_LEVEL), side, q[5] / float(MAX_LEVEL), 1.0 })
+// The cliff face down from tile c to its neighbour n (side as edge_points), where c stands above it.
+def face_of(out:MeshParts, c:int, n:int, side:int):
+    let pts = edge_points(c, n, side)
+    for(pts.length - 1) i:
+        let pa = pts[i]
+        let pb = pts[i + 1]
+        let ha = pa[2]
+        let hb = pb[2]
+        let na = min(pa[3], ha)
+        let nb = min(pb[3], hb)
+        if not (ha - na < 0.01 and hb - nb < 0.01):
+            let sa = iso(pa[0] * 1000.0, pa[1] * 1000.0)
+            let sb = iso(pb[0] * 1000.0, pb[1] * 1000.0)
+            let along_a = if side == 0: pa[1] else: pa[0]
+            let along_b = if side == 0: pb[1] else: pb[0]
+            let quad = [ [ sa.x, sa.y, ha, along_a, ha, na ], [ sb.x, sb.y, hb, along_b, hb, nb ], [ sb.x, sb.y, nb, along_b, hb, nb ],
+                         [ sa.x, sa.y, na, along_a, ha, na ] ]
+            for([ 0, 1, 2, 0, 2, 3 ]) k:
+                let q = quad[k]
+                out.pos.push(float3 { q[0], q[1] - q[2] * LEVEL_PX * 1.5, 0.0 })
+                out.tc.push(float2 { q[3], q[2] })
+                out.col.push(float4 { q[4] / float(MAX_LEVEL), float(side), q[5] / float(MAX_LEVEL), 1.0 })
 
 def near_back_edge(x:int, y:int, top:float) -> bool:
     var dy = -OCCLUDE_BACK
@@ -681,12 +718,8 @@ def build_relief():
                 let g = int(ceiling(top))
                 top_quad(tops[g], x, y, c)
                 rims_of(rims[g], x, y, c)
-                if x + 1 < W:
-                    let n = c + 1
-                    face_of(faces[g], float(x + 1), float(y), float(x + 1), float(y + 1), relief[c * 4 + 1], relief[c * 4 + 2], relief[n * 4], relief[n * 4 + 3], 0.0)
-                if y + 1 < H:
-                    let n = c + W
-                    face_of(faces[g], float(x), float(y + 1), float(x + 1), float(y + 1), relief[c * 4 + 3], relief[c * 4 + 2], relief[n * 4], relief[n * 4 + 1], 1.0)
+                if x + 1 < W: face_of(faces[g], c, c + 1, 0)
+                if y + 1 < H: face_of(faces[g], c, c + W, 1)
                 if near_back_edge(x, y, top):
                     let d = x + y
                     if not rows.get(d): rows.set(d, MeshParts {})
