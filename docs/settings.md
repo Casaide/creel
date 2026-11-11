@@ -38,6 +38,7 @@ All in `game/ground`, read every frame (any time).
 | `ground_water_shallow`, `ground_water_deep` | a teal, a deep teal | The water's colour at its edge and where it is deep. |
 | `ground_water_ripples` | `0.0` | How many ripples the water carries. 0: a calm water's few pale glints. Toward 1: more of them, whiter, all along the water, as on a running stream. |
 | `ground_litter_fringe` | `0.0` | More than 0: the edge of the forest floor (the litter laid under trees) is scattered a pixel at a time over this much of its weight, so leaves thin out onto the grass with no drawn line. |
+| `ground_atlas_next`, `ground_atlas_mix` | none, `0.0` | A second set of ground textures turning in over `ground_atlas_tex`, for ground that changes while you watch (a season coming on, snow settling). At mix 0 the ground is all the first set, at 1 all the second. Between them each texel is one or the other, never a blend, and the second comes in a texel at a time in small patches, so the ground stays crisp. Set `ground_stale = true` when you move the mix, because the ground is kept in a texture between changes. Both atlases must have the same layout. |
 
 ## Raised ground
 
