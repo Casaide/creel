@@ -21,9 +21,10 @@ let ATMO_COLS = [ "shadow_tint", "highlight_tint", "haze_colour" ]
 // blue and soft, the lit ground stays clear), in the haze's colour. deep darkens the frame's top, where the far woods are.
 // woods darkens and greys what lies under a closed canopy (what the game drew with atmo_shade_canopy: deep in a wood; a
 // clearing stays lit), mist lays the haze over it, and shade_grey is how much colour the shade loses. unit_lift keeps
-// the units readable where the game marked them (atmo_shade_unit): less shade, wood and mist on them, and a little light.
-let ATMO_OPT = [ "sun_shade", "sun", "shafts", "shaft_length", "mist", "deep", "woods", "shade_grey", "unit_lift" ]
-let ATMO_OPT_MAX = [ 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 ]
+// the units readable where the game marked them (atmo_shade_unit): less shade, wood, mist and haze on them, and a little
+// light. unit_rim lights a unit's edge toward the sun, an art pixel wide, so it stands out of the shade behind it.
+let ATMO_OPT = [ "sun_shade", "sun", "shafts", "shaft_length", "mist", "deep", "woods", "shade_grey", "unit_lift", "unit_rim" ]
+let ATMO_OPT_MAX = [ 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 ]
 let ATMO_OPT_COLS = [ "shade_colour", "sun_colour", "shaft_colour" ]
 // The glows the game knows how to place (game/glows.lobster), and each one's knobs: colour ("#rrggbb", or "own": the
 // thing's own colour), radius (canvas px), strength (0 to 4) and flicker (0 to 1).
@@ -188,6 +189,8 @@ SHADER atmo_pass
         UNIFORM float woods
         UNIFORM float shade_grey
         UNIFORM float unit_lift
+        UNIFORM float unit_rim
+        UNIFORM float px
         UNIFORM vec3 shade_colour
         UNIFORM vec3 sun_colour
         UNIFORM vec3 shaft_colour
@@ -215,6 +218,9 @@ SHADER atmo_pass
         // (hard edged, pixel for pixel: the art is crisp, so is its shade)
         vec3 sg = texelFetch(tex3, ivec2(gl_FragCoord.xy), 0).rgb;
         float unit = sg.b * unit_lift;  // (a unit the player must not lose: lifted out of the dark)
+        // (its edge toward the sun: a unit here and none an art pixel sunward. Crisp, no blur)
+        ivec2 toward = ivec2(round(normalize(sun_dir + vec2(0.0001)) * px));
+        float rim = sg.b * (1.0 - texelFetch(tex3, ivec2(gl_FragCoord.xy) + toward, 0).b) * unit_rim;
         float fire = 1.0 - clamp(dot(texture(tex2, uv).rgb, LUM) * glow * 3.0, 0.0, 1.0);  // (a fire's light: no shade by it)
         float sh = sg.r * fire * (1.0 - unit * 0.6);
         // (water keeps most of its light in shade: shade on a stream reads as a road. Told by its colour: blue over red)
@@ -260,14 +266,15 @@ SHADER atmo_pass
         c *= mix(vec3(1.0), ht, highlight * smoothstep(0.08, 0.55, y));
         c = (c - 0.45) * (1.0 + contrast) + 0.45;
         y = dot(c, LUM);
-        c = mix(vec3(y), c, 1.0 + saturation);
+        c = mix(vec3(y), c, 1.0 + saturation * (1.0 - unit));  // (a unit keeps more of its colour than the ground)
         float n = texture(tex2, uv).a;
         float h = haze * mix(0.12, 1.0, pow(smoothstep(haze_start, 1.0, uv.y), 1.4)) * (1.0 + haze_drift * (n * 2.0 - 1.0));
-        c = mix(c, haze_colour, clamp(h, 0.0, 1.0));
+        c = mix(c, haze_colour, clamp(h * (1.0 - unit * 0.6), 0.0, 1.0));
         c = mix(c, haze_colour * 0.85, clamp(mist * wood * (0.8 + 0.2 * n) * (0.5 + 0.5 * uv.y), 0.0, 1.0));
         c += shaft_colour * air * (0.5 + 0.5 * uv.y);
-        c *= 1.0 - deep * smoothstep(0.55, 1.0, uv.y) * (0.4 + 0.6 * sh);
+        c *= 1.0 - deep * smoothstep(0.55, 1.0, uv.y) * (0.4 + 0.6 * sh) * (1.0 - unit);
         c *= 1.0 + unit * 0.35;
+        c = mix(c, c * 1.5 + sun_colour * 0.18, rim);  // (the rim: the sun caught on his sunward edge)
         vec2 d = (uv - 0.5) * vec2(screen.x / screen.y, 1.0);
         c *= 1.0 - vignette * smoothstep(vignette_radius, vignette_radius + 0.6, length(d));
         frag_color = vec4(c, 1.0);
@@ -522,9 +529,10 @@ def atmo_end(cam:float2, zoom:float, canvas:float):
     for(ATMO_NUMS) k, i: gl.set_uniform(k, atmo_nums[i])
     for(ATMO_COLS) k, i: gl.set_uniform(k, atmo_cols[i])
     let shaded = atmo_shade_used and atmo_shade != nil
-    for(ATMO_OPT) k, i: gl.set_uniform(k, if not shaded and (k == "sun_shade" or k == "shafts" or k == "mist" or k == "woods" or k == "unit_lift"): 0.0 else: atmo_opt[i])
+    for(ATMO_OPT) k, i: gl.set_uniform(k, if not shaded and (k == "sun_shade" or k == "shafts" or k == "mist" or k == "woods" or k == "unit_lift" or k == "unit_rim"): 0.0 else: atmo_opt[i])
     for(ATMO_OPT_COLS) k, i: gl.set_uniform(k, atmo_opt_cols[i])
     gl.set_uniform("sun_dir", normalize(atmo_sun_dir))
+    gl.set_uniform("px", max(1.0, floor(zoom + 0.5)))  // (an art pixel, in screen pixels)
     atmo_shade_used = false
     gl.set_primitive_texture(3, assert atmo_shade)
     gl.set_primitive_texture(0, assert atmo_world)
