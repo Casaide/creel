@@ -45,6 +45,7 @@ var atmo_opt = []::float
 var atmo_opt_cols = []::float3
 var atmo_sun_dir = float2 { -0.6, 0.8 }  // towards the sun on the screen (y up), for the shafts: the game sets it from its sun
 var atmo_shade:resource<texture>? = nil  // the ground's shadows this frame, the screen's size, sampled nearest (red: 1 in shade)
+var atmo_ground:resource<texture>? = nil  // the ground's own shade, kept for what stands in it (atmo_shade_standing)
 var atmo_shade_used = false              // the game drew shadows into it this frame
 var atmo_glows = []::AtmoGlow  // by ATMO_SOURCES; strength 0: the data doesn't name it
 var atmo_world:resource<texture>? = nil
@@ -103,6 +104,35 @@ SHADER atmo_shade_unit
         UNIFORMS tex0
         if (texture(tex0, itc).a < 0.02) discard;
         frag_color = vec4(0.0, 0.0, 1.0, 1.0);
+// (a unit takes the shade of the ground where it stands, not of whatever lies behind it on the screen: its colour
+// carries its foot's place in the buffer, twelve bits across and twelve up (atmo_stand_colour), and all of it takes the
+// ground's shade there, read at five places across its feet so it goes into a shadow by degrees; its blue marks it as
+// a unit, as atmo_shade_unit does)
+SHADER atmo_shade_stand
+    VERTEX
+        INPUTS apos:4 atc:2 acolor:4
+        UNIFORMS mvp
+        gl_Position = mvp * apos;
+        itc = atc;
+        icolor = acolor;
+    PIXEL
+        INPUTS itc:2 icolor:4
+        UNIFORMS tex0 tex1
+        if (texture(tex0, itc).a < 0.02) discard;
+        ivec3 c = ivec3(icolor.rgb * 255.0 + 0.5);
+        ivec2 foot = ivec2(c.r * 16 + c.g / 16, (c.g % 16) * 256 + c.b);
+        ivec2 size = textureSize(tex1, 0);
+        vec2 g = vec2(0.0);
+        for (int i = -2; i <= 2; i++) g += texelFetch(tex1, clamp(foot + ivec2(i * 4, 0), ivec2(0), size - 1), 0).rg;
+        frag_color = vec4(g / 5.0, 1.0, 1.0);
+SHADER atmo_copy
+    VERTEX
+        INPUTS apos:4
+        UNIFORMS mvp
+        gl_Position = mvp * apos;
+    PIXEL
+        UNIFORMS tex0
+        frag_color = texelFetch(tex0, ivec2(gl_FragCoord.xy), 0);
 SHADER atmo_shade_clear
     VERTEX
         INPUTS apos:4 atc:2 acolor:4
@@ -408,6 +438,32 @@ def atmo_shade_begin():
     gl.ortho()
     gl.clear(float4 { 0.0, 0.0, 0.0, 1.0 })
     atmo_shade_used = true
+
+// What stands in the shade is drawn from here: call it when the ground's shade is in the buffer (the shadows, the
+// canopy) and before anything that stands up. It keeps a copy of the ground's shade, and atmo_shade_stand reads that
+// copy, so a man or a horse takes the shade of the ground where he stands, the same from his feet to his head, and a
+// tree's shadow on the ground behind him is not painted flat across his back. The game sets its camera again after.
+def atmo_shade_standing():
+    let ws = gl.window_size()
+    if not atmo_ground or gl.texture_size(assert atmo_ground) != ws: atmo_ground = atmo_target(ws, true)
+    let was = gl.blend(blend_none)
+    gl.switch_to_framebuffer(atmo_ground)
+    gl.ortho()
+    gl.set_shader("atmo_copy")
+    gl.set_primitive_texture(0, assert atmo_shade)
+    atmo_quad(ws)
+    gl.switch_to_framebuffer(atmo_shade)
+    gl.ortho()
+    gl.blend(was)
+    gl.set_primitive_texture(1, assert atmo_ground)
+
+// The colour to draw a unit's sprite with under atmo_shade_stand: foot is where it stands on the screen, in pixels
+// from the top left (where the ground's shade is read for all of it).
+def atmo_stand_colour(foot:float2) -> float4:
+    let ws = gl.window_size()
+    let x = clamp(int(foot.x), 0, min(ws.x, 4096) - 1)
+    let y = clamp(ws.y - 1 - int(foot.y), 0, min(ws.y, 4096) - 1)
+    return float4 { float(x / 16) / 255.0, float((x % 16) * 16 + y / 256) / 255.0, float(y % 256) / 255.0, 1.0 }
 
 // A source's index (ATMO_SOURCES), for atmo_glow.
 def atmo_source(name:string) -> int: return find(ATMO_SOURCES) s: s == name
