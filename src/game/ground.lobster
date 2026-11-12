@@ -7,7 +7,7 @@
 
 let MASK_K = 4   // mask samples per tile
 let MASK_CH = 6  // build_masks' channels: the masks' four and the props' two
-let OCCLUDE_BACK = 2
+var relief_occlude = 2  // tiles: how far behind a hill's top lower ground makes it a near edge, drawn again over what stands behind it (2 hides behind a drop of a level or so; a higher drop hides more)
 let OCCLUDE_SORT = 6.0
 var relief_faces = []::resource<mesh>?  // per level group 1..MAX_LEVEL
 var relief_tops = []::resource<mesh>?
@@ -762,9 +762,9 @@ def face_of(out:MeshParts, c:int, n:int, side:int):
                 out.col.push(float4 { q[4] / float(MAX_LEVEL), float(side), q[5] / float(MAX_LEVEL), 1.0 })
 
 def near_back_edge(x:int, y:int, top:float) -> bool:
-    var dy = -OCCLUDE_BACK
+    var dy = -relief_occlude
     while dy <= 0:
-        var dx = -OCCLUDE_BACK
+        var dx = -relief_occlude
         while dx <= 0:
             let nx = x + dx
             let ny = y + dy
@@ -942,6 +942,29 @@ def draw_ground(art_px:float):
     gl.set_mesh_texture(gq, 0, 5, assert prop_tex)
     gl.set_mesh_texture(gq, 0, 6, ground_atlas_next or ground_atlas())
     gl.render_mesh(gq)
+
+// The ground's heights for the low fog (view/atmosphere's atmo_low_begin), placed as draw_ground_at places the ground:
+// the flat ground, then the raised ground level by level, faces and tops. The hills' near edges that hide what's
+// behind them are draw_occluder_heights.
+def draw_ground_heights():
+    gl.set_shader("atmo_low_top")
+    gl.set_uniform("level_px", LEVEL_PX)
+    let gq = ground_quad
+    if gq: gl.render_mesh(gq)
+    for(relief_faces) f, k:
+        if f:
+            gl.set_shader("atmo_low_face")
+            gl.render_mesh(f)
+        let t = relief_tops[k]
+        if t:
+            gl.set_shader("atmo_low_top")
+            gl.set_uniform("level_px", LEVEL_PX)
+            gl.render_mesh(t)
+
+def draw_occluder_heights(o:Occluder):
+    gl.set_shader("atmo_low_top")
+    gl.set_uniform("level_px", LEVEL_PX)
+    gl.render_mesh(o.tops)
 
 // The time the terrain shader sees: in steps, so the water moves only when the still ground is redrawn.
 def ground_step() -> float: return floor(gl.time() * GROUND_HZ) / GROUND_HZ

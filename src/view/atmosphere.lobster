@@ -24,9 +24,14 @@ let ATMO_COLS = [ "shadow_tint", "highlight_tint", "haze_colour" ]
 // clearing stays lit), mist lays the haze over it, and shade_grey is how much colour the shade loses. unit_lift keeps
 // the units readable where the game marked them (atmo_shade_unit): less shade, wood, mist and haze on them, and a little
 // light. unit_rim lights a unit's edge toward the sun, an art pixel wide, so it stands out of the shade behind it.
-let ATMO_OPT = [ "sun_shade", "sun", "shafts", "shaft_length", "mist", "deep", "woods", "shade_grey", "unit_lift", "unit_rim" ]
-let ATMO_OPT_MAX = [ 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 ]
-let ATMO_OPT_COLS = [ "shade_colour", "sun_colour", "shaft_colour" ]
+// low_fog is fog lying in the low ground (a valley's), in low_fog_colour: thickest at the bottom, thinning out up to
+// the top the game gives (atmo_low_fog_at, in levels), its top rising and falling by low_fog_drift levels in slow
+// drifting banks. Whatever stands in it is fogged by how high each pixel of it is: a tree's top stands out of the fog
+// its foot is lost in. The game draws the heights (atmo_low_begin).
+let ATMO_OPT = [ "sun_shade", "sun", "shafts", "shaft_length", "mist", "deep", "woods", "shade_grey", "unit_lift", "unit_rim", "low_fog",
+                 "low_fog_drift" ]
+let ATMO_OPT_MAX = [ 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 3.0 ]
+let ATMO_OPT_COLS = [ "shade_colour", "sun_colour", "shaft_colour", "low_fog_colour" ]
 // The glows the game knows how to place (game/glows.lobster), and each one's knobs: colour ("#rrggbb", or "own": the
 // thing's own colour), radius (canvas px), strength (0 to 4) and flicker (0 to 1).
 let ATMO_SOURCES = [ "building_fire", "ruin_fire", "window", "flash", "shot" ]
@@ -48,6 +53,12 @@ var atmo_sun_dir = float2 { -0.6, 0.8 }  // towards the sun on the screen (y up)
 var atmo_shade:resource<texture>? = nil  // the ground's shadows this frame, the screen's size, sampled nearest (red: 1 in shade)
 var atmo_ground:resource<texture>? = nil  // the ground's own shade, kept for what stands in it (atmo_shade_standing)
 var atmo_shade_used = false              // the game drew shadows into it this frame
+var atmo_low:resource<texture>? = nil    // the height of what's drawn at each pixel this frame, for the low fog (atmo_low_begin)
+var atmo_low_used = false                // the game drew the heights this frame
+var atmo_low_top = 0.0                   // levels: the low fog's top (atmo_low_fog_at; 0: no low fog)
+var atmo_low_depth = 1.0                 // levels: from its top down to where it is thickest
+var atmo_low_cam = float2_0              // the camera and zoom the heights were drawn with (the fog's banks are pinned to the world)
+var atmo_low_zoom = 1.0
 var atmo_glows = []::AtmoGlow  // by ATMO_SOURCES; strength 0: the data doesn't name it
 var atmo_world:resource<texture>? = nil
 var atmo_light:resource<texture>? = nil
@@ -63,6 +74,10 @@ var atmo_gidx = []::int
 let ATMO_SHADERS = """
 PIXELFUNCTIONS
     float atmo_hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    vec4 atmo_low_out(float h) {
+        float v = clamp(h / 10.0, 0.0, 1.0) * 255.0;
+        return vec4(floor(v) / 255.0, fract(v), 0.0, 1.0);
+    }
     float atmo_noise(vec2 p) {
         vec2 i = floor(p);
         vec2 f = fract(p);
@@ -134,6 +149,44 @@ SHADER atmo_copy
     PIXEL
         UNIFORMS tex0
         frag_color = texelFetch(tex0, ivec2(gl_FragCoord.xy), 0);
+// The low fog's heights (atmo_low_begin): what's drawn at a pixel says how high it stands, in levels (0 to 10, in red
+// and, finer, green). The ground's tops carry their lift (canvas px) in their first texture coordinate, a cliff's face
+// its height (levels) in its second; a sprite standing up is as high as its foot plus how far up the screen from its
+// foot the pixel is (its colour: atmo_low_colour).
+SHADER atmo_low_top
+    VERTEX
+        INPUTS apos:4 atc:2
+        UNIFORMS mvp
+        gl_Position = mvp * apos;
+        ih = vec2(atc.x, 0.0);
+    PIXEL
+        INPUTS ih:2
+        UNIFORM float level_px
+        frag_color = atmo_low_out(ih.x / level_px);
+SHADER atmo_low_face
+    VERTEX
+        INPUTS apos:4 atc:2
+        UNIFORMS mvp
+        gl_Position = mvp * apos;
+        ih = vec2(atc.y, 0.0);
+    PIXEL
+        INPUTS ih:2
+        frag_color = atmo_low_out(ih.x);
+SHADER atmo_low_stand
+    VERTEX
+        INPUTS apos:4 atc:2 acolor:4
+        UNIFORMS mvp
+        gl_Position = mvp * apos;
+        itc = atc;
+        icolor = acolor;
+    PIXEL
+        INPUTS itc:2 icolor:4
+        UNIFORMS tex0
+        UNIFORM float level_screen
+        if (texture(tex0, itc).a < 0.5) discard;
+        ivec3 c = ivec3(icolor.rgb * 255.0 + 0.5);
+        float foot_y = float(c.g * 256 + c.b);
+        frag_color = atmo_low_out(icolor.r * 10.0 + max(0.0, gl_FragCoord.y - foot_y) / level_screen);
 SHADER atmo_shade_clear
     VERTEX
         INPUTS apos:4 atc:2 acolor:4
@@ -209,8 +262,16 @@ SHADER atmo_pass
         UNIFORMS mvp
         gl_Position = mvp * apos;
     PIXEL
-        UNIFORMS tex0 tex1 tex2 tex3
+        UNIFORMS tex0 tex1 tex2 tex3 tex4
         UNIFORM vec2 screen
+        UNIFORM float low_fog
+        UNIFORM float low_fog_drift
+        UNIFORM vec3 low_fog_colour
+        UNIFORM float low_top
+        UNIFORM float low_depth
+        UNIFORM vec2 cam
+        UNIFORM float zoom
+        UNIFORM float time
         UNIFORM float sun_shade
         UNIFORM float sun
         UNIFORM float shafts
@@ -310,6 +371,29 @@ SHADER atmo_pass
         }
         c += shaft_colour * air * (0.5 + 0.5 * uv.y);
         c *= 1.0 - deep * smoothstep(0.55, 1.0, uv.y) * (0.4 + 0.6 * sh) * (1.0 - unit);
+        // the low fog, after the deep woods' darkening (fog is lit air, not shade): by how far below its top the pixel's
+        // thing stands, its top drifting in slow banks pinned to the world (a unit in it is kept a little clearer, a dark
+        // shape in the fog)
+        if (low_fog > 0.0) {
+            vec2 wp = (vec2(gl_FragCoord.x, screen.y - gl_FragCoord.y) - screen * 0.5) / zoom + cam;
+            float fn = atmo_noise(wp / 340.0 + vec2(time * 0.018, time * 0.005)) * 0.6 + atmo_noise(wp / 120.0 - vec2(time * 0.026, -time * 0.009)) * 0.4;
+            float top = low_top + (fn - 0.5) * 2.0 * low_fog_drift;
+            // (read over a few art px round the pixel: fog is soft, and an edge between ground deep in it and ground
+            // above it is too)
+            float f = 0.0;
+            float f0 = 0.0;
+            ivec2 size = textureSize(tex4, 0);
+            for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+                vec4 hv = texelFetch(tex4, clamp(ivec2(gl_FragCoord.xy + vec2(i, j) * px * 1.5), ivec2(0), size - 1), 0);
+                float hl = (hv.r * 255.0 + hv.g) / 25.5;
+                float t = clamp((top - hl) / max(low_depth, 0.01), 0.0, 1.0);
+                float k = 1.0 - (1.0 - t) * (1.0 - t);  // (it closes in quickly below its top)
+                f += k * (i == 0 && j == 0 ? 0.2 : 0.1);
+                if (i == 0 && j == 0) f0 = k;
+            }
+            f = min(f, f0 + 0.12);  // (soft within the fog, but no pale rim bled over a ridge standing out of it)
+            c = mix(c, low_fog_colour, clamp(low_fog * f * (1.0 - unit * 0.35), 0.0, 1.0));
+        }
         c *= 1.0 + unit * 0.35;
         c = mix(c, c * 1.5 + sun_colour * 0.18, rim);  // (the rim: the sun caught on his sunward edge)
         vec2 d = (uv - 0.5) * vec2(screen.x / screen.y, 1.0);
@@ -472,6 +556,36 @@ def atmo_stand_colour(foot:float2) -> float4:
     let y = clamp(ws.y - 1 - int(foot.y), 0, min(ws.y, 4096) - 1)
     return float4 { float(x / 16) / 255.0, float((x % 16) * 16 + y / 256) / 255.0, float(y % 256) / 255.0, 1.0 }
 
+// The low fog's place in this map: its top and how deep it is to its thickest, in levels (top 0: none). The mood
+// says how thick it is (low_fog), so the same valley's fog thins as the day comes on.
+def atmo_low_fog_at(top:float, depth:float):
+    atmo_low_top = top
+    atmo_low_depth = max(0.01, depth)
+
+// Whether the game should draw the heights this frame: a mood with low fog, in a map with a fog top.
+def atmo_low_fogging() -> bool: return atmo_on and atmo_low_top > 0.0 and atmo_opt_num("low_fog") > 0.0
+
+// The heights are drawn from here (cleared to 10 levels: above any fog), placed as the world is (cam and zoom, for
+// the fog's banks). The game draws the ground's heights (draw_ground_heights, game/ground.lobster), then what stands
+// on it, back to front, with the shader atmo_low_stand and each one's colour atmo_low_colour, and the hills' near
+// edges again where they hide what's behind them. Before atmo_begin.
+def atmo_low_begin(cam:float2, zoom:float):
+    let ws = gl.window_size()
+    if not atmo_low or gl.texture_size(atmo_low) != ws: atmo_low = atmo_target(ws, true)
+    gl.switch_to_framebuffer(atmo_low)
+    gl.ortho()
+    gl.clear(float4 { 1.0, 0.0, 0.0, 1.0 })
+    atmo_low_used = true
+    atmo_low_cam = cam
+    atmo_low_zoom = zoom
+
+// The colour to draw a sprite with under atmo_low_stand: its foot on the screen (px from the top left) and the level
+// it stands at.
+def atmo_low_colour(foot:float2, lv:float) -> float4:
+    let ws = gl.window_size()
+    let y = clamp(ws.y - 1 - int(foot.y), 0, 65535)
+    return float4 { clamp(lv, 0.0, 10.0) / 10.0, float(y / 256) / 255.0, float(y % 256) / 255.0, 1.0 }
+
 // A source's index (ATMO_SOURCES), for atmo_glow.
 def atmo_source(name:string) -> int: return find(ATMO_SOURCES) s: s == name
 
@@ -595,8 +709,17 @@ def atmo_end(cam:float2, zoom:float, canvas:float):
     for(ATMO_OPT) k, i: gl.set_uniform(k, if not shaded and (k == "sun_shade" or k == "shafts" or k == "mist" or k == "woods" or k == "unit_lift" or k == "unit_rim"): 0.0 else: atmo_opt[i])
     for(ATMO_OPT_COLS) k, i: gl.set_uniform(k, atmo_opt_cols[i])
     gl.set_uniform("sun_dir", normalize(atmo_sun_dir))
+    let low = atmo_low_used and atmo_low != nil and atmo_low_top > 0.0
+    if not low: gl.set_uniform("low_fog", 0.0)
+    gl.set_uniform("low_top", atmo_low_top)
+    gl.set_uniform("low_depth", atmo_low_depth)
+    gl.set_uniform("cam", atmo_low_cam)
+    gl.set_uniform("zoom", atmo_low_zoom)
+    gl.set_uniform("time", gl.time())
     gl.set_uniform("px", max(1.0, floor(zoom + 0.5)))  // (an art pixel, in screen pixels)
     atmo_shade_used = false
+    atmo_low_used = false
+    gl.set_primitive_texture(4, if low: assert atmo_low else: assert atmo_shade)
     gl.set_primitive_texture(3, assert atmo_shade)
     gl.set_primitive_texture(0, assert atmo_world)
     gl.set_primitive_texture(1, assert atmo_bloom_a)

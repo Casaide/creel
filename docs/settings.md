@@ -50,6 +50,8 @@ All in `game/ground`, read every frame (any time).
 | `relief_rough_size` | `game/relief` | `1.5` | Tiles: the size of the rough's broad swells. A finer ripple a third the size rides on them. Set it with `relief_rough`. |
 | `relief_cliffs` | `game/relief` | `0.0` | Tiles, 0 to 1. More than 0: proper cliffs, drawn off the grid. The sim's levels are unchanged (a tile beside higher ground is still cliff, and nothing walks on it); only the drawing changes. Each level's drop is a curve through the unwalkable tile below it, half a tile out from the higher ground give or take half this much, on a noise of its own, so a rim runs at any angle and never along a tile's edge. Where two levels' drops wander apart there is a ledge between them; where they meet, one taller face. Scree lies at each face's foot. A ramp is drawn as a straight slope, a level over its tile, with any wall above it cut into it. The ground is kept on a fine lattice (8 points a tile) near any change of height: its steep parts are drawn by the `cliff` shader (rock), the rest by the terrain shader, and units stand on it (`lift_at`). Walkable ground keeps its level all over. It takes the place of `relief_rough` and `relief_sharp`. 0.7 suits a mountain gorge. Set it before the map's relief is built. |
 
+| `relief_occlude` | `game/ground` | `2` | Tiles. Raised ground with lower ground within this many tiles behind it (up the screen) is a hill's near edge: its tops are kept as `occluders`, which a game draws again in its back-to-front order so they hide what stands behind and below them. 2 hides what's behind a drop of a level or two. A higher drop hides more of the ground behind it (about 1.8 rows of tiles a level at 22 degrees), so raise it to cover that: 4 suits a ridge four levels above a valley. More costs more draws. Set it before the map's relief is built. |
+
 A game that draws its own `cliff` shader (a shader of that name loaded after Creel's takes its place) reads its inputs
 as Creel's does: the texture coordinate is (along the face, height in levels); the colour is (rim's level / 9, which way
 the face looks from 0 to 1, foot's level / 9, 1 for a face on a tile's edge or 0.5 for one drawn off the grid by
@@ -74,6 +76,7 @@ are all in [`atmosphere.md`](atmosphere.md). One setting there is read every fra
 | Setting | In | Default | What it does |
 |---|---|---|---|
 | `atmo_sun_dir` | `view/atmosphere` | `{ -0.6, 0.8 }` | Toward the sun on the screen (y up), for the rays in the air (`shafts`). Set it from the game's sun. |
+| `atmo_low_fog_at(top, depth)` | `view/atmosphere` | top `0` (none) | The low fog's place in this map, in levels: its `top`, and how far below that it is at its thickest. The mood says how thick (`low_fog`), what colour (`low_fog_colour`) and how much its top drifts (`low_fog_drift`). Call it when a map is entered. See [`atmosphere.md`](atmosphere.md). |
 ## Drawing sprites
 
 Read every frame (any time).
