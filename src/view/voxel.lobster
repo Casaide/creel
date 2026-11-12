@@ -366,6 +366,7 @@ def vx_parse_shape(o:JV, hard_by_default:bool) -> vx_spec:
         s.model = vx_model_of(as_str(at(o, "model")), gobj(o, "mats"))
         s.pa, s.a = vx_pt(at(o, "at"))
         if has(o, "to"): s.pb, s.b = vx_pt(at(o, "to"))
+        if has(o, "side"): s.n = vx_v3(at(o, "side"))  // its +x this way (held gear: a gun along the hand, its lock to the side)
         s.ra = gfloat(o, "scale", 1.0) / vx_VOX_RES
         s.hard = gbool(o, "hard", not gbool(o, "soft", false))
     else: assert false
@@ -1258,12 +1259,16 @@ def vx_emit(out:[vx_prim], s:vx_spec, p:vx_points, fx:float3, fy:float3, fz:floa
                 if s.bone or s.ax != float3_0: out.push(vx_part_prim(s, p, fx * m.x, fy, fz))
                 else:
                     let c = vx_where(p, s.pa) + tr(s.a)
-                    let x0 = fx * m.x * (if s.flip: -1.0 else: 1.0)
                     var y = fy
                     if s.pb != "": y = normalize(vx_where(p, s.pb) + tr(s.b) - c)
-                    let x = normalize(x0 - y * dot(x0, y))
-                    let z = cross(fx, y)  // (from the unmirrored x: a mirrored model keeps its up)
-                    out.push(vx_prim { c, c + y, s.ra, s.ra, s.mat, s.hard, false, float3_0, model: s.model, mx: x, mz: normalize(z - y * dot(z, y)) })
+                    if s.n != float3_0:  // (its side given: x that way, z = x cross y, so it can lie along the frame's first axis)
+                        let sx = normalize(tr(s.n) - y * dot(tr(s.n), y))
+                        out.push(vx_prim { c, c + y, s.ra, s.ra, s.mat, s.hard, false, float3_0, model: s.model, mx: sx, mz: cross(sx, y) })
+                    else:
+                        let x0 = fx * m.x * (if s.flip: -1.0 else: 1.0)
+                        let x = normalize(x0 - y * dot(x0, y))
+                        let z = cross(fx, y)  // (from the unmirrored x: a mirrored model keeps its up)
+                        out.push(vx_prim { c, c + y, s.ra, s.ra, s.mat, s.hard, false, float3_0, model: s.model, mx: x, mz: normalize(z - y * dot(z, y)) })
             default: assert false
 
 // A .vox body's part: on its point, its own axes turned by the frame; or a limb's, kept where it was drawn against its

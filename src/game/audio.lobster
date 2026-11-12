@@ -37,17 +37,42 @@ def volume_save(): write_file(SETTINGS_FILE, "music={music_level}\nsound={sound_
 
 def db_to_volume(db:float) -> float: return pow(10.0, db / 20.0)
 
-def play_sound(name:string, db:float):
-    if not sound_on: return
+// The game's sounds and buses, from data/audio.json: "sounds" { name: { "takes", "gap", "bus" } } (a name starting
+// with _ is a note) and "buses" { name: dB }. A game calls it once, before its first sound; it can be called again.
+def sounds_load():
+    let a = lib_data("audio.json")
+    let snd = gobj(a, "sounds")
+    for(snd.keys) name, k:
+        if not starts_with(name, "_"):
+            let s = snd.a[k]
+            sounds.set(name, Sound { max(1, gint(s, "takes", 1)), if has(s, "gap"): as_float(at(s, "gap")) else: 0.0, gstr(s, "bus", "") })
+    let b = gobj(a, "buses")
+    for(b.keys) name, k: buses.set(name, as_float(b.a[k]))
+
+// One of a sound's takes, in turn (sfx/<name>_<take>.wav), at db over its bus: its channel, or 0 (no sound, sound off,
+// or played within its gap).
+def sound_take(name:string, db:float) -> int:
+    if not sound_on: return 0
     let s = sounds.get(name)
-    if not s: return
+    if not s: return 0
     let now = gl.time()
-    if now - s.last < s.gap: return
+    if now - s.last < s.gap: return 0
     s.last = now
     let n = s.next % s.takes + 1
     s.next++
     let ch = play_wav(audio_file("sfx/{name}_{n}.wav"))
     if ch > 0: sound_volume(ch, db_to_volume(buses.get(s.bus, 0.0) + db) * float(sound_level) / 10.0)
+    return ch
+
+def play_sound(name:string, db:float):
+    sound_take(name, db)
+
+// A sound from somewhere left or right of the listener: pan -1 (all left) .. 1 (all right), 0 straight ahead.
+def play_sound_at(name:string, db:float, pan:float):
+    let ch = sound_take(name, db)
+    if ch > 0 and pan != 0.0:
+        let k = clamp(pan, -1.0, 1.0)
+        sound_position(ch, float3 { sin(k * 70.0), cos(k * 70.0), 0.0 }, float3 { 0.0, 1.0, 0.0 }, 1.0)
 
 // One of the player's creature voices: "select", "ack" or "die".
 def say(p:int, kind:string):
