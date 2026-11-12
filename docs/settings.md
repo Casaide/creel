@@ -99,3 +99,22 @@ Set in `view/voxel_grid` before a model is baked. A game that changes one puts i
 - **Ground you can work** (`terrain.json`): a terrain with `"resource"`, `"amount"` and `"depleted"` is gathered with
   `CMD_GATHER` and turns into the `depleted` terrain when it is used up. Trees are the usual case; anything that
   should be cleared by work can use it.
+- **A model held along the hand** (`view/voxel`, `gear.json`): a gear shape `{ "model": ..., "at": ..., "to": ...,
+  "side": [x, y, z] }` turns the model so its +x points along `side` (in the hold's frame) and its +z is x cross y.
+  Without `side` the model's x is the frame's first axis, so a model can't lie along it; with `side` a long gun's
+  barrel (`"to": ["hand", 1, 0, 0]`) can point where the hand points, its lock to one side (`"side": [0, 0, 1]`).
+  Thin parts (a barrel one voxel wide) can drop out when a model is baked at an angle: give them a `cap` of their own
+  over the model.
+
+## Sounds
+
+Set from the game's data, `data/audio.json`, read by `sounds_load()` (`game/audio`), which a game calls once before its
+first sound:
+
+| Key | What it is |
+|---|---|
+| `sounds.<name>` | A sound: `takes` (how many files: `assets/audio/sfx/<name>_1.wav` and on, played in turn), `gap` (seconds it won't play again within, default 0) and `bus` (a name in `buses`). A name starting with `_` is a note. |
+| `buses.<name>` | A bus's volume in dB, added to every sound on it. |
+
+`play_sound(name, db)` plays the next take at `db` over its bus; `play_sound_at(name, db, pan)` does the same from the
+left or right, `pan` from -1 (all left) to 1 (all right). The player's own `sound_level` (settings.txt) is on top.
