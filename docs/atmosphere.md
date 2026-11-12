@@ -58,6 +58,33 @@ These act on the **shade buffer** (below). They do nothing while the game draws 
 | `unit_lift` | 0 to 1 | Keeps marked units (the buffer's blue) readable: less shade, deep wood, mist and haze on them, their own colour kept (the grade desaturates them less), and a little light. |
 | `unit_rim` | 0 to 1 | Lights a marked unit's edge toward the sun (`atmo_sun_dir`), one art pixel wide, so it stands out of the shade behind it. Crisp, with no blur. |
 
+### The low fog (optional)
+
+Fog that lies in the low ground, a valley's, thickest at the bottom and thinning up to a top the game gives with
+`atmo_low_fog_at(top, depth)` (levels). Anything standing in it is fogged pixel by pixel by how high that pixel is, so
+a tree's top stands clear out of the fog its foot is lost in, and ground above the top is not touched at all. It works
+from a buffer of heights the game draws (below), so it does nothing until the game draws one.
+
+| Knob | Range | What it does |
+|---|---|---|
+| `low_fog` | 0 to 1 | How thick the fog is at its thickest, `depth` levels below its top. 0: none. |
+| `low_fog_colour` | colour | The fog's colour. Left out: white. |
+| `low_fog_drift` | 0 to 3 | Levels: how far the fog's top rises and falls, in slow banks that drift with time and are pinned to the world (they don't swim when the camera moves). |
+
+A unit marked in the shade buffer is fogged a little less, so it reads as a dark shape in the fog.
+
+**The heights.** `atmo_low_fogging()` says whether to draw them this frame. Then, before `atmo_begin`:
+1. `atmo_low_begin(cam, zoom)`, placed as the world is (cleared to 10 levels: above any fog).
+2. The ground: `draw_ground_heights()` (`game/ground`) in the world's transform.
+3. What stands on it, back to front: each sprite with `sprite_shader = "atmo_low_stand"`, its colour
+   `atmo_low_colour(foot, level)` (its foot on the screen, and the level it stands at), and the uniform `level_screen`
+   (screen px a level: `LEVEL_PX * 1.5 * zoom`). Its pixels are as high as its foot plus how far above its foot they
+   are. Between them, in the same order, `draw_occluder_heights(o)` for each of the hills' near edges (`occluders`),
+   so what stands down behind a hill doesn't put its low heights over the hill's top.
+
+The shaders that write heights are `atmo_low_top` (the ground's tops: uniform `level_px`), `atmo_low_face` (a cliff's
+faces) and `atmo_low_stand`. A height is levels / 10 in red, finer in green.
+
 Water keeps most of its light in shade. It is told by its colour (blue over red), so a stream in shade
 doesn't read as a road.
 
