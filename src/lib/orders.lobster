@@ -110,6 +110,10 @@ def block_new() -> int:
     for([ fb_state, fb_x, fb_y, fb_tx, fb_ty, fb_wx, fb_wy, fb_dx, fb_dy, fb_pace, fb_key, fb_r, fb_owner, fb_army, fb_t, fb_held, fb_gx, fb_gy ]) col: col.push(0)
     return fb_state.length - 1
 
+// A block's pace: `spare` twentieths of a walk, rounded and never none (cut down, a slow walker's block stood still:
+// two twentieths short of a speed of 1 is 0).
+def spared(speed:int, spare:int) -> int: return max(1, (speed * spare + 10) / 20)
+
 def block_speed(c:[int]) -> int:
     var s = 1 << 30
     for(c) i: s = min(s, u_speed[i])
@@ -142,9 +146,9 @@ def block_formation(army:int, idx:[int], x:int, y:int, cx:int, cy:int, ux:int, u
     let paces = map(chunks) c: block_speed(c)
     sort_ints(paces)
     let spare = if idx.length < BLOCK_ARMY: 19 else: 16   // (twentieths of their walk: a little under it, so whoever falls behind can catch up; a small group
-    let army_pace = paces[paces.length / 2] * spare / 20  // starts in its places, so it needs less)
+    let army_pace = spared(paces[paces.length / 2], spare)  // starts in its places, so it needs less)
     // whoever can't keep it goes at the back, the slowest last: in front, the blocks behind would walk through it (#253)
-    def lags(c:[int]) -> bool: return block_speed(c) * spare / 20 < army_pace
+    def lags(c:[int]) -> bool: return spared(block_speed(c), spare) < army_pace
     let late_keys = []::int
     for(chunks) c, n: if lags(c): late_keys.push(((1 << 20) - block_speed(c)) * (1 << KEY_BITS) + n)
     sort_ints(late_keys)
@@ -256,7 +260,7 @@ def block_formation(army:int, idx:[int], x:int, y:int, cx:int, cy:int, ux:int, u
         fb_wy[b] = ty
         fb_dx[b] = ux
         fb_dy[b] = uy
-        fb_pace[b] = min(army_pace, block_speed(c) * spare / 20)
+        fb_pace[b] = min(army_pace, spared(block_speed(c), spare))
         fb_key[b] = cell_field(cell_of(tx, ty), false, lane(c[0]))
         fb_r[b] = deep(c) / 2
         fb_owner[b] = u_owner[c[0]]
