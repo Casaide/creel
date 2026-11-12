@@ -69,7 +69,7 @@ The baker's light, set before the first bake. Put each one in the bake cache's k
 | `vg_leaf_tones` | `view/voxel_grid` | `5.0` | How many hard bands of light a leaf has. |
 
 The rest of the light is data, not settings: a game's `atmosphere.json` moods. Each mood's knobs (grade, haze, bloom,
-glow, and the sun's optional `sun_shade`, `shade_colour`, `shade_grey`, `woods`, `mist`, `deep`, `unit_lift`, `unit_rim` and others),
+glow, and the sun's optional `sun_shade`, `shade_colour`, `shade_grey`, `woods`, `mist`, `deep`, `unit_lift`, `unit_rim`, `paint` (a watercolour softening over the whole picture) and others),
 moving between moods with `atmo_set_between`, and the shade buffer a game draws its shadows, canopy and units into
 are all in [`atmosphere.md`](atmosphere.md). One setting there is read every frame (any time):
 

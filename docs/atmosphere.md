@@ -70,6 +70,7 @@ from a buffer of heights the game draws (below), so it does nothing until the ga
 | `low_fog` | 0 to 1 | How thick the fog is at its thickest, `depth` levels below its top. 0: none. |
 | `low_fog_colour` | colour | The fog's colour. Left out: white. |
 | `low_fog_drift` | 0 to 3 | Levels: how far the fog's top rises and falls, in slow banks that drift with time and are pinned to the world (they don't swim when the camera moves). |
+| `paint` | 0 to 1 | Softens the whole picture as a painter would, for a watercolour look: each pixel takes the mean colour of the calmest of the four corners round it (a Kuwahara filter), so flat colour stays flat and edges stay sharp but the pixels' grain melts into soft patches. Its reach grows with it, up to about two of the art's pixels at 1. A unit the game marked (`atmo_shade_unit`) is left crisp. 0 (the default) is off. |
 
 A unit marked in the shade buffer is fogged a little less, so it reads as a dark shape in the fog.
 

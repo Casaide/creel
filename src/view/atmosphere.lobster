@@ -28,9 +28,12 @@ let ATMO_COLS = [ "shadow_tint", "highlight_tint", "haze_colour" ]
 // the top the game gives (atmo_low_fog_at, in levels), its top rising and falling by low_fog_drift levels in slow
 // drifting banks. Whatever stands in it is fogged by how high each pixel of it is: a tree's top stands out of the fog
 // its foot is lost in. The game draws the heights (atmo_low_begin).
+// paint softens the picture as a painter's would: each pixel takes the calmest of the four corners round it (a
+// Kuwahara filter), so flat colour stays flat and edges stay sharp but the pixels' grain melts into soft patches, as
+// in a watercolour; its reach grows with it, up to about two of the art's pixels.
 let ATMO_OPT = [ "sun_shade", "sun", "shafts", "shaft_length", "mist", "deep", "woods", "shade_grey", "unit_lift", "unit_rim", "low_fog",
-                 "low_fog_drift" ]
-let ATMO_OPT_MAX = [ 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 3.0 ]
+                 "low_fog_drift", "paint" ]
+let ATMO_OPT_MAX = [ 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 3.0, 1.0 ]
 let ATMO_OPT_COLS = [ "shade_colour", "sun_colour", "shaft_colour", "low_fog_colour" ]
 // The glows the game knows how to place (game/glows.lobster), and each one's knobs: colour ("#rrggbb", or "own": the
 // thing's own colour), radius (canvas px), strength (0 to 4) and flicker (0 to 1).
@@ -282,6 +285,7 @@ SHADER atmo_pass
         UNIFORM float shade_grey
         UNIFORM float unit_lift
         UNIFORM float unit_rim
+        UNIFORM float paint
         UNIFORM float px
         UNIFORM vec3 shade_colour
         UNIFORM vec3 sun_colour
@@ -306,6 +310,31 @@ SHADER atmo_pass
         const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
         vec2 uv = gl_FragCoord.xy / screen;
         vec3 c = texelFetch(tex0, ivec2(gl_FragCoord.xy), 0).rgb;
+        // (paint: the calmest of the four corners round the pixel, its mean colour; a unit is left crisp)
+        if (paint > 0.0 && texelFetch(tex3, ivec2(gl_FragCoord.xy), 0).b < 0.5) {
+            int r = int(clamp(floor(paint * px * 2.0 + 0.5), 1.0, 8.0));
+            ivec2 at = ivec2(gl_FragCoord.xy);
+            ivec2 hi = textureSize(tex0, 0) - 1;
+            vec3 best = c;
+            float least = 1e9;
+            for (int q = 0; q < 4; q++) {
+                ivec2 dir = ivec2(q % 2 == 0 ? -1 : 1, q < 2 ? -1 : 1);
+                vec3 sum = vec3(0.0);
+                vec3 sq = vec3(0.0);
+                float n = 0.0;
+                for (int j = 0; j <= r; j++) for (int i = 0; i <= r; i++) {
+                    vec3 s = texelFetch(tex0, clamp(at + dir * ivec2(i, j), ivec2(0), hi), 0).rgb;
+                    sum += s;
+                    sq += s * s;
+                    n += 1.0;
+                }
+                vec3 m = sum / n;
+                vec3 var3 = sq / n - m * m;
+                float v = var3.r + var3.g + var3.b;
+                if (v < least) { least = v; best = m; }
+            }
+            c = mix(c, best, clamp(paint * 2.0, 0.0, 1.0));
+        }
         // the sun: what's in the ground's shade takes its colour, what's lit the sun's
         // (hard edged, pixel for pixel: the art is crisp, so is its shade)
         vec3 sg = texelFetch(tex3, ivec2(gl_FragCoord.xy), 0).rgb;
