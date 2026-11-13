@@ -561,6 +561,7 @@ class vx_body_spec:
     fit_r:float2
     seat_z:float  // a rider: its seat's height in its own frame, and its legs astride: thigh, shin, foot
     astride:[int]
+    astride_l:float2 = float2 { 6.7, 5.0 }  // and how long its thigh and shin are astride (seat "legs")
     seat:float3  // a mount: where its rider sits, how far out its rider's knees go
     wide:float
     looks:[float]              // per look: the skin shade
@@ -695,6 +696,8 @@ def vx_parse_body(id:string, o:JV) -> vx_body_spec:
         let so = at(o, "seat")
         b.seat_z = gfloat(so, "z", 0.0)
         b.astride = map(gstrs(so, "astride")) m: vx_mat(m)
+        let sl = glist(so, "legs")
+        if sl.length == 2: b.astride_l = float2 { as_float(sl[0]), as_float(sl[1]) }
         if has(so, "at"): b.seat = vx_v3(at(so, "at"))
         b.wide = gfloat(so, "wide", 0.0)
     if has(o, "looks"):
@@ -1646,10 +1649,27 @@ def vx_rider_prims(u:vx_unit_def, ph0:float) -> [vx_prim]:
     vx_whole_body(out, u, b, vx_body_points(b, 0.0, seat - float3 { 0.0, 0.0, b.seat_z }), 0.0, t, flags)
     vx_seated = false
     let wide = mb.wide * ms
+    // (the legs down the mount's sides, clear of it: the knee at least `wide` out, and the shin hanging straight down
+    // from it as far out as the mount is wide anywhere along it, so it lies against the barrel, not through it)
+    def clear_x(y:float, z:float, r:float) -> float:
+        var x = 0.0
+        while x < 40.0:
+            var d = 1000.0
+            for(mount) q: d = min(d, vx_dist(float3 { x, y, z } / ms, q) * ms)
+            if d >= r: return x
+            x += 0.25
+        return x
     for([ -1.0, 1.0 ]) side:
         let hip = seat + float3 { side * 2.0, 0.0, 0.6 }
-        let knee = seat + float3 { side * wide, 3.4, -3.6 }
-        let ankle = knee + float3 { 0.0, -0.8, -5.0 }
+        let l1 = b.astride_l.x / 6.7
+        var knee = seat + float3 { side * wide, 3.4 * l1, -3.6 * l1 }
+        var ankle = knee + float3 { 0.0, -0.8, -5.0 } * (b.astride_l.y / 5.0)
+        var out_x = max(abs(knee.x), clear_x(knee.y, knee.z, 1.7))
+        for(5) k:
+            let f = float(k) / 4.0
+            out_x = max(out_x, clear_x(knee.y + (ankle.y - knee.y) * f, knee.z + (ankle.z - knee.z) * f, 1.3))
+        knee = float3 { side * out_x, knee.y, knee.z }
+        ankle = float3 { side * out_x, ankle.y, ankle.z }
         out.push(vx_cap(hip, knee, 2.0, 1.7, b.astride[0]))
         out.push(vx_cap(knee, ankle, 1.4, 1.1, b.astride[1]))
         out.push(vx_cap(ankle, ankle + float3 { 0.0, 2.0, -0.4 }, 1.1, 1.0, b.astride[2]))
