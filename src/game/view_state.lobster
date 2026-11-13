@@ -36,6 +36,14 @@ var reveal = false  // reveal: the view shows the whole map, the fog off (view o
 var shot = ""
 var rec_dir = ""  // record:<dir>: from:<seconds> of play on, for:<seconds>, one PNG a frame at 30 fps, then quit (a clip of the game)
 var rec_clean = false  // clean: nothing over the world: no top bar, panel, minimap, groups, health bars or banner (a clip for showing)
+var rec_from = 0.0
+var rec_for = 10.0
+var rec_n = 0
+var rec_fps = 30.0  // fps:<n>: frames a second of play
+var rec_push = 1.0  // push:<k>: a record:'s camera closes in, its zoom k times by the end (1.15 is a slow push)
+var rec_pan = float2_0  // pan:<x>,<y>: a record:'s camera drifts that many tiles by the end
 var raze_at = -1.0  // raze:<seconds>: your buildings but the Town Center and walls fall then (captures of ruins)
 
 var in_net_match = false  // a network match: orders go through lockstep
+
+var watch = false  // the bots play every side, yours too
