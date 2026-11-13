@@ -87,8 +87,13 @@ import view.voxel
 import game.voxel_units
 import hooks.view
 import game.world_draw
+import game.match_loop
 import game.controls
 import game.order_marks
 import game.hud_kit
 import game.cursor_images
+import loop
+
+// (Never true: it makes Lobster type-check the loop and everything it calls, drawing included.)
+if command_line_arguments().length > 99: plain_loop()
 print "all modules: ok"

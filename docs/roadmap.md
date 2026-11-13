@@ -39,8 +39,11 @@ game. Still to come:
 - [x] The camera, world drawing, selection, orders and minimap (`game/world_view`, `world_draw`, `controls`,
   `voxel_units`). The game's share comes in through the functions in `examples/plain/src/hooks/view.lobster`; their
   names are still the ones Age of Anything used and will change as a second game shows what they should be.
-- [ ] The frame loop and the options every game wants (captures, recording, the frame budget, watch, speed). Until it
-  moves, a new game copies that part of Age of Anything's main program.
+- [x] The steps of a match's frame (`game/match_loop`): the play time a frame owes and the ticks it pays for (lockstep's
+  turns, the bots, the step), the camera that follows the fighting, the world drawn under its atmosphere, a take's
+  frames. The loop that calls them is a game's own, with its menus and panels; `examples/plain/src/loop.lobster` is the
+  plainest one, to start from.
+- [ ] The options a game reads from its command line (captures, the frame budget, speed) are still each game's to parse.
 - [x] The HUD kit (`game/hud_kit`): what a game's panels are drawn with (scale, icons, queued text, wells, frames,
   buttons, bars, a cost row, a tooltip card). The panels themselves (top bar, command panel, tech tree) are a game's
   and stay out of Creel.

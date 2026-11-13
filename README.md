@@ -55,9 +55,9 @@ plus a few changes that are being offered upstream. `LOBSTER_VERSION` has the co
 - `creel run`, `creel test`, `creel check`: one command over the tools that are separate scripts today.
 - `creel voxel <file>`: open a voxel model or `.vox` file in a live preview, and write one back out.
 - `creel pack`, `creel build`: zip a pack with its signature; release builds for Mac, Steam Deck, Android, Windows.
-- The frame loop, and pad and touch play, as engine modules. The camera, world drawing, selection, orders, minimap
-  and the kit a HUD is drawn with are here; the loop that runs them is still in Age of Anything's main program. A
-  game's own panels (top bar, command panel, tech tree) stay in the game.
+- Pad and touch play as engine modules. The camera, world drawing, selection, orders, minimap, the kit a HUD is drawn
+  with and the steps of a match's frame are here, and `examples/plain/src/loop.lobster` is a plain frame loop to start
+  from. A game's own loop, menus and panels (top bar, command panel, tech tree) stay in the game.
 - A small test pack, so the engine's tests run here without a game.
 - Docs: a tutorial, and a reference for the data files and hooks.
 

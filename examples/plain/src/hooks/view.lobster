@@ -12,6 +12,9 @@ def draw_cracks_of(b:int): return
 // The top bar, drawn over the world.
 def draw_topbar(speed:float, paused:bool): return
 
+// The lights the atmosphere pass should glow (fires, lamps): add them with atmo_glow. Called by draw_world_lit.
+def collect_glows(): return
+
 // Town life: add to the draw list, then draw what goes over it.
 def collect_town(): return
 def draw_town(): return
