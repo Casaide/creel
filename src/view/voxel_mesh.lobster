@@ -209,8 +209,9 @@ let VM_AO_TAPS = [ int3 { 2, 0, 0 }, int3 { -2, 0, 0 }, int3 { 0, 2, 0 }, int3 {
                    int3 { 2, 2, 2 }, int3 { -2, 2, 2 }, int3 { 2, -2, 2 }, int3 { -2, -2, 2 },
                    int3 { 2, 2, -2 }, int3 { -2, 2, -2 }, int3 { 2, -2, -2 }, int3 { -2, -2, -2 } ]
 
-let VM_VIEW = float3 { -30.0, 45.0, 0.0 }  // the camera's turn
-let VM_SUN = float3 { -48.0, -58.0, 0.0 }  // the light's
+let VM_SPLAT = [ int2 { 0, 0 }, int2 { 1, 0 }, int2 { 0, 1 }, int2 { 1, 1 } ]
+var VM_VIEW = float3 { -30.0, 45.0, 0.0 }  // the camera's turn (its x is a setting: see view/facing)
+var VM_SUN = float3 { -48.0, -58.0, 0.0 }  // the light's (a game may lower it before it bakes: a low sun casts long shadows)
 
 // A model as a voxel sprite in world_bake's frame: RGBA bytes, rows top down, its size, the world origin on it.
 def voxel_bake(model:MNode, shadow:bool) -> string, int, int, float2:
@@ -329,13 +330,19 @@ def vm_draw(sh:vm_shell, shadow:bool, shadef) -> string, int, int, float2:
             let p = (float(q) + float3_1 * 0.5) * v
             if p.y > v * 0.5:
                 let g = screen(p + sun * (p.y / -sun.y)) - lo
-                let x = int(floor(g.x))
-                let y = int(floor(g.y))
-                for([ int2 { 0, 0 }, int2 { 1, 0 }, int2 { 0, 1 }, int2 { 1, 1 } ]) o:
-                    let xx = x + o.x
-                    let yy = y + o.y
-                    if xx >= 0 and yy >= 0 and xx < w and yy < h and out[(yy * w + xx) * 4 + 3] == 0:
-                        for(4) ch: write_int8_le(out, (yy * w + xx) * 4 + ch, WB_SHADOW[ch])
+                // (a low sun stretches each voxel's shadow along the way it falls: a run of dabs down to the shadow of
+                // the voxel under it, so a long shadow has no gaps between its rows)
+                let g2 = screen(p - float3 { 0.0, v, 0.0 } + sun * ((p.y - v) / -sun.y)) - lo
+                let steps = max(1, int(ceiling(magnitude(g2 - g))))
+                for(steps) st:
+                    let gg = g + (g2 - g) * (float(st) / float(steps))
+                    let x = int(floor(gg.x))
+                    let y = int(floor(gg.y))
+                    for(VM_SPLAT) o:
+                        let xx = x + o.x
+                        let yy = y + o.y
+                        if xx >= 0 and yy >= 0 and xx < w and yy < h and out[(yy * w + xx) * 4 + 3] == 0:
+                            for(4) ch: write_int8_le(out, (yy * w + xx) * 4 + ch, WB_SHADOW[ch])
     return out, w, h, -lo
 
 // A sprite's ground shadows (its see-through pixels in the shadows' colour) apart from the rest: the art, the shadows.

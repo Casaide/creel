@@ -7,9 +7,9 @@
 
 let MASK_K = 4   // mask samples per tile
 let MASK_CH = 6  // build_masks' channels: the masks' four and the props' two
-let OCCLUDE_BACK = 2
+var relief_occlude = 2  // tiles: how far behind a hill's top lower ground makes it a near edge, drawn again over what stands behind it (2 hides behind a drop of a level or so; a higher drop hides more)
 let OCCLUDE_SORT = 6.0
-var relief_faces = []::resource<mesh>?  // per level group 1..3
+var relief_faces = []::resource<mesh>?  // per level group 1..MAX_LEVEL
 var relief_tops = []::resource<mesh>?
 var relief_rims = []::resource<mesh>?
 class Occluder:
@@ -96,13 +96,17 @@ PIXELFUNCTIONS
     }
 
     // A texel of the ground atlas (data/ground/atlas.png, src/ground_textures.lobster): tile k, at p art px, wrapping.
-    vec4 gtex(sampler2D atlas, int k, vec2 p) {
+    // Where a second atlas is turning in over the first (nmix above 0: ground_atlas_mix), each texel is the one or the
+    // other, never a mix of the two, so the ground stays as crisp as its art: the next atlas comes in a texel at a time,
+    // in small patches (half of a texel's turn is its own, half its patch's).
+    vec4 gtex(sampler2D atlas, sampler2D next, float nmix, int k, vec2 p) {
         ivec2 q = ivec2(mod(floor(p), 256.0)) + ivec2(k % 4, k / 4) * 256;
+        if (nmix > 0.0 && hs(vec2(q), 91u) * 0.5 + hs(floor(vec2(q) / 5.0), 92u) * 0.5 < nmix) return texelFetch(next, q, 0);
         return texelFetch(atlas, q, 0);
     }
     // One terrain's texture with no repeat to see: two grids of big cells half a cell apart, each cell offsetting the
     // texture its own way, faded towards its edges, the higher texel of the two showing where both are strong.
-    vec4 ground(sampler2D atlas, int k, vec2 ap) {
+    vec4 ground(sampler2D atlas, sampler2D next, float nmix, int k, vec2 ap) {
         vec2 g = ap / 150.0;
         vec2 c1 = floor(g);
         vec2 c2 = floor(g + 0.5);
@@ -111,8 +115,8 @@ PIXELFUNCTIONS
         float w1 = min(min(f1.x, 1.0 - f1.x), min(f1.y, 1.0 - f1.y));
         float w2 = min(min(f2.x, 1.0 - f2.x), min(f2.y, 1.0 - f2.y));
         uint s = uint(k) * 7u + 3u;
-        vec4 a = gtex(atlas, k, ap + vec2(hs(c1, s), hs(c1, s + 1u)) * 256.0);
-        vec4 b = gtex(atlas, k, ap + vec2(hs(c2, s + 2u), hs(c2, s + 3u)) * 256.0 + 128.0);
+        vec4 a = gtex(atlas, next, nmix, k, ap + vec2(hs(c1, s), hs(c1, s + 1u)) * 256.0);
+        vec4 b = gtex(atlas, next, nmix, k, ap + vec2(hs(c2, s + 2u), hs(c2, s + 3u)) * 256.0 + 128.0);
         return mix(a, b, smoothstep(-0.05, 0.05, (b.a - a.a) * 0.25 + (w2 - w1) * 1.5));
     }
     // A layer laid over the ground where its weight w passes 0.5, its edge ragged by the two heights: the higher shows
@@ -133,15 +137,24 @@ SHADER terrain
         iworld = vec3(apos.xy / 1.5 + vec2(0.0, atc.x), 1.0 + atc.y);   // canvas units (64 x 32 a tile) on the base plane (raised ground says how far it was lifted), and a shade
     PIXEL
         INPUTS iworld:3
-        UNIFORMS tex0 tex1 tex2 tex3 tex4 tex5
+        UNIFORMS tex0 tex1 tex2 tex3 tex4 tex5 tex6
+        UNIFORM float atlas_mix
         UNIFORM vec2 map_size
         UNIFORM float art_px
         UNIFORM float dev_px
         UNIFORM float time
+        UNIFORM float bank_px
+        UNIFORM float water_edge
+        UNIFORM float shore_soft
+        UNIFORM float tile_h
+        UNIFORM float litter_fringe
+        UNIFORM vec3 water_shallow
+        UNIFORM vec3 water_deep
+        UNIFORM float water_ripples
         vec2 world = iworld.xy;
         float ishade = iworld.z;
         float a = world.x / 32.0;
-        float b = world.y / 16.0;
+        float b = world.y / tile_h;
         vec2 t = vec2((a + b) * 0.5, (b - a) * 0.5);
         if (t.x < 0.0 || t.y < 0.0 || t.x > map_size.x || t.y > map_size.y) discard;
         // The textures are sized on the screen and pinned to the world: a texel an art px (the units' voxel; a device px
@@ -155,43 +168,43 @@ SHADER terrain
         // raised ground, flowered meadows, patches of bare earth; each laid over the last along its own ragged edge
         float lush = smoothstep(0.04, 0.35, m.r);
         float raised = clamp((ishade - 1.0) * 4.0, 0.0, 1.0);
-        vec4 s = ground(tex4, 0, ap);
+        vec4 s = ground(tex4, tex6, atlas_mix, 0, ap);
         vec3 col = s.rgb;
         float h = s.a;
         float w_olive = (zn(t * 0.22 + 80.0) - 0.5) * 1.6 + 0.5 + edge_n * 0.3;  // (a second and third grass mixed in over a few tiles)
-        if (w_olive > 0.35) splat(col, h, ground(tex4, 12, ap), w_olive);
+        if (w_olive > 0.35) splat(col, h, ground(tex4, tex6, atlas_mix, 12, ap), w_olive);
         float w_worn = (zn(t * 0.45 + 95.0) - 0.5) * 1.6 + 0.24 + edge_n * 0.3;
-        if (w_worn > 0.35) splat(col, h, ground(tex4, 13, ap), w_worn);
+        if (w_worn > 0.35) splat(col, h, ground(tex4, tex6, atlas_mix, 13, ap), w_worn);
         float w_dark = max(m.b * 1.3, smoothstep(0.62, 0.8, zn(t * 0.05 + 7.0)) * 0.9) + edge_n * 0.35;
-        if (w_dark > 0.35) splat(col, h, ground(tex4, 2, ap), w_dark);
+        if (w_dark > 0.35) splat(col, h, ground(tex4, tex6, atlas_mix, 2, ap), w_dark);
         float dry_zone = smoothstep(0.42, 0.68, zn(t * 0.06 + 17.0));
         float w_dry = dry_zone * (1.0 - lush) * (1.0 - m.b) + raised * 0.35 + edge_n * 0.35;
-        if (w_dry > 0.35) splat(col, h, ground(tex4, 1, ap), w_dry);
+        if (w_dry > 0.35) splat(col, h, ground(tex4, tex6, atlas_mix, 1, ap), w_dry);
         float w_meadow = smoothstep(0.6, 0.75, zn(t * 0.09 + 30.0)) * (1.0 - m.b) + edge_n * 0.3;
-        if (w_meadow > 0.35) splat(col, h, ground(tex4, 3, ap), w_meadow);
+        if (w_meadow > 0.35) splat(col, h, ground(tex4, tex6, atlas_mix, 3, ap), w_meadow);
         float w_earth = smoothstep(0.6, 0.88, zn(t * 0.16 + 50.0)) * (0.55 + 0.45 * dry_zone) * (1.0 - lush) * (1.0 - m.b) + edge_n * 0.3;
-        if (w_earth > 0.35) splat(col, h, ground(tex4, 9, ap), w_earth);
+        if (w_earth > 0.35) splat(col, h, ground(tex4, tex6, atlas_mix, 9, ap), w_earth);
         col *= mix(vec3(1.06, 1.0, 0.86), vec3(0.92, 1.0, 1.08), zn(t * 0.12 + 61.0));  // (a drift of hue from region to region)
         col *= 0.94 + 0.12 * zn(t * 0.35 + 70.0);  // (and of tone, within a zone)
         float grass = 1.0;  // (how much of the top is grass, for the tufts)
         // the ground under props: a forest floor under the woods, scree about stone and gold
-        float w_forest = pm.r * 1.5 - 0.1 + edge_n * 0.35;
+        float w_forest = pm.r * 1.5 - 0.1 + edge_n * 0.35 + (hash(ap) - 0.5) * litter_fringe;  // (litter_fringe: the floor's edge scattered a pixel at a time)
         if (w_forest > 0.35) {
-            splat(col, h, ground(tex4, 10, ap), w_forest);
+            splat(col, h, ground(tex4, tex6, atlas_mix, 10, ap), w_forest);
             grass *= 1.0 - smoothstep(0.45, 0.55, w_forest);
         }
         float w_scree = pm.g * 1.7 - 0.05 + edge_n * 0.6;
         if (w_scree > 0.35) {
-            splat(col, h, ground(tex4, 11, ap), w_scree);
+            splat(col, h, ground(tex4, tex6, atlas_mix, 11, ap), w_scree);
             grass *= 1.0 - smoothstep(0.45, 0.55, w_scree);
         }
         // swamp: mud with standing pools between reeds
         float w_mud = m.g + (n - 0.5) * 0.3 + edge_n * 0.3;
         bool pool_here = false;
         if (w_mud > 0.35) {
-            splat(col, h, ground(tex4, 8, ap), w_mud);
+            splat(col, h, ground(tex4, tex6, atlas_mix, 8, ap), w_mud);
             float hummock = (zn(t * 0.7 + 90.0) - 0.5) * 1.4 + 0.5 + edge_n * 0.3;  // (tussocks of bog grass in the mud)
-            if (hummock > 0.35) splat(col, h, ground(tex4, 2, ap) * vec4(0.9, 0.92, 0.8, 1.0), hummock);
+            if (hummock > 0.35) splat(col, h, ground(tex4, tex6, atlas_mix, 2, ap) * vec4(0.9, 0.92, 0.8, 1.0), hummock);
             float pool = vnoise(t * 0.55 + 13.0) * 0.75 + vnoise(t * 2.0 + 3.0) * 0.25 + (h - 0.4) * 0.05;
             if (w_mud > 0.5 && pool > 0.6) {
                 col = mix(vec3(0.17, 0.27, 0.24), vec3(0.22, 0.33, 0.29), smoothstep(0.6, 0.75, pool)) * (0.97 + 0.06 * h);
@@ -204,7 +217,7 @@ SHADER terrain
         // rock: weathered stone through the grass
         float w_rock = m.a + (n - 0.5) * 0.3 + edge_n * 0.3;
         if (w_rock > 0.35) {
-            splat(col, h, ground(tex4, 5, ap), w_rock);
+            splat(col, h, ground(tex4, tex6, atlas_mix, 5, ap), w_rock);
             grass *= 1.0 - smoothstep(0.45, 0.55, w_rock);
         }
         // the paths (game/paths.lobster: a channel a style) and the trails worn by walkers
@@ -223,7 +236,7 @@ SHADER terrain
         float paved = max(st_cob, st_road);
         float w_dirt = max(st_trail, paved + 0.08 + edge_n * 0.15);  // (a dirt fringe along a paved road)
         if (w_dirt > 0.35) {
-            splat(col, h, ground(tex4, 4, ap), w_dirt);
+            splat(col, h, ground(tex4, tex6, atlas_mix, 4, ap), w_dirt);
             grass *= 1.0 - smoothstep(0.45, 0.55, w_dirt);
         }
         float u = texture(tex3, t / map_size).r * 9.0;  // (boards a ninth of a tile wide, their seams a device px: the slope out here, where every pixel takes it)
@@ -276,14 +289,29 @@ SHADER terrain
         col *= 0.93 + 0.13 * lit;
         // the shore: a sand fringe, a darker wet band, then water (deep to shallow), its foam, the sky and fine ripples
         float water = m.r + (n - 0.5) * 0.3 + edge_n * 0.06;
-        if (water > 0.28) {
+        if (shore_soft > 0.0) {
+            // (shore_soft: no sand, the ground slopes down to the water over this much of the mask: its own cover goes
+            // on down the slope, damper and darker in ragged steps, earth showing through by the waterline; the slope
+            // turned to the sun, up and left of the screen, is lit, the one turned from it in shade)
+            float wn = m.r + (n - 0.5) * 0.1 + edge_n * 0.04;
+            float sl = clamp((wn - (water_edge - shore_soft)) / shore_soft, 0.0, 1.0);
+            if (sl > 0.0) {
+                float sd = sl + (hs(ap, 61u) - 0.5) * 0.16;
+                float face = clamp((texture(tex0, (t + vec2(-0.2, 0.0)) / map_size).r - m.r) * 6.0, -1.0, 1.0);
+                vec3 earth = mix(vec3(0.36, 0.27, 0.17), vec3(0.24, 0.18, 0.12), smoothstep(0.5, 1.0, sd));
+                col = mix(col, earth, smoothstep(0.45, 0.95, sd) * 0.8);
+                col *= 1.0 - 0.26 * floor(clamp(sd, 0.0, 0.999) * 5.0) / 4.0 * (face < 0.0 ? 1.0 : 0.4);
+                col *= 1.0 + 0.1 * max(face, 0.0) * sl;
+            }
+        } else if (water > water_edge - 0.22) {
             float lift = 0.93 + 0.13 * lit;
-            splat(col, h, ground(tex4, 6, ap) * vec4(lift, lift, lift, 1.0), water - 0.36 + 0.5);
-            if (water > 0.4) splat(col, h, ground(tex4, 7, ap) * vec4(lift, lift, lift, 1.0), water - 0.46 + 0.5);
+            splat(col, h, ground(tex4, tex6, atlas_mix, 6, ap) * vec4(lift, lift, lift, 1.0), water - (water_edge - 0.14) + 0.5);
+            if (water > water_edge - 0.1) splat(col, h, ground(tex4, tex6, atlas_mix, 7, ap) * vec4(lift, lift, lift, 1.0), water - (water_edge - 0.04) + 0.5);
         }
-        if (water > 0.5) {
-            float depth = smoothstep(0.5, 1.0, m.r + (n - 0.5) * 0.12);
-            col = mix(vec3(0.310, 0.541, 0.549), vec3(0.141, 0.314, 0.416), depth);
+        // (water_edge: where on the mask the water begins: 0.5 fills its tiles, more makes a stream narrower than them)
+        if (water > water_edge) {
+            float depth = smoothstep(water_edge, 1.0, m.r + (n - 0.5) * 0.12);
+            col = mix(water_shallow, water_deep, depth);
             col *= 0.96 + 0.08 * fbm(t * 0.5 + 12.0);
             if (depth < 0.18) col = mix(col, vec3(0.50, 0.50, 0.40), (0.18 - depth) * 2.4);
             vec2 sp = vec2(world.x * 0.018, world.y * 0.16);
@@ -293,11 +321,28 @@ SHADER terrain
             float rip = vnoise(rp) * 0.7 + vnoise(rp * 2.1 + 7.0) * 0.3;
             float above = vnoise(rp - vec2(0.0, 0.42)) * 0.7 + vnoise((rp - vec2(0.0, 0.42)) * 2.1 + 7.0) * 0.3;
             float gate = vnoise(ap * vec2(0.02, 0.1) + vec2(-time * 0.2, 4.0));
-            if (rip > 0.74 && gate > 0.45) col = mix(col, vec3(0.66, 0.80, 0.80), 0.4);
-            else if (above > 0.74 && gate > 0.45) col *= 0.9;
-            float foam = 0.515 + 0.01 * sin(time * 1.1 + n * 9.0);
+            // (water_ripples: 0 a calm lake's few glints; toward 1 a running stream's white dabs all along it)
+            float rip_at = 0.74 - 0.16 * water_ripples;
+            float gate_at = 0.45 - 0.3 * water_ripples;
+            if (rip > rip_at && gate > gate_at) col = mix(col, mix(vec3(0.66, 0.80, 0.80), vec3(0.90, 0.95, 0.97), water_ripples), 0.4 + 0.35 * water_ripples);
+            else if (above > rip_at && gate > gate_at) col *= 0.9;
+            float foam = water_edge + 0.015 + 0.01 * sin(time * 1.1 + n * 9.0);
             if (water < foam && hs(ap, 91u) > 0.3) col = mix(col, vec3(0.78, 0.84, 0.80), 0.55);
             else if (water < foam + 0.025) col *= 0.88;
+            // a bank (bank_px art px high; 0: none): the water lies that far below the ground, so under the far
+            // shore the bank's earth shows: the ground's cover over its lip, soil, and a dark wet foot at the water
+            if (bank_px > 0.0) {
+                for (int bk = 0; bk < 3; bk++) {
+                    vec2 w2 = world - vec2(0.0, bank_px * (bk == 0 ? 1.0 : bk == 1 ? 0.66 : 0.3) / 1.5);
+                    vec2 t2 = vec2((w2.x / 32.0 + w2.y / tile_h) * 0.5, (w2.y / tile_h - w2.x / 32.0) * 0.5);
+                    float wa = texture(tex0, t2 / map_size).r + (vnoise(t2 * 2.3) * 0.6 + vnoise(t2 * 6.1) * 0.4 - 0.5) * 0.3 + edge_n * 0.06;
+                    if (wa <= water_edge) {
+                        float e = hs(floor(ap / vec2(2.0, 1.0)), 77u);
+                        vec3 soil = e < 0.3 ? vec3(0.21, 0.15, 0.10) : e < 0.7 ? vec3(0.28, 0.20, 0.13) : e < 0.95 ? vec3(0.35, 0.25, 0.16) : vec3(0.50, 0.47, 0.41);
+                        col = bk == 0 ? soil * 0.6 : bk == 1 ? soil : soil * 1.25;
+                    }
+                }
+            }
         }
         col *= ishade;
         float rim = min(min(t.x, t.y), min(map_size.x - t.x, map_size.y - t.y));
@@ -310,17 +355,18 @@ SHADER cliff
         UNIFORMS mvp
         gl_Position = mvp * apos;
         iface = atc;
-        iinfo = vec4(acolor.r * 3.0, acolor.g, acolor.b * 3.0, 0.0);   // the rim's height, which way it faces, the foot's height
+        iinfo = vec4(acolor.r * 9.0, acolor.g, acolor.b * 9.0, acolor.a);   // the rim's height, which way it faces (0 to 1), the foot's height, 1 on a tile's edge (0.5 off the grid)
     PIXEL
         INPUTS iface:2 iinfo:4
         UNIFORM float art_px
-        float level_px = 20.0;
+        UNIFORM float level_px
+        UNIFORM float snow
         vec2 face = iface;
         float rim = iinfo.x;
         float foot = iinfo.z;
         float side = iinfo.y;
         float bay = bayer(ivec2(gl_FragCoord.xy / art_px));
-        vec2 p = floor(vec2(face.x * 35.8 + side * 300.0, (rim - face.y) * level_px) / 1.5) * 1.5;
+        vec2 p = floor(vec2(face.x * 35.8 + (iinfo.w > 0.75 ? side * 300.0 : 0.0), (rim - face.y) * level_px) / 1.5) * 1.5;
         float hpx = face.y * level_px;
         float depth = max((rim - foot) * level_px, 1.0);
         float k = clamp(p.y / depth, 0.0, 1.0);
@@ -341,7 +387,7 @@ SHADER cliff
         else if (cy < 0.2) col *= 0.62;
         if (fx < 0.05 && hash(vec2(bx, course + 9.0)) > 0.35) col *= 0.55;
         if (vnoise(vec2(p.x * 0.4, p.y * 0.07) + course) > 0.84 && fx > 0.45 && fx < 0.52) col *= 0.62;
-        if (vnoise(p * 0.12 + 40.0) > 0.68 && cy > 0.45 && hash(floor(p / 1.5)) > 0.3) col = mix(col, vec3(0.36, 0.45, 0.20), 0.6);
+        if (iinfo.w > 0.75 && vnoise(p * 0.12 + 40.0) > 0.68 && cy > 0.45 && hash(floor(p / 1.5)) > 0.3) col = mix(col, vec3(0.36, 0.45, 0.20), 0.6);
         float lip = 2.0 + 2.5 * vnoise(vec2(p.x * 0.3, 2.0)) + (hash(vec2(floor(p.x / 1.5), 5.0)) > 0.8 ? 2.0 : 0.0);
         if (p.y < lip) {
             col = mix(vec3(0.31, 0.416, 0.173), vec3(0.47, 0.53, 0.23), g);
@@ -349,21 +395,36 @@ SHADER cliff
         } else if (p.y < lip + 1.5) {
             col *= 0.55;
         }
-        col *= side > 0.5 ? 1.0 : 0.74;
+        col *= mix(0.74, 1.0, clamp(side, 0.0, 1.0));
         col *= mix(1.0, 0.8, floor(clamp(k + bay * 0.2, 0.0, 0.999) * 3.0) / 2.0);
         float scree = 2.0 + 3.0 * vnoise(vec2(p.x * 0.25, 9.0));
         if (depth - p.y < scree && hash(floor(p / 1.5) + 31.0) > 0.45) col = mix(col, vec3(0.30, 0.26, 0.19), 0.6);
         if (depth - p.y < 1.6) col *= 0.55;
+        if (snow > 0.0) {  // (snow lies on the lip, on each course's top and in the scree, a few pixels at a time)
+            vec3 sn = vec3(0.84, 0.87, 0.92) * mix(0.78, 1.0, clamp(side, 0.0, 1.0));
+            float hs1 = hash(floor(p / 1.5) + 61.0);
+            if (p.y < lip && hs1 < snow * 1.2) col = sn;
+            else if (cy > lip_c - 0.06 && hs1 < snow * 0.9) col = mix(col, sn, 0.85);
+            else if (depth - p.y < scree && hs1 < snow) col = mix(col, sn, 0.75);
+        }
         frag_color = vec4(col, 1.0);
 """
 
 var mask_tex:resource<texture>? = nil
+var ground_bank_px = 0.0     // the water lies this many art px below its banks (0: level with the ground)
+var ground_water_edge = 0.5  // where on its mask the water begins (more: narrower than its tiles)
+var ground_litter_fringe = 0.0  // more than 0: the forest floor's edge is scattered a pixel at a time over this much of its weight (leaves strewn out onto the grass)
+var ground_shore_soft = 0.0  // more than 0: no sand at the shore, the ground slopes down to the water over this much of the mask
+var ground_water_shallow = float3 { 0.310, 0.541, 0.549 }  // the water's colour at its edge, and where it's deep
+var ground_water_deep = float3 { 0.141, 0.314, 0.416 }
+var ground_water_ripples = 0.0  // 0: a calm water's few glints; toward 1: a running stream's white dabs all along it
 var prop_tex:resource<texture>? = nil  // the ground under props (prop_channel)
 var mask_bytes = []::int               // the masks as Godot's image holds them (RGBA bytes, MASK_K a tile)
 var paths_tex:resource<texture>? = nil
 var arc_tex:resource<texture>? = nil
 var wear_tex:resource<texture>? = nil
 var ground_quad:resource<mesh>? = nil
+var relief_snow = 0.0  // 0 to 1: how much snow lies on the cliff faces' ledges, lips and scree
 var fog_mesh:resource<mesh>? = nil
 let GROUND_HZ = 15.0  // how often still ground redraws (only its water moves; a fragment shader over every pixel: the laptop ran hot)
 var ground_tex:resource<texture>? = nil
@@ -373,6 +434,12 @@ var ground_tex_zoom = 0.0
 var ground_tex_step = -1.0
 var ground_stale = true                        // a texture its shader reads was rebuilt
 var ground_atlas_tex:resource<texture>? = nil  // the ground's textures (data/ground/atlas.png: src/ground_textures.lobster)
+// A second atlas turning in over the first, for a ground that changes while you watch (a season coming on): at
+// ground_atlas_mix 0 the ground is all ground_atlas_tex, at 1 all ground_atlas_next, and between them each texel is
+// one or the other, the next coming in a texel at a time in small patches. A game that moves the mix says so with
+// ground_stale = true (the ground is kept in a texture between changes).
+var ground_atlas_next:resource<texture>? = nil
+var ground_atlas_mix = 0.0
 
 def ground_atlas() -> resource<texture>:
     if not ground_atlas_tex:
@@ -504,7 +571,7 @@ def fog_cell(pos:[float3], col:[float4], idx:[int], c:int, dark:[float], corner:
     pos.push(float3 { m.x, m.y, 0.0 })
     col.push(float4 { 0.0, 0.0, 0.0, dark[c] })
     for([ int2 { 0, 0 }, int2 { 1, 0 }, int2 { 1, 1 }, int2 { 0, 1 } ]) d:
-        let p = iso(float((cx + d.x) * 1000), float((cy + d.y) * 1000)) - float2 { 0.0, (if relief.length: relief[c * 4 + (if d.y == 0: d.x else: 3 - d.x)] else: 0.0) * LEVEL_PX * 1.5 }
+        let p = iso(float((cx + d.x) * 1000), float((cy + d.y) * 1000)) - float2 { 0.0, (if relief.length: height_in(c, float(d.x), float(d.y)) else: 0.0) * LEVEL_PX * 1.5 }
         pos.push(float3 { p.x, p.y, 0.0 })
         col.push(float4 { 0.0, 0.0, 0.0, corner[(cy + d.y) * (W + 1) + cx + d.x] })
     for([ 0, 2, 1, 0, 3, 2, 0, 4, 3, 0, 1, 4 ]) v: idx.push(n + v)
@@ -534,18 +601,110 @@ class MeshParts:
 
 def corner_px(x:int, y:int) -> float2: return iso(float(x * 1000), float(y * 1000))
 
+// The light on raised ground at m (tiles), height h (levels) there: lit as it faces the sun, a little with its height.
+// The slope is found on either side of the point, a side across a drop left out, so the light runs smoothly over a
+// rough top and down a ramp, and turns sharply only at a rim.
+def slope_shade(m:float2, h:float) -> float:
+    let e = 0.25
+    let g = map([ float2 { 1.0, 0.0 }, float2 { 0.0, 1.0 } ]) d:
+        let hi = lift_at((m.x + d.x * e) * 1000.0, (m.y + d.y * e) * 1000.0) / LEVEL_PX - h
+        let lo = h - lift_at((m.x - d.x * e) * 1000.0, (m.y - d.y * e) * 1000.0) / LEVEL_PX
+        let ok_hi = abs(hi) < e * 1.6
+        let ok_lo = abs(lo) < e * 1.6
+        if ok_hi and ok_lo: (hi + lo) / (2.0 * e)
+        else: if ok_hi: hi / e else: if ok_lo: lo / e else: 0.0
+    return 0.05 * h + clamp(g[0] * 0.8 + g[1] * 0.3, -1.0, 1.0) * 0.16
+
+// A cliff tile's lattice cells, nearest the back first, each cut in two triangles: steep ones facing the camera go to
+// the faces (the cliff shader, its rock in courses), ones facing away are left out (the ground in front hides them),
+// the rest go to the tops. Each triangle goes in the group of its highest point (one list of one: all in that one).
+let CLIFF_STEEP = 0.5  // levels a tile: a triangle steeper than this is rock (a face, or the scree at its foot)
+def cliff_cells(tops:[MeshParts], faces:[MeshParts], x:int, y:int, c:int):
+    let k = CLIFF_STEPS
+    let gw = W * k + 1
+    let step = 1.0 / float(k)
+    var s = 0
+    while s <= 2 * k - 2:
+        var i = max(0, s - k + 1)
+        while i <= min(s, k - 1):
+            let j = s - i
+            let o = (y * k + j) * gw + x * k + i
+            let hk = [ cliff_h[o], cliff_h[o + 1], cliff_h[o + gw + 1], cliff_h[o + gw] ]
+            let mk = [ float2 { float(x) + float(i) * step, float(y) + float(j) * step }, float2 { float(x) + float(i + 1) * step, float(y) + float(j) * step },
+                       float2 { float(x) + float(i + 1) * step, float(y) + float(j + 1) * step }, float2 { float(x) + float(i) * step, float(y) + float(j + 1) * step } ]
+            if max(max(hk[0], hk[1]), max(hk[2], hk[3])) > 0.0:
+                // (cut along the diagonal whose ends lie nearest in height: it runs along the rim, so a rim at 45
+                // degrees is drawn straight and not as a saw)
+                let cut = if abs(hk[1] - hk[3]) < abs(hk[0] - hk[2]) - 0.01: [ [ 0, 1, 3 ], [ 1, 2, 3 ] ] else: [ [ 0, 1, 2 ], [ 0, 2, 3 ] ]
+                for(cut) tri:
+                    cliff_tri(tops, faces, map(tri) v: mk[v], map(tri) v: hk[v])
+            i++
+        s++
+
+def cliff_tri(tops:[MeshParts], faces:[MeshParts], m:[float2], h:[float]):
+    let q = map(3) v: iso(m[v].x * 1000.0, m[v].y * 1000.0) - float2 { 0.0, h[v] * LEVEL_PX * 1.5 }
+    let flat = map(3) v: iso(m[v].x * 1000.0, m[v].y * 1000.0)
+    let area = (q[1].x - q[0].x) * (q[2].y - q[0].y) - (q[1].y - q[0].y) * (q[2].x - q[0].x)
+    let area0 = (flat[1].x - flat[0].x) * (flat[2].y - flat[0].y) - (flat[1].y - flat[0].y) * (flat[2].x - flat[0].x)
+    if area * area0 <= 0.0: return
+    let top = max(max(h[0], h[1]), h[2])
+    let foot = min(min(h[0], h[1]), h[2])
+    let g = max(1, min(int(ceiling(top - 0.001)), MAX_LEVEL))
+    // the slope: the plane through the three points
+    let ax = m[1].x - m[0].x
+    let ay = m[1].y - m[0].y
+    let ah = h[1] - h[0]
+    let bx = m[2].x - m[0].x
+    let by = m[2].y - m[0].y
+    let bh = h[2] - h[0]
+    let nx = ay * bh - ah * by
+    let ny = ah * bx - ax * bh
+    let nz = ax * by - ay * bx
+    let gx = -nx / nz
+    let gy = -ny / nz
+    // (a ramp climbs a level a tile: it stays ground, unless a wall cuts into it)
+    let on_ramp = ramp[clamp(int((m[0].y + m[1].y + m[2].y) / 3.0), 0, H - 1) * W + clamp(int((m[0].x + m[1].x + m[2].x) / 3.0), 0, W - 1)] == 1
+    if sqrt(gx * gx + gy * gy) > (if on_ramp: 1.6 else: CLIFF_STEEP):
+        // (a face and the scree at its foot are the rock's: their rim the level it falls from, their foot the one
+        // it falls to, so the courses, the lip and the scree run on across the triangles)
+        let rim = float(int(ceiling(top - 0.15)))
+        let base = float(int(floor(foot + 0.001)))
+        let out = faces[if faces.length == 1: 0 else: g]
+        // (which way it faces: down the slope; toward +y is lit, toward +x is in shade, as the edges' faces are)
+        let dn = abs(gx) + abs(gy)
+        let side = clamp(0.5 + 0.5 * (gx - gy) / max(dn, 0.001), 0.0, 1.0)
+        for(3) v:
+            out.pos.push(float3 { q[v].x, q[v].y, 0.0 })
+            out.tc.push(float2 { q[v].x / 48.0, h[v] })
+            out.col.push(float4 { rim / float(MAX_LEVEL), side, base / float(MAX_LEVEL), 0.5 })
+    else:
+        let out = tops[if tops.length == 1: 0 else: g]
+        for(3) v:
+            out.pos.push(float3 { q[v].x, q[v].y, 0.0 })
+            out.tc.push(float2 { h[v] * LEVEL_PX, slope_shade(m[v], h[v]) })
+            out.col.push(float4_1)
+
 def top_quad(out:MeshParts, x:int, y:int, c:int):
-    let corners = [ int2 { x, y }, int2 { x + 1, y }, int2 { x + 1, y + 1 }, int2 { x, y + 1 } ]
-    let hk = [ relief[c * 4], relief[c * 4 + 1], relief[c * 4 + 2], relief[c * 4 + 3] ]
-    let gx = (hk[1] + hk[2] - hk[0] - hk[3]) * 0.5
-    let gy = (hk[2] + hk[3] - hk[0] - hk[1]) * 0.5
-    let shade = 0.05 * (hk[0] + hk[1] + hk[2] + hk[3]) * 0.25 + clamp(gx * 0.8 + gy * 0.3, -1.0, 1.0) * 0.16
-    for([ 0, 1, 2, 0, 2, 3 ]) k:
-        let lift = hk[k] * LEVEL_PX
-        let q = corner_px(corners[k].x, corners[k].y) - float2 { 0.0, lift * 1.5 }
-        out.pos.push(float3 { q.x, q.y, 0.0 })
-        out.tc.push(float2 { lift, shade })
-        out.col.push(float4_1)
+    if is_cliff_tile(c):
+        cliff_cells([ out ], [ MeshParts {} ], x, y, c)
+        return
+    let rough = tile_rough(c)
+    let n = if rough: ROUGH_STEPS else: 1
+    let step = 1.0 / float(n)
+    let sub = [ float2 { 0.0, 0.0 }, float2 { 1.0, 0.0 }, float2 { 1.0, 1.0 }, float2 { 0.0, 1.0 } ]
+    for(n) j:
+        for(n) i:
+            let hk = map(sub) s: height_in(c, (float(i) + s.x) * step, (float(j) + s.y) * step)
+            let gx = (hk[1] + hk[2] - hk[0] - hk[3]) * 0.5
+            let gy = (hk[2] + hk[3] - hk[0] - hk[1]) * 0.5
+            let flat = 0.05 * (hk[0] + hk[1] + hk[2] + hk[3]) * 0.25 + clamp(gx * 0.8 + gy * 0.3, -1.0, 1.0) * 0.16
+            for([ 0, 1, 2, 0, 2, 3 ]) k:
+                let lift = hk[k] * LEVEL_PX
+                let m = float2 { float(x) + (float(i) + sub[k].x) * step, float(y) + (float(j) + sub[k].y) * step }
+                let q = iso(m.x * 1000.0, m.y * 1000.0) - float2 { 0.0, lift * 1.5 }
+                out.pos.push(float3 { q.x, q.y, 0.0 })
+                out.tc.push(float2 { lift, if rough: slope_shade(m, hk[k]) else: flat })
+                out.col.push(float4_1)
 
 def band(out:MeshParts, a:float2, b:float2, y0:float, y1:float, col:float4):
     let q = [ a + float2 { 0.0, y0 }, b + float2 { 0.0, y0 }, b + float2 { 0.0, y1 }, a + float2 { 0.0, y1 } ]
@@ -554,40 +713,58 @@ def band(out:MeshParts, a:float2, b:float2, y0:float, y1:float, col:float4):
         out.tc.push(float2_0)
         out.col.push(col)
 
+// The points along the edge tile c shares with tile n (side 0: c's right-hand edge, n beside it; 1: c's lower edge,
+// n below it), each as the tile coordinate, c's height there and n's: one segment a tile, or strips when rough.
+def edge_points(c:int, n:int, side:int) -> [[float]]:
+    let x = c % W
+    let y = c / W
+    let k = if tile_rough(c) or tile_rough(n): ROUGH_STEPS else: 1
+    return map(k + 1) i:
+        let t = float(i) / float(k)
+        if side == 0: [ float(x + 1), float(y) + t, height_in(c, 1.0, t), height_in(n, 0.0, t) ]
+        else: [ float(x) + t, float(y + 1), height_in(c, t, 1.0), height_in(n, t, 0.0) ]
+
 def rims_of(out:MeshParts, x:int, y:int, c:int):
-    let edges = []::[float]
-    if x > 0:
-        let n = c - 1
-        edges.push([ float(x), float(y), float(x), float(y + 1), relief[c * 4], relief[c * 4 + 3], relief[n * 4 + 1], relief[n * 4 + 2] ])
-    if y > 0:
-        let n = c - W
-        edges.push([ float(x), float(y), float(x + 1), float(y), relief[c * 4], relief[c * 4 + 1], relief[n * 4 + 3], relief[n * 4 + 2] ])
+    if is_cliff_tile(c) or (x > 0 and is_cliff_tile(c - 1)) or (y > 0 and is_cliff_tile(c - W)): return
+    let edges = []::[[float]]
+    if x > 0 and not (relief[c * 4] - relief[(c - 1) * 4 + 1] < 0.5 and relief[c * 4 + 3] - relief[(c - 1) * 4 + 2] < 0.5):
+        edges.push(map(edge_points(c - 1, c, 0)) p: [ p[0], p[1], p[3] ])
+    if y > 0 and not (relief[c * 4] - relief[(c - W) * 4 + 3] < 0.5 and relief[c * 4 + 1] - relief[(c - W) * 4 + 2] < 0.5):
+        edges.push(map(edge_points(c - W, c, 1)) p: [ p[0], p[1], p[3] ])
     for(edges) e:
-        if not (e[4] - e[6] < 0.5 and e[5] - e[7] < 0.5):
-            let a = iso(e[0] * 1000.0, e[1] * 1000.0) - float2 { 0.0, e[4] * LEVEL_PX * 1.5 }
-            let b = iso(e[2] * 1000.0, e[3] * 1000.0) - float2 { 0.0, e[5] * LEVEL_PX * 1.5 }
+        for(e.length - 1) i:
+            let a = iso(e[i][0] * 1000.0, e[i][1] * 1000.0) - float2 { 0.0, e[i][2] * LEVEL_PX * 1.5 }
+            let b = iso(e[i + 1][0] * 1000.0, e[i + 1][1] * 1000.0) - float2 { 0.0, e[i + 1][2] * LEVEL_PX * 1.5 }
             band(out, a, b, -1.6 * 1.5, 0.0, float4 { 0.12, 0.10, 0.06, 0.5 })
             band(out, a, b, 0.0, 1.2 * 1.5, float4 { 0.55, 0.66, 0.30, 0.9 })
 
-def face_of(out:MeshParts, ax:float, ay:float, bx:float, by:float, ha:float, hb:float, na0:float, nb0:float, side:float):
-    let na = min(na0, ha)
-    let nb = min(nb0, hb)
-    if ha - na < 0.01 and hb - nb < 0.01: return
-    let pa = iso(ax * 1000.0, ay * 1000.0)
-    let pb = iso(bx * 1000.0, by * 1000.0)
-    let along_a = if side == 0.0: ay else: ax
-    let along_b = if side == 0.0: by else: bx
-    let quad = [ [ pa.x, pa.y, ha, along_a, ha, na ], [ pb.x, pb.y, hb, along_b, hb, nb ], [ pb.x, pb.y, nb, along_b, hb, nb ], [ pa.x, pa.y, na, along_a, ha, na ] ]
-    for([ 0, 1, 2, 0, 2, 3 ]) k:
-        let q = quad[k]
-        out.pos.push(float3 { q[0], q[1] - q[2] * LEVEL_PX * 1.5, 0.0 })
-        out.tc.push(float2 { q[3], q[2] })
-        out.col.push(float4 { q[4] / 3.0, side, q[5] / 3.0, 1.0 })
+// The cliff face down from tile c to its neighbour n (side as edge_points), where c stands above it.
+def face_of(out:MeshParts, c:int, n:int, side:int):
+    let pts = edge_points(c, n, side)
+    for(pts.length - 1) i:
+        let pa = pts[i]
+        let pb = pts[i + 1]
+        let ha = pa[2]
+        let hb = pb[2]
+        let na = min(pa[3], ha)
+        let nb = min(pb[3], hb)
+        if not (ha - na < 0.01 and hb - nb < 0.01):
+            let sa = iso(pa[0] * 1000.0, pa[1] * 1000.0)
+            let sb = iso(pb[0] * 1000.0, pb[1] * 1000.0)
+            let along_a = if side == 0: pa[1] else: pa[0]
+            let along_b = if side == 0: pb[1] else: pb[0]
+            let quad = [ [ sa.x, sa.y, ha, along_a, ha, na ], [ sb.x, sb.y, hb, along_b, hb, nb ], [ sb.x, sb.y, nb, along_b, hb, nb ],
+                         [ sa.x, sa.y, na, along_a, ha, na ] ]
+            for([ 0, 1, 2, 0, 2, 3 ]) k:
+                let q = quad[k]
+                out.pos.push(float3 { q[0], q[1] - q[2] * LEVEL_PX * 1.5, 0.0 })
+                out.tc.push(float2 { q[3], q[2] })
+                out.col.push(float4 { q[4] / float(MAX_LEVEL), float(side), q[5] / float(MAX_LEVEL), 1.0 })
 
 def near_back_edge(x:int, y:int, top:float) -> bool:
-    var dy = -OCCLUDE_BACK
+    var dy = -relief_occlude
     while dy <= 0:
-        var dx = -OCCLUDE_BACK
+        var dx = -relief_occlude
         while dx <= 0:
             let nx = x + dx
             let ny = y + dy
@@ -596,6 +773,25 @@ def near_back_edge(x:int, y:int, top:float) -> bool:
             dx++
         dy++
     return false
+
+def tiles_from_back() -> [int]:
+    let out = []::int
+    for(W + H - 1) d:
+        var x = max(0, d - H + 1)
+        while x <= min(d, W - 1):
+            out.push((d - x) * W + x)
+            x++
+    return out
+
+// The highest point of cliff tile c.
+def cliff_top(c:int) -> float:
+    let k = CLIFF_STEPS
+    let gw = W * k + 1
+    var top = 0.0
+    for(k + 1) j:
+        for(k + 1) i:
+            top = max(top, cliff_h[(c / W * k + j) * gw + c % W * k + i])
+    return top
 
 def parts_mesh(m:MeshParts) -> resource<mesh>?:
     if not m.pos.length: return nil
@@ -609,39 +805,38 @@ def build_relief():
     occluders = []
     if not has_heights: return
     corner_heights()
-    let faces = map(4): MeshParts {}
-    let tops = map(4): MeshParts {}
-    let rims = map(4): MeshParts {}
+    let faces = map(MAX_LEVEL + 1): MeshParts {}
+    let tops = map(MAX_LEVEL + 1): MeshParts {}
+    let rims = map(MAX_LEVEL + 1): MeshParts {}
     let rows = dictionary<int, MeshParts>(256)
     let row_rims = dictionary<int, MeshParts>(256)
     let row_cells = dictionary<int, [int]>(256)
-    for(H) y:
-        for(W) x:
-            let c = y * W + x
-            let top = max(max(relief[c * 4], relief[c * 4 + 1]), max(relief[c * 4 + 2], relief[c * 4 + 3]))
-            if top > 0.0:
-                let g = int(ceiling(top))
-                top_quad(tops[g], x, y, c)
-                rims_of(rims[g], x, y, c)
-                if x + 1 < W:
-                    let n = c + 1
-                    face_of(faces[g], float(x + 1), float(y), float(x + 1), float(y + 1), relief[c * 4 + 1], relief[c * 4 + 2], relief[n * 4], relief[n * 4 + 3], 0.0)
-                if y + 1 < H:
-                    let n = c + W
-                    face_of(faces[g], float(x), float(y + 1), float(x + 1), float(y + 1), relief[c * 4 + 3], relief[c * 4 + 2], relief[n * 4], relief[n * 4 + 1], 1.0)
-                if near_back_edge(x, y, top):
-                    let d = x + y
-                    if not rows.get(d): rows.set(d, MeshParts {})
-                    if not row_rims.get(d): row_rims.set(d, MeshParts {})
-                    let rm = rows.get(d)
-                    let rr = row_rims.get(d)
-                    if rm: top_quad(rm, x, y, c)
-                    let cs = row_cells.get(d)
-                    if cs: cs.push(c)
-                    else: row_cells.set(d, [ c ])
-                    if rr: rims_of(rr, x, y, c)
+    // (with cliffs, tile by tile from the back, so where the ground folds over itself the near part is drawn last)
+    let order = if cliff_tile.length: tiles_from_back() else: map(W * H) c: c
+    for(order) c:
+        let x = c % W
+        let y = c / W
+        let top = if is_cliff_tile(c): cliff_top(c) else: max(max(relief[c * 4], relief[c * 4 + 1]), max(relief[c * 4 + 2], relief[c * 4 + 3]))
+        if top > 0.0:
+            let g = min(int(ceiling(top)), MAX_LEVEL)
+            if is_cliff_tile(c): cliff_cells(tops, faces, x, y, c)
+            else: top_quad(tops[g], x, y, c)
+            rims_of(rims[g], x, y, c)
+            if x + 1 < W: face_of(faces[g], c, c + 1, 0)
+            if y + 1 < H: face_of(faces[g], c, c + W, 1)
+            if near_back_edge(x, y, top):
+                let d = x + y
+                if not rows.get(d): rows.set(d, MeshParts {})
+                if not row_rims.get(d): row_rims.set(d, MeshParts {})
+                let rm = rows.get(d)
+                let rr = row_rims.get(d)
+                if rm: top_quad(rm, x, y, c)
+                let cs = row_cells.get(d)
+                if cs: cs.push(c)
+                else: row_cells.set(d, [ c ])
+                if rr: rims_of(rr, x, y, c)
     var g = 1
-    while g < 4:
+    while g <= MAX_LEVEL:
         relief_faces.push(parts_mesh(faces[g]))
         relief_tops.push(parts_mesh(tops[g]))
         relief_rims.push(parts_mesh(rims[g]))
@@ -652,7 +847,7 @@ def build_relief():
             let tm = parts_mesh(rm)
             if tm:
                 let rr = row_rims.get(d)
-                occluders.push(Occluder { sort_y: (float(d) * 16.0 - OCCLUDE_SORT) * 1.5, tops: tm, rims: if rr: parts_mesh(rr) else: nil,
+                occluders.push(Occluder { sort_y: (float(d) * iso_k * 2000.0 / 3.0 - OCCLUDE_SORT) * 1.5, tops: tm, rims: if rr: parts_mesh(rr) else: nil,
                                           cells: row_cells.get(d) or [] })
 
 def sorted_ints_g(xs:[int]) -> [int]:
@@ -671,6 +866,8 @@ def draw_relief(art_px:float):
         if f:
             gl.set_shader("cliff")
             gl.set_uniform("art_px", art_px)
+            gl.set_uniform("level_px", LEVEL_PX)
+            gl.set_uniform("snow", relief_snow)
             gl.render_mesh(f)
         let t = relief_tops[k]
         if t: draw_terrain_mesh(t, art_px)
@@ -690,12 +887,22 @@ def draw_terrain_mesh(m:resource<mesh>, art_px:float):
     gl.set_uniform("art_px", art_px)
     gl.set_uniform("dev_px", art_px * ART_K)
     gl.set_uniform("time", ground_step())
+    gl.set_uniform("bank_px", ground_bank_px)
+    gl.set_uniform("water_edge", ground_water_edge)
+    gl.set_uniform("shore_soft", ground_shore_soft)
+    gl.set_uniform("tile_h", iso_k * 2000.0 / 3.0)  // (half a tile down the screen, canvas px: 16 at 30 degrees)
+    gl.set_uniform("litter_fringe", ground_litter_fringe)
+    gl.set_uniform("water_shallow", ground_water_shallow)
+    gl.set_uniform("water_deep", ground_water_deep)
+    gl.set_uniform("water_ripples", ground_water_ripples)
+    gl.set_uniform("atlas_mix", if ground_atlas_next: ground_atlas_mix else: 0.0)
     gl.set_mesh_texture(m, 0, 0, mt)
     gl.set_mesh_texture(m, 0, 1, pt)
     gl.set_mesh_texture(m, 0, 2, wt)
     gl.set_mesh_texture(m, 0, 3, at)
     gl.set_mesh_texture(m, 0, 4, ground_atlas())
     gl.set_mesh_texture(m, 0, 5, assert prop_tex)
+    gl.set_mesh_texture(m, 0, 6, ground_atlas_next or ground_atlas())
     gl.render_mesh(m)
 
 def draw_occluder(o:Occluder, art_px:float):
@@ -718,13 +925,46 @@ def draw_ground(art_px:float):
     gl.set_uniform("art_px", art_px)
     gl.set_uniform("dev_px", art_px * ART_K)
     gl.set_uniform("time", ground_step())
+    gl.set_uniform("bank_px", ground_bank_px)
+    gl.set_uniform("water_edge", ground_water_edge)
+    gl.set_uniform("shore_soft", ground_shore_soft)
+    gl.set_uniform("tile_h", iso_k * 2000.0 / 3.0)  // (half a tile down the screen, canvas px: 16 at 30 degrees)
+    gl.set_uniform("litter_fringe", ground_litter_fringe)
+    gl.set_uniform("water_shallow", ground_water_shallow)
+    gl.set_uniform("water_deep", ground_water_deep)
+    gl.set_uniform("water_ripples", ground_water_ripples)
+    gl.set_uniform("atlas_mix", if ground_atlas_next: ground_atlas_mix else: 0.0)
     gl.set_mesh_texture(gq, 0, 0, mt)
     gl.set_mesh_texture(gq, 0, 1, pt)
     gl.set_mesh_texture(gq, 0, 2, wt)
     gl.set_mesh_texture(gq, 0, 3, at)
     gl.set_mesh_texture(gq, 0, 4, ground_atlas())
     gl.set_mesh_texture(gq, 0, 5, assert prop_tex)
+    gl.set_mesh_texture(gq, 0, 6, ground_atlas_next or ground_atlas())
     gl.render_mesh(gq)
+
+// The ground's heights for the low fog (view/atmosphere's atmo_low_begin), placed as draw_ground_at places the ground:
+// the flat ground, then the raised ground level by level, faces and tops. The hills' near edges that hide what's
+// behind them are draw_occluder_heights.
+def draw_ground_heights():
+    gl.set_shader("atmo_low_top")
+    gl.set_uniform("level_px", LEVEL_PX)
+    let gq = ground_quad
+    if gq: gl.render_mesh(gq)
+    for(relief_faces) f, k:
+        if f:
+            gl.set_shader("atmo_low_face")
+            gl.render_mesh(f)
+        let t = relief_tops[k]
+        if t:
+            gl.set_shader("atmo_low_top")
+            gl.set_uniform("level_px", LEVEL_PX)
+            gl.render_mesh(t)
+
+def draw_occluder_heights(o:Occluder):
+    gl.set_shader("atmo_low_top")
+    gl.set_uniform("level_px", LEVEL_PX)
+    gl.render_mesh(o.tops)
 
 // The time the terrain shader sees: in steps, so the water moves only when the still ground is redrawn.
 def ground_step() -> float: return floor(gl.time() * GROUND_HZ) / GROUND_HZ

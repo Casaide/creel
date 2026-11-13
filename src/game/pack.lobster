@@ -120,6 +120,14 @@ def resource_stage(kind:string, left:int, full:int) -> int:
 let SPRITE_LIGHT = 91.0 / 255.0
 
 let SPRITE_SHADERS = """
+PIXELFUNCTIONS
+    // a sprite's texel, the team key recoloured (rgb premultiplied by alpha)
+    vec4 sprite_texel(sampler2D tex, ivec2 p, ivec2 hi, vec3 team) {
+        vec4 t = texelFetch(tex, clamp(p, ivec2(0), hi), 0);
+        vec3 rgb = t.rgb;
+        if (min(t.r, t.b) - t.g > 0.22 && abs(t.r - t.b) < 0.3) rgb = team * max(t.r, t.b) * 1.08;
+        return vec4(rgb * t.a, t.a);
+    }
 SHADER sprite
     VERTEX
         INPUTS apos:4 atc:2 acolor:4
@@ -131,11 +139,28 @@ SHADER sprite
         INPUTS itc:2 icolor:4
         UNIFORMS tex0
         UNIFORM float gone
-        vec4 t = texture(tex0, itc);
-        if (t.a < 0.02) discard;
-        vec3 rgb = t.rgb;
-        if (min(t.r, t.b) - t.g > 0.22 && abs(t.r - t.b) < 0.3) rgb = icolor.rgb * max(t.r, t.b) * 1.08;
-        frag_color = vec4(rgb * icolor.a * 2.8021978, t.a * (1.0 - gone));
+        UNIFORM float even
+        // (sprite_even: at a zoom between whole numbers, nearest sampling draws an art px two screen px wide, then
+        // three, and edges look jagged. Sharp bilinear: each art px is solid, and only the one screen px where two
+        // meet is a mix of them, so every art px reads the same size and stays crisp. At a whole zoom it is nearest.)
+        // (each texel recoloured before they're mixed, and mixed with their alpha, so a clear texel's colour doesn't
+        // darken an edge)
+        ivec2 sz = textureSize(tex0, 0);
+        vec2 p = itc * vec2(sz) - 0.5;
+        vec2 i = floor(p);
+        vec2 f = p - i;
+        if (even > 0.5) {
+            vec2 s = 1.0 / max(fwidth(itc * vec2(sz)), vec2(0.0001));  // screen px an art px
+            f = clamp((f - 0.5) * s + 0.5, 0.0, 1.0);
+        } else {
+            f = step(0.5, f);  // (nearest)
+        }
+        ivec2 a = ivec2(i);
+        ivec2 hi = sz - 1;
+        vec4 m = mix(mix(sprite_texel(tex0, a, hi, icolor.rgb), sprite_texel(tex0, a + ivec2(1, 0), hi, icolor.rgb), f.x),
+                     mix(sprite_texel(tex0, a + ivec2(0, 1), hi, icolor.rgb), sprite_texel(tex0, a + ivec2(1, 1), hi, icolor.rgb), f.x), f.y);
+        if (m.a < 0.02) discard;
+        frag_color = vec4(m.rgb / m.a * icolor.a * 2.8021978, m.a * (1.0 - gone));
 SHADER sprite_copy
     VERTEX
         INPUTS apos:4 atc:2
@@ -222,10 +247,14 @@ var b_idx = []::int
 var b_sheet = -1
 var sprite_snap = 1.0  // device px a world art px while the world is drawn: a sprite lands on a whole one (#358)
 
+var sprite_shader = "sprite"  // what flush_sprites draws with (the atmosphere's shade buffer draws the same sprites through its own)
+var sprite_even = false       // art px all the same size at a zoom between whole numbers (sharp bilinear; docs/settings.md)
+
 def flush_sprites():
     ui_batch_flush()  // (fills batched before these sprites go under them; and out before a bust's framebuffer)
     if b_pos.length:
-        gl.set_shader("sprite")
+        gl.set_shader(sprite_shader)
+        if sprite_shader == "sprite": gl.set_uniform("even", if sprite_even: 1.0 else: 0.0)
         gl.set_primitive_texture(0, sheet_texture(b_sheet))
         gl.draw_mesh("PCT", b_pos, b_col, []::float3, b_tc, []::float2, b_idx)
     b_pos = []::float3

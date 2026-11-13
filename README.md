@@ -30,6 +30,14 @@ changes without notice.
 - **Network** (`src/net`): lockstep over TCP, and finding games on the local network.
 - **Sound** (`src/audio`, `src/game/audio.lobster`): an offline synth and the in-game player.
 
+## Docs
+
+- [`docs/settings.md`](docs/settings.md): the settings a game can change (the camera's angle, the ground, cliffs), kept
+  up to date as they are added.
+- [`docs/atmosphere.md`](docs/atmosphere.md): the atmosphere pass in full: every mood knob and its range, mood blending,
+  glows, and the shade buffer's shaders, channels and draw order.
+- [`docs/roadmap.md`](docs/roadmap.md): what is still to move into the engine.
+
 ## Using it
 
 A game keeps Creel beside its own code, usually as a git submodule, and starts each program with:

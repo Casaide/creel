@@ -5,7 +5,7 @@
 // splatted with a depth test, banded light and self-shadows, fur flecked by a hash of the voxel, a dark outline, a
 // ground shadow of its own. game/voxel_units.lobster bakes a match's units; voxel_proto.lobster draws a sheet.
 
-let vx_ELEV = 30.0                                                      // the camera's elevation, degrees
+var vx_ELEV = 30.0                                                      // the camera's elevation, degrees (a setting: see view/facing)
 var vx_RES = 2.0                                                        // voxels a body unit (a body unit is about a world pixel; a voxel a baked pixel)
 var vx_CELL = int2 { int(100.0 * vx_RES), int(170.0 * vx_RES) }         // a sprite cell (room for a siege tower; each is cropped to what's drawn)
 var vx_ANCHOR = int2 { vx_CELL.x / 2, vx_CELL.y - int(40.0 * vx_RES) }  // the ground under the unit, in its cell (room in front: a cart's puller, a trunk)
@@ -366,6 +366,7 @@ def vx_parse_shape(o:JV, hard_by_default:bool) -> vx_spec:
         s.model = vx_model_of(as_str(at(o, "model")), gobj(o, "mats"))
         s.pa, s.a = vx_pt(at(o, "at"))
         if has(o, "to"): s.pb, s.b = vx_pt(at(o, "to"))
+        if has(o, "side"): s.n = vx_v3(at(o, "side"))  // its +x this way (held gear: a gun along the hand, its lock to the side)
         s.ra = gfloat(o, "scale", 1.0) / vx_VOX_RES
         s.hard = gbool(o, "hard", not gbool(o, "soft", false))
     else: assert false
@@ -560,6 +561,7 @@ class vx_body_spec:
     fit_r:float2
     seat_z:float  // a rider: its seat's height in its own frame, and its legs astride: thigh, shin, foot
     astride:[int]
+    astride_l:float2 = float2 { 6.7, 5.0 }  // and how long its thigh and shin are astride (seat "legs")
     seat:float3  // a mount: where its rider sits, how far out its rider's knees go
     wide:float
     looks:[float]              // per look: the skin shade
@@ -694,6 +696,8 @@ def vx_parse_body(id:string, o:JV) -> vx_body_spec:
         let so = at(o, "seat")
         b.seat_z = gfloat(so, "z", 0.0)
         b.astride = map(gstrs(so, "astride")) m: vx_mat(m)
+        let sl = glist(so, "legs")
+        if sl.length == 2: b.astride_l = float2 { as_float(sl[0]), as_float(sl[1]) }
         if has(so, "at"): b.seat = vx_v3(at(so, "at"))
         b.wide = gfloat(so, "wide", 0.0)
     if has(o, "looks"):
@@ -1258,12 +1262,16 @@ def vx_emit(out:[vx_prim], s:vx_spec, p:vx_points, fx:float3, fy:float3, fz:floa
                 if s.bone or s.ax != float3_0: out.push(vx_part_prim(s, p, fx * m.x, fy, fz))
                 else:
                     let c = vx_where(p, s.pa) + tr(s.a)
-                    let x0 = fx * m.x * (if s.flip: -1.0 else: 1.0)
                     var y = fy
                     if s.pb != "": y = normalize(vx_where(p, s.pb) + tr(s.b) - c)
-                    let x = normalize(x0 - y * dot(x0, y))
-                    let z = cross(fx, y)  // (from the unmirrored x: a mirrored model keeps its up)
-                    out.push(vx_prim { c, c + y, s.ra, s.ra, s.mat, s.hard, false, float3_0, model: s.model, mx: x, mz: normalize(z - y * dot(z, y)) })
+                    if s.n != float3_0:  // (its side given: x that way, z = x cross y, so it can lie along the frame's first axis)
+                        let sx = normalize(tr(s.n) - y * dot(tr(s.n), y))
+                        out.push(vx_prim { c, c + y, s.ra, s.ra, s.mat, s.hard, false, float3_0, model: s.model, mx: sx, mz: cross(sx, y) })
+                    else:
+                        let x0 = fx * m.x * (if s.flip: -1.0 else: 1.0)
+                        let x = normalize(x0 - y * dot(x0, y))
+                        let z = cross(fx, y)  // (from the unmirrored x: a mirrored model keeps its up)
+                        out.push(vx_prim { c, c + y, s.ra, s.ra, s.mat, s.hard, false, float3_0, model: s.model, mx: x, mz: normalize(z - y * dot(z, y)) })
             default: assert false
 
 // A .vox body's part: on its point, its own axes turned by the frame; or a limb's, kept where it was drawn against its
@@ -1641,10 +1649,27 @@ def vx_rider_prims(u:vx_unit_def, ph0:float) -> [vx_prim]:
     vx_whole_body(out, u, b, vx_body_points(b, 0.0, seat - float3 { 0.0, 0.0, b.seat_z }), 0.0, t, flags)
     vx_seated = false
     let wide = mb.wide * ms
+    // (the legs down the mount's sides, clear of it: the knee at least `wide` out, and the shin hanging straight down
+    // from it as far out as the mount is wide anywhere along it, so it lies against the barrel, not through it)
+    def clear_x(y:float, z:float, r:float) -> float:
+        var x = 0.0
+        while x < 40.0:
+            var d = 1000.0
+            for(mount) q: d = min(d, vx_dist(float3 { x, y, z } / ms, q) * ms)
+            if d >= r: return x
+            x += 0.25
+        return x
     for([ -1.0, 1.0 ]) side:
         let hip = seat + float3 { side * 2.0, 0.0, 0.6 }
-        let knee = seat + float3 { side * wide, 3.4, -3.6 }
-        let ankle = knee + float3 { 0.0, -0.8, -5.0 }
+        let l1 = b.astride_l.x / 6.7
+        var knee = seat + float3 { side * wide, 3.4 * l1, -3.6 * l1 }
+        var ankle = knee + float3 { 0.0, -0.8, -5.0 } * (b.astride_l.y / 5.0)
+        var out_x = max(abs(knee.x), clear_x(knee.y, knee.z, 1.7))
+        for(5) k:
+            let f = float(k) / 4.0
+            out_x = max(out_x, clear_x(knee.y + (ankle.y - knee.y) * f, knee.z + (ankle.z - knee.z) * f, 1.3))
+        knee = float3 { side * out_x, knee.y, knee.z }
+        ankle = float3 { side * out_x, ankle.y, ankle.z }
         out.push(vx_cap(hip, knee, 2.0, 1.7, b.astride[0]))
         out.push(vx_cap(knee, ankle, 1.4, 1.1, b.astride[1]))
         out.push(vx_cap(ankle, ankle + float3 { 0.0, 2.0, -0.4 }, 1.1, 1.0, b.astride[2]))
@@ -1906,6 +1931,32 @@ def vx_fill(parts:[vx_prim], unit_size:float, flies:bool = false) -> vx_shape:
     vx_fill_more(fl, 1000000000.0)
     return vx_fill_end(fl)
 
+var vx_smooth_normals = 0  // passes averaging each surface voxel's normal and occlusion with those round it (0 off): a
+                           // model's stairs and a thin coat's folds shade evenly, not in flecks
+
+// One pass: each surface voxel's normal and occlusion the mean of its own and those of the surface voxels in the
+// 3 x 3 x 3 round it that face the same way.
+def vx_blur_surface(pos:[int3], nrm:[float3], occl:[float], lo:int3, dims:int3):
+    let at = map(dims.x * dims.y * dims.z): -1
+    def cell(v:int3) -> int: return ((v.z - lo.z) * dims.y + v.y - lo.y) * dims.x + v.x - lo.x
+    for(pos) v, i: at[cell(v)] = i
+    let was = copy(nrm)
+    let was_o = copy(occl)
+    for(pos) v, i:
+        var sum = float3_0
+        var so = 0.0
+        var n = 0
+        for(3) dz: for(3) dy: for(3) dx:
+            let q = v + int3 { dx - 1, dy - 1, dz - 1 }
+            if q.x >= lo.x and q.y >= lo.y and q.z >= lo.z and q.x < lo.x + dims.x and q.y < lo.y + dims.y and q.z < lo.z + dims.z:
+                let j = at[cell(q)]
+                if j >= 0 and dot(was[j], was[i]) > 0.0:  // (not across a thin sheet to its far side)
+                    sum += was[j]
+                    so += was_o[j]
+                    n++
+        nrm[i] = normalize(sum)
+        occl[i] = so / float(n)
+
 // The filled grid's surface: each surface voxel, its normal and how hemmed in it is.
 def vx_fill_end(fl:vx_filling) -> vx_shape:
     let lo = fl.lo
@@ -1931,6 +1982,7 @@ def vx_fill_end(fl:vx_filling) -> vx_shape:
         var hit = 0
         for(vx_AO_TAPS) t: if vx_solid_at(mats, lo, dims, v + t): hit++
         clamp((float(hit) / 14.0 - 0.45) / 0.35, 0.0, 1.0)
+    for(vx_smooth_normals): vx_blur_surface(pos, nrm, occl, lo, dims)
     return vx_shape { pos, smat, nrm, occl, lo, dims, mats }
 
 // ---- surface patterns (materials.json's "pattern"): texture in the colour, by the voxel's place on its shape, so
@@ -2038,12 +2090,13 @@ var vx_shadows = true                                  // shadows on the body (i
 let vx_SKY = float3 { 0.13, 0.15, 0.2 }              // the sky fill at full (a surface facing straight up, open)
 let vx_BOUNCE = float3 { 0.07, 0.06, 0.03 }          // the ground's bounce (a surface facing straight down)
 let vx_RIM = float3 { 0.62, 0.7, 0.85 }              // the rim's light (the sky behind the unit)
-let vx_SUN = normalize(float3 { -0.55, 0.45, 1.0 })  // towards the sun, as the camera sees it: upper left (the world's)
+var vx_SUN = normalize(float3 { -0.55, 0.45, 1.0 })  // towards the sun, as the camera sees it: upper left (the world's; a game may lower it)
 var vx_depth = []::float                             // the cell being drawn (reused: only the last one's box is cleared)
 var vx_cols = []::float3
 var vx_mat = []::int
 var vx_out = []::float4
 var vx_box = int4_0  // the last cell's box, outline included: x0, y0, x1, y1
+var vx_despeckle = 0  // passes softening the shading over each surface (0 off): flecks smoothed, lines and seams kept
 
 // One facing of a shape as a sprite cell (alpha 0 around it; drawn in vx_box): the cell is reused by the next call,
 // so copy what's wanted first. The team colour's key (magenta) survives the shading, so the game's sprite shader can
@@ -2124,6 +2177,7 @@ def vx_cell_in(sh:vx_shape, facing:int, cw:int, ch:int, anchor:int2) -> [float4]
                 vx_cols[j] = c
                 vx_mat[j] = m
     vx_box = int4 { box.x - 1, box.y - 1, box.z + 1, box.w + 1 }  // (the outline round it)
+    for(vx_despeckle): vx_smooth_specks(cw)
     for(vx_box.w - vx_box.y + 1) yy: for(vx_box.z - vx_box.x + 1) xx:
         let px = vx_box.x + xx
         let py = vx_box.y + yy
@@ -2147,6 +2201,25 @@ def vx_cell_in(sh:vx_shape, facing:int, cw:int, ch:int, anchor:int2) -> [float4]
 // A soft halo round every light in the cell (a lit window's glow on the wall round it and the air in front): each pixel
 // near a light takes the nearest one's colour, fading with the distance, the strongest kept (not summed).
 var vx_glow = []::float
+// Shading's flecks (a voxel's band flipped, a model's stairs, a crease caught on one voxel of a thin coat) read as noise
+// once the sprite is drawn small. A pass of softening: each pixel the mean of itself and those beside it on the same
+// surface (the same material, near the same depth), so a line one pixel wide, a seam between colours and the body's
+// outline stay sharp.
+def vx_smooth_specks(cw:int):
+    let was = copy(vx_cols)
+    for(vx_box.w - vx_box.y - 1) yy: for(vx_box.z - vx_box.x - 1) xx:
+        let j = (vx_box.y + 1 + yy) * cw + vx_box.x + 1 + xx
+        let m = vx_mat[j]
+        if m >= 0 and vx_MAT_GLOW[m] == 0 and m != vx_mat_team:
+            var n = 1
+            var sum = was[j]
+            for([ 1, -1, cw, -cw ]) dj:
+                let q = j + dj
+                if vx_mat[q] == m and abs(vx_depth[q] - vx_depth[j]) < 3.0:
+                    n++
+                    sum += was[q]
+            vx_cols[j] = sum / float(n)
+
 def vx_halo(cw:int, ch:int):
     let lights = []::int
     for(vx_box.w - vx_box.y + 1) yy: for(vx_box.z - vx_box.x + 1) xx:
