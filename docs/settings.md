@@ -119,6 +119,11 @@ units bake as before.
   barrel (`"to": ["hand", 1, 0, 0]`) can point where the hand points, its lock to one side (`"side": [0, 0, 1]`).
   Thin parts (a barrel one voxel wide) can drop out when a model is baked at an angle: give them a `cap` of their own
   over the model.
+- **A rider's legs astride** (`view/voxel`, a body's `"seat"`): the rider's legs now hang down the mount's sides clear
+  of it. The knee is at least the mount's `seat.wide` out, and the shin hangs straight down, as far out as the mount
+  is wide anywhere along it, so it lies against the barrel rather than through it. The rider's `"seat": { "legs":
+  [thigh, shin] }` sets how long they are, in body units (default `[6.7, 5.0]`, as before). Smyana's men use
+  `[9.0, 8.5]` so their feet hang below the horse's belly.
 
 ## Sounds
 
