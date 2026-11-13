@@ -441,6 +441,12 @@ var ground_atlas_tex:resource<texture>? = nil  // the ground's textures (data/gr
 var ground_atlas_next:resource<texture>? = nil
 var ground_atlas_mix = 0.0
 
+// A game turns the next atlas in by this (nil: none).
+def ground_atlas_turn(next:resource<texture>?, mix:float):
+    ground_atlas_next = next
+    ground_atlas_mix = mix
+    ground_stale = true
+
 def ground_atlas() -> resource<texture>:
     if not ground_atlas_tex:
         ground_atlas_tex = gl.load_texture("../data/ground/atlas.png", texture_format_clamp | texture_format_nomipmap | texture_format_nearest_mag | texture_format_nearest_min)

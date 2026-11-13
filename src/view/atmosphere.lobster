@@ -565,7 +565,7 @@ def atmo_shade_begin():
 // tree's shadow on the ground behind him is not painted flat across his back. The game sets its camera again after.
 def atmo_shade_standing():
     let ws = gl.window_size()
-    if not atmo_ground or gl.texture_size(assert atmo_ground) != ws: atmo_ground = atmo_target(ws, true)
+    if not atmo_ground or gl.texture_size(atmo_ground) != ws: atmo_ground = atmo_target(ws, true)
     let was = gl.blend(blend_none)
     gl.switch_to_framebuffer(atmo_ground)
     gl.ortho()
@@ -575,7 +575,7 @@ def atmo_shade_standing():
     gl.switch_to_framebuffer(atmo_shade)
     gl.ortho()
     gl.blend(was)
-    gl.set_primitive_texture(1, assert atmo_ground)
+    gl.set_primitive_texture(1, atmo_ground)
 
 // The colour to draw a unit's sprite with under atmo_shade_stand: foot is where it stands on the screen, in pixels
 // from the top left (where the ground's shade is read for all of it).
