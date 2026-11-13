@@ -94,6 +94,17 @@ Set in `view/voxel_grid` before a model is baked. A game that changes one puts i
 | `vg_sun_shadow` | `false` | `false`: a model's own shadow is found by marching toward the sun in steps of the lighting unit, which steps over twigs and thin boughs. `true`: it is found from a picture of the model seen from the sun, exact to a voxel and hard-edged, so a crown shades its own boughs and trunk. |
 | `vg_shade` | `0.0` | How much of its sky light a voxel in that shadow loses as well, from 0 (none) to 1 (all). Only read when `vg_sun_shadow` is on. |
 
+## Voxel units
+
+Set in `view/voxel` before a unit is baked, and put in the bake key. Both are off by default, so Age of Anything's
+units bake as before.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `vx_set_res(res)` | `2.0` | Voxels a body unit, and the sprite cell to fit. A unit made of `.vox` models has `vx_VOX_RES` (2) model voxels a body unit, so a unit of size `s` bakes a model voxel to `res * s / 2` pixels. Under 1, rows of the model are lost and a thin coat breaks up into flecks of what is under it; exactly 1 puts rows on the half pixel and can open holes. A little over 1 (Smyana: `2 / 0.73 * 1.15` for its men of size 0.73) keeps every voxel. Draw the sprites smaller to match. |
+| `vx_smooth_normals` | `0` | Passes evening out the shading: each surface voxel's normal and occlusion averaged with those round it that face the same way. A model's voxel stairs then light smoothly, not in flecks. Smyana: 2. |
+| `vx_despeckle` | `0` | Passes softening the shaded picture: each pixel the mean of itself and those beside it of the same material at near the same depth. Lines one pixel wide, seams between colours and the outline stay sharp. Smyana: 1. |
+
 ## Features a game switches on from its data
 
 - **Map bridges** (`lib/bridges`): a map's `"bridges"` (tile rectangles `x0, y0, x1, y1`) are timber decks over water

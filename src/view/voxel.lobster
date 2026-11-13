@@ -1911,6 +1911,32 @@ def vx_fill(parts:[vx_prim], unit_size:float, flies:bool = false) -> vx_shape:
     vx_fill_more(fl, 1000000000.0)
     return vx_fill_end(fl)
 
+var vx_smooth_normals = 0  // passes averaging each surface voxel's normal and occlusion with those round it (0 off): a
+                           // model's stairs and a thin coat's folds shade evenly, not in flecks
+
+// One pass: each surface voxel's normal and occlusion the mean of its own and those of the surface voxels in the
+// 3 x 3 x 3 round it that face the same way.
+def vx_blur_surface(pos:[int3], nrm:[float3], occl:[float], lo:int3, dims:int3):
+    let at = map(dims.x * dims.y * dims.z): -1
+    def cell(v:int3) -> int: return ((v.z - lo.z) * dims.y + v.y - lo.y) * dims.x + v.x - lo.x
+    for(pos) v, i: at[cell(v)] = i
+    let was = copy(nrm)
+    let was_o = copy(occl)
+    for(pos) v, i:
+        var sum = float3_0
+        var so = 0.0
+        var n = 0
+        for(3) dz: for(3) dy: for(3) dx:
+            let q = v + int3 { dx - 1, dy - 1, dz - 1 }
+            if q.x >= lo.x and q.y >= lo.y and q.z >= lo.z and q.x < lo.x + dims.x and q.y < lo.y + dims.y and q.z < lo.z + dims.z:
+                let j = at[cell(q)]
+                if j >= 0 and dot(was[j], was[i]) > 0.0:  // (not across a thin sheet to its far side)
+                    sum += was[j]
+                    so += was_o[j]
+                    n++
+        nrm[i] = normalize(sum)
+        occl[i] = so / float(n)
+
 // The filled grid's surface: each surface voxel, its normal and how hemmed in it is.
 def vx_fill_end(fl:vx_filling) -> vx_shape:
     let lo = fl.lo
@@ -1936,6 +1962,7 @@ def vx_fill_end(fl:vx_filling) -> vx_shape:
         var hit = 0
         for(vx_AO_TAPS) t: if vx_solid_at(mats, lo, dims, v + t): hit++
         clamp((float(hit) / 14.0 - 0.45) / 0.35, 0.0, 1.0)
+    for(vx_smooth_normals): vx_blur_surface(pos, nrm, occl, lo, dims)
     return vx_shape { pos, smat, nrm, occl, lo, dims, mats }
 
 // ---- surface patterns (materials.json's "pattern"): texture in the colour, by the voxel's place on its shape, so
@@ -2049,6 +2076,7 @@ var vx_cols = []::float3
 var vx_mat = []::int
 var vx_out = []::float4
 var vx_box = int4_0  // the last cell's box, outline included: x0, y0, x1, y1
+var vx_despeckle = 0  // passes softening the shading over each surface (0 off): flecks smoothed, lines and seams kept
 
 // One facing of a shape as a sprite cell (alpha 0 around it; drawn in vx_box): the cell is reused by the next call,
 // so copy what's wanted first. The team colour's key (magenta) survives the shading, so the game's sprite shader can
@@ -2129,6 +2157,7 @@ def vx_cell_in(sh:vx_shape, facing:int, cw:int, ch:int, anchor:int2) -> [float4]
                 vx_cols[j] = c
                 vx_mat[j] = m
     vx_box = int4 { box.x - 1, box.y - 1, box.z + 1, box.w + 1 }  // (the outline round it)
+    for(vx_despeckle): vx_smooth_specks(cw)
     for(vx_box.w - vx_box.y + 1) yy: for(vx_box.z - vx_box.x + 1) xx:
         let px = vx_box.x + xx
         let py = vx_box.y + yy
@@ -2152,6 +2181,25 @@ def vx_cell_in(sh:vx_shape, facing:int, cw:int, ch:int, anchor:int2) -> [float4]
 // A soft halo round every light in the cell (a lit window's glow on the wall round it and the air in front): each pixel
 // near a light takes the nearest one's colour, fading with the distance, the strongest kept (not summed).
 var vx_glow = []::float
+// Shading's flecks (a voxel's band flipped, a model's stairs, a crease caught on one voxel of a thin coat) read as noise
+// once the sprite is drawn small. A pass of softening: each pixel the mean of itself and those beside it on the same
+// surface (the same material, near the same depth), so a line one pixel wide, a seam between colours and the body's
+// outline stay sharp.
+def vx_smooth_specks(cw:int):
+    let was = copy(vx_cols)
+    for(vx_box.w - vx_box.y - 1) yy: for(vx_box.z - vx_box.x - 1) xx:
+        let j = (vx_box.y + 1 + yy) * cw + vx_box.x + 1 + xx
+        let m = vx_mat[j]
+        if m >= 0 and vx_MAT_GLOW[m] == 0 and m != vx_mat_team:
+            var n = 1
+            var sum = was[j]
+            for([ 1, -1, cw, -cw ]) dj:
+                let q = j + dj
+                if vx_mat[q] == m and abs(vx_depth[q] - vx_depth[j]) < 3.0:
+                    n++
+                    sum += was[q]
+            vx_cols[j] = sum / float(n)
+
 def vx_halo(cw:int, ch:int):
     let lights = []::int
     for(vx_box.w - vx_box.y + 1) yy: for(vx_box.z - vx_box.x + 1) xx:
