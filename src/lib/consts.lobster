@@ -29,6 +29,7 @@ let LANES = 32
 let FORM_GAP = 160
 let SLOT_ARRIVE = 60
 let AVOID_LOOK = 3     // half summed radii: a moving one of its own side this near is steered round (#355)
+let PRESS_IN = 1000    // milli-tiles past its reach (and a body): nearer its foe than this, a unit after it presses straight in (#453)
 let PLACE_STEP = 250   // milli-tiles: a place on blocked ground looks in towards the centre this far at a time
 let CLEAR_RINGS = 3    // rings round where a unit comes out looked at for a spot clear of everyone (#394)
 let STALL_LOOKS = 3    // progress looks a unit in an arrived block stands wedged, its place clear, before it stays where it is (#393)
