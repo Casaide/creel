@@ -24,7 +24,7 @@ def lan_files(dir:string) -> [string]:
     return sorted_strs(out)
 
 // Data files only the looks and sounds read: two builds that differ in them still play together.
-var net_look_only = [ "atmosphere.json", "audio.json", "tips.json", "ui.json" ]
+let net_look_only = [ "atmosphere.json", "audio.json", "tips.json", "ui.json" ]
 
 // This build's network version: the protocol and every data file the sim reads (sorted), hashed. A file's
 // name goes in relative to the data folder, so where the game is installed doesn't matter.
