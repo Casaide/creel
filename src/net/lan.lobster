@@ -40,6 +40,11 @@ def net_version() -> string:
     net_version_cache = substring(sha256_text(all), 0, 12)
     return net_version_cache
 
+// A system tool's command line, run through sh: launch_subprocess doesn't search PATH (a bare "ip" never ran),
+// and an app started from the Finder or Steam may lack the sbin folders (macOS's ipconfig is in /usr/sbin).
+def tool_command(line:string) -> [string]:
+    return [ "/bin/sh", "-c", "PATH=\"$PATH:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin\"; " + line + " 2>/dev/null" ]
+
 // The first IPv4 address in a tool's output that isn't this machine's loopback ("192.168.0.3", "inet 10.0.0.7/24 ..."), or "".
 def ipv4_in(out:string) -> string:
     for(tokenize(out, " \n\t", "")) t:
@@ -56,8 +61,8 @@ def ipv4_in(out:string) -> string:
 // This machine's address on the home network (macOS, then Linux / the Deck), or "" if none. (SteamOS's
 // hostname has no -I, so the Deck asks ip; hostname -I stays for other Linuxes without ip.)
 def my_ipv4() -> string:
-    for([ [ "ipconfig", "getifaddr", "en0" ], [ "ipconfig", "getifaddr", "en1" ], [ "ip", "-4", "-o", "addr", "show", "scope", "global" ], [ "hostname", "-I" ] ]) cmd:
-        let code, out = launch_subprocess(cmd)
+    for([ "ipconfig getifaddr en0", "ipconfig getifaddr en1", "ip -4 -o addr show scope global", "hostname -I" ]) cmd:
+        let code, out = launch_subprocess(tool_command(cmd))
         if code == 0 and out:
             let a = ipv4_in(out)
             if a != "": return a
