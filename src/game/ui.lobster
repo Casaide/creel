@@ -233,6 +233,7 @@ class UiText:
     edge:float  // a dark outline this thick (0: none)
 
 var ui_texts = []::UiText
+var ui_badge_box = float4_0  // the pad's focused button this frame (at, size; none at 0 wide): ui_flush puts its A badge on it, over the rest
 let UI_FONTS = [ "data/fonts/Droid_Sans/DroidSans.ttf", "data/fonts/Droid_Sans/DroidSans-Bold.ttf", "../assets/fonts/display.ttf", "data/fonts/Droid_Sans/DroidSans-Bold.ttf" ]
 
 // A caption's letters' x from its start, measured once by size and words (each measure switches the font: per frame
@@ -280,6 +281,16 @@ def ui_text_c(x:float, y:float, s:string, size:int, col:float4, font:int, edge:f
 
 def ui_flush():
     ui_batch_flush()
+    let b = ui_badge_box  // (the pad's A badge last, over the words and the widgets beside its button)
+    ui_badge_box = float4_0
+    let spot = if b.z > 0.0: ui_pad_badge_at(b.xy, b.zw) else: float3_0  // (clear of the words queued in it)
+    ui_flush_texts()
+    if spot.z > 0.0:
+        ui_pad_badge(spot.xy, spot.z, "A")
+        ui_batch_flush()
+        ui_flush_texts()
+
+def ui_flush_texts():
     text_batch():
         for(ui_texts) t:
             if t.font == 3:  // a caption: a letter at a time, spaced
@@ -450,6 +461,7 @@ var ui_stick_ready = true
 def ui_frame(pad:bool):
     ui_hits_last = ui_hits
     ui_hits = []
+    ui_badge_box = float4_0
     ui_pad_a = pad and gl.button("controller_a") == 1
     if not pad:
         ui_focus = -1
@@ -509,19 +521,27 @@ def ui_button(at:float2, size:float2, label:string, primary:bool) -> bool:
     if label != "":  // (bold, as theme.gd's buttons)
         let fs = if ui_label_px > 0: ui_label_px else: int(min(18.0 * u, size.y * 0.45))
         ui_text_f(at + lift + float2 { (size.x - ui_text_wf(label, fs, 1)) / 2.0, (size.y - float(fs)) / 2.0 - 2.0 * u }, label, fs, ui_look.text, 1, 0.0)
-    if focused: ui_pad_badge_at(at + lift, size)
+    if focused: ui_badge_box = float4 { at.x + lift.x, at.y + lift.y, size.x, size.y }
     return (over and ui_clicked()) or (focused and ui_pad_a)
 
-// The pad's A badge on the focused button, so it's clear what's picked and how to press it (the console way;
-// Godot's pad_mode.gd): inside a wide button's right end (its words are centred), beside a small one on its
-// right, or on its left at the screen's right edge. Sized to the button.
-def ui_pad_badge_at(at:float2, size:float2):
+// Where the pad's A badge goes on the focused button, so it's clear what's picked and how to press it (the console
+// way; Godot's pad_mode.gd): inside the button's right end when that's clear of the words queued over it (its label,
+// or a caption its page drew), else just past its right edge, or its left one at the screen's edge. Sized to the
+// button. Its centre and radius.
+def ui_pad_badge_at(at:float2, size:float2) -> float3:
     let u = ui()
-    let d = clamp(size.y * 0.55, 22.0 * u, 40.0 * u)
-    var x = at.x + size.x + 10.0 * u
-    if size.x >= 4.0 * d: x = at.x + size.x - d * 1.45
-    elif x + d > float(gl.window_size().x) - 4.0 * u: x = at.x - d - 10.0 * u
-    ui_pad_badge(float2 { x + d / 2.0, at.y + size.y / 2.0 }, d / 2.0, "A")
+    let r = clamp(size.y * 0.55, 22.0 * u, 40.0 * u) / 2.0
+    var words = at.x  // (the right end of the words on it)
+    for(ui_texts) t:
+        let mid = t.at.y + float(t.size) / 2.0
+        if t.s.length and mid > at.y and mid < at.y + size.y and t.at.x < at.x + size.x and t.at.x >= at.x - 1.0:
+            let w = if t.font == 3: ui_caps_offsets(t.s, t.size).top() + ui_text_wf(t.s.substring(t.s.length - 1, 1), t.size, 3) else: ui_text_wf(t.s, t.size, t.font)
+            words = max(words, t.at.x + w)
+    var x = at.x + size.x - 1.9 * r
+    if size.x < 8.0 * r or words > x - 1.5 * r:  // (a small button, or the words reach the end: beside it, over its rim a little)
+        x = at.x + size.x + 0.6 * r
+        if x + r > float(gl.window_size().x) - 4.0 * u: x = at.x - 0.6 * r
+    return float3 { x, at.y + size.y / 2.0, r }
 
 // A pad button's badge: a light disc with a dark rim and its letter (plain and neutral, like the Deck's own buttons).
 def ui_pad_badge(c:float2, r:float, letter:string):
