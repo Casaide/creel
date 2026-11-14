@@ -489,10 +489,19 @@ def collect_props():
 
 let SHADE_FOOT_BACK = 3.0  // art px: a unit reads the ground's shade this far behind its feet, toward the sun (its own shadow falls the other way)
 
+// What a drawable is in the shade buffer (pack's sprite_shade): flat on the ground (or not a sprite) nothing, a unit its
+// foot on the screen (read back toward the sun: screen px, y down), anything else standing a clear.
+def shade_of(d:Drawable, cam_px:float2, ws:float2, back:float2) -> float4:
+    if d.f < 0 or d.y <= -50000.0: return SHADE_NONE
+    let role = frame_role_of(d.f)
+    if role == ROLE_UNIT: return atmo_stand_colour((float2 { d.x, d.ay } - cam_px) * zoom + ws / 2.0 + back)
+    return if role == ROLE_CAST: SHADE_NONE else: SHADE_CLEAR
+
 // The shade buffer (view/atmosphere.lobster), when the mood shades: the ground's shadows go into it, joining into one
-// shade instead of piling up black on the world; then, back to front, what stands up out of it (props, buildings: lit
-// by their own bake) and the units, each taking the shade of the ground at its feet. What lies flat on the ground
-// (sorted under everything) is shaded as the ground is. After the world, its draw list sorted.
+// shade instead of piling up black on the world; then the world's own sprite batches again (kept as they were drawn,
+// so back to front), what stands up out of the shade cleared of it (props, buildings: lit by their own bake) and each
+// unit given the shade of the ground at its feet. What lies flat on the ground is shaded as the ground is. After the
+// world.
 def draw_shade(cam_px:float2, ws:float2):
     flush_sprites()
     let was = gl.blend(blend_none)
@@ -505,28 +514,17 @@ def draw_shade(cam_px:float2, ws:float2):
                 for(draws) d:
                     if d.f >= 0 and frame_role_of(d.f) == ROLE_CAST: sprite(d.f, d.x, d.ay, float4_1)
                 flush_sprites()
+    sprite_shader = "sprite"
+    b_sheet = -1
     atmo_shade_standing()
-    let s = normalize(atmo_sun_dir)
-    let back = float2 { s.x, -s.y } * SHADE_FOOT_BACK * zoom  // (screen px, y down)
+    gl.set_shader("atmo_shade_stand_or_clear")
     gl.translate(ws / 2.0):
         gl.scale(zoom):
             gl.translate(-cam_px):
-                b_sheet = -1
-                for(draws) d:
-                    if d.f >= 0 and d.y > -50000.0:
-                        let role = frame_role_of(d.f)
-                        if role != ROLE_CAST:
-                            let shader = if role == ROLE_UNIT: "atmo_shade_stand" else: "atmo_shade_clear"
-                            if shader != sprite_shader:
-                                flush_sprites()
-                                sprite_shader = shader
-                                gl.blend(if role == ROLE_UNIT: blend_none else: blend_alpha)
-                            let col = if role == ROLE_UNIT: atmo_stand_colour((float2 { d.x, d.ay } - cam_px) * zoom + ws / 2.0 + back) else: float4_1
-                            if d.xf.length: sprite_xf(d.f, d.xf, col)
-                            else: sprite(d.f, d.x, d.ay, col)
-                flush_sprites()
-    sprite_shader = "sprite"
-    b_sheet = -1
+                for(shade_batches) b:
+                    gl.set_primitive_texture(0, sheet_texture(b.sheet))
+                    gl.draw_mesh("PCT", b.pos, b.col, []::float3, b.tc, []::float2, b.idx)
+    shade_batches = []
     gl.blend(was)
     atmo_rebind()
 
@@ -584,7 +582,11 @@ def draw_world(alpha:float):
                 qsort_in_place(draws) a, b: a.y < b.y or (a.y == b.y and a.seq < b.seq)
                 perf_lap(3)
                 b_sheet = -1
+                shade_keep = shading  // (the sprites kept as they're drawn, for the shade buffer: draw_shade)
+                let sun = normalize(atmo_sun_dir)
+                let back = float2 { sun.x, -sun.y } * SHADE_FOOT_BACK * zoom
                 for(draws) d:
+                    if shading: sprite_shade = shade_of(d, cam_px, ws, back)
                     if d.f == -2:
                         flush_sprites()
                         draw_occluder(occluders[int(d.x)], zoom / ART_K)
@@ -607,6 +609,7 @@ def draw_world(alpha:float):
                     elif d.xf.length: sprite_xf(d.f, d.xf, d.col)
                     else: sprite(d.f, d.x, d.ay, d.col)
                 flush_sprites()
+                shade_keep = false
                 perf_lap(4)
                 gl.scale(1.5):
                     draw_town()

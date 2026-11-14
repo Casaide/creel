@@ -129,6 +129,7 @@ Each frame, before `atmo_begin`:
 | `atmo_shade_clear` | clears all channels, by the colour's red | What stands up out of the shade (trees, rocks), so it is lit by its own bake. Alpha blending. |
 | `atmo_shade_unit` | blue: a unit stands here (its shade kept) | Units the player must not lose. Additive blending. |
 | `atmo_shade_stand` | red and green from the ground at the unit's foot, blue: a unit | Units, in place of `atmo_shade_unit`, after `atmo_shade_standing()`. Blending off. Colour from `atmo_stand_colour(foot)`. |
+| `atmo_shade_stand_or_clear` | a unit's as `atmo_shade_stand`, or a clear, or nothing, by the colour's alpha (1, a half, 0) | Sprites of both kinds in one draw, after `atmo_shade_standing()`. Blending off: a clear is cut at half its alpha. |
 
 ### A unit takes the shade where it stands
 
@@ -150,12 +151,13 @@ Smyana does this for its men, horses and mules.
 ### Creel's own world drawing does it for you
 
 `draw_world` (`game/world_draw.lobster`) draws the shade buffer itself whenever `atmo_shading()` is true: its ground
-shadows go into the buffer instead of onto the world, then, back to front, its units with `atmo_shade_stand` (read
-`SHADE_FOOT_BACK` art px behind the feet, toward the sun) and everything else that stands with `atmo_shade_clear`.
-What is sorted flat on the ground (farms, ponds' props) is shaded as the ground is. It tells them apart by each frame's
+shadows go into the buffer instead of onto the world, then its own sprite batches again, kept as the world drew them
+(so back to front, and no sprite is worked out twice), with `atmo_shade_stand_or_clear`: each unit takes the shade at
+its feet (read `SHADE_FOOT_BACK` art px behind them, toward the sun), everything else that stands is cleared, and what
+is sorted flat on the ground (farms, ponds' props) is shaded as the ground is. It tells them apart by each frame's
 role (`game/pack.lobster`): a voxel unit's frames and their shadows are marked when they are made (`vx_publish`); a
 game's own frames are named with `frame_named(name)`, and a name ending `~shadow` is a shadow. A mood without
-`sun_shade` draws exactly as before. Age of Anything does this for every match.
+`sun_shade` draws exactly as before. In Age of Anything's big battle (2,000 units) it costs about a millisecond a frame. Age of Anything does this for every match.
 
 Draw the clears and the unit marks **back to front, interleaved**. Then a tree in front of a man wipes
 his mark, and a tree behind him doesn't. A sunfleck (a spot of light through the canopy) is just a
