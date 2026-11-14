@@ -68,8 +68,25 @@ def my_ipv4() -> string:
             if a != "": return a
     return ""
 
-// Ask every address nearby; the hosts that answered within `seconds`. (Blocks: a lobby button.)
-def lan_scan(seconds:float) -> [LanHost]:
+// What the last scan saw, for the network page (#506): this machine's address, how many addresses it asked,
+// how many took the connection, how many answered as a game, and the first error a connection gave.
+class LanSeen:
+    me = ""
+    tried = 0
+    reached = 0
+    answered = 0
+    error = ""
+
+var lan_seen = LanSeen {}
+
+def lan_scan_note() -> string:
+    let s = lan_seen
+    if s.tried == 0: return ""
+    let seen_from = if s.me != "": "from {s.me}" else: "from an unknown address (only this machine)"
+    return "Looked {seen_from}: {s.tried} addresses, {s.reached} took the call, {s.answered} answered" + (if s.error != "": " (first error: {s.error})" else: "")
+
+// Ask every address nearby on `port`; the hosts that answered within `seconds`. (Blocks: a lobby button.)
+def lan_scan(seconds:float, port:int) -> [LanHost]:
     let me = my_ipv4()
     let ips = [ "127.0.0.1" ]
     if me != "":
@@ -77,6 +94,9 @@ def lan_scan(seconds:float) -> [LanHost]:
         for(254) n:
             let ip = "{parts[0]}.{parts[1]}.{parts[2]}.{n + 1}"
             if ip != me: ips.push(ip)
+    lan_seen = LanSeen {}
+    lan_seen.me = me
+    lan_seen.tried = ips.length
     // In batches (each socket is a file; a whole /24 at once runs a Mac out of them), each its share of the time.
     let found = []::LanHost
     let batch = 48
@@ -84,7 +104,7 @@ def lan_scan(seconds:float) -> [LanHost]:
     var at = 0
     while at < ips.length:
         let these = ips.slice(at, min(batch, ips.length - at))
-        var links = map(these) ip: net_join(ip, NET_PORT)
+        var links = map(these) ip: net_join(ip, port)
         let asked = map(these): false
         let t0 = seconds_elapsed()
         while seconds_elapsed() - t0 < per:
@@ -93,15 +113,21 @@ def lan_scan(seconds:float) -> [LanHost]:
                     if net_ready(l) and not asked[k]:
                         net_send(l, '?', "")
                         asked[k] = true
+                        lan_seen.reached++
                     for(net_poll(l)) f:
                         if f[0] == "I":
                             let p = tokenize(f[1], "|", "")
                             if p.length >= 3: found.push(LanHost { these[k], p[0], p[1], p[2] })
                             l.closed = true
             tcp.wait(nil, nil, false, 0.01)
-        for(links) l: l.sock = nil  // (closed now, not when they're collected)
+        for(links) l, k:
+            if l.error != "" and lan_seen.error == "" and not ends_with(l.error, "error 111") and not ends_with(l.error, "error 61"):
+                lan_seen.error = "{these[k]}: {l.error}"  // (refused, 111 / 61, is just an address with no game)
+            l.sock = nil  // (closed now, not when they're collected)
         links = []
         at += batch
+    lan_seen.answered = found.length
+    print lan_scan_note()
     return found
 
 // The packs in use, as a hello carries them, and what's wrong if a joiner's differ from ours.
