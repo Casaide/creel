@@ -147,6 +147,16 @@ unit the shade of the ground at its own feet instead:
 
 Smyana does this for its men, horses and mules.
 
+### Creel's own world drawing does it for you
+
+`draw_world` (`game/world_draw.lobster`) draws the shade buffer itself whenever `atmo_shading()` is true: its ground
+shadows go into the buffer instead of onto the world, then, back to front, its units with `atmo_shade_stand` (read
+`SHADE_FOOT_BACK` art px behind the feet, toward the sun) and everything else that stands with `atmo_shade_clear`.
+What is sorted flat on the ground (farms, ponds' props) is shaded as the ground is. It tells them apart by each frame's
+role (`game/pack.lobster`): a voxel unit's frames and their shadows are marked when they are made (`vx_publish`); a
+game's own frames are named with `frame_named(name)`, and a name ending `~shadow` is a shadow. A mood without
+`sun_shade` draws exactly as before. Age of Anything does this for every match.
+
 Draw the clears and the unit marks **back to front, interleaved**. Then a tree in front of a man wipes
 his mark, and a tree behind him doesn't. A sunfleck (a spot of light through the canopy) is just a
 clear: Smyana draws small ovals in black with the plain colour shader after the canopy.

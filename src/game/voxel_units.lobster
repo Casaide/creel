@@ -198,6 +198,8 @@ def vx_publish(lk:int, v:int, manifest:[string]):
             let fr = f0 + string_to_int(t[4])
             vx_frames.set(vx_fkey(lk, v, string_to_int(t[1]), string_to_int(t[2]), string_to_int(t[3])), fr)
             vx_shadow_of.set(fr, f0 + string_to_int(t[5]))
+            set_frame_role(fr, ROLE_UNIT)
+            set_frame_role(f0 + string_to_int(t[5]), ROLE_CAST)
 
 // The job's frames from the cache, if they're there.
 def vx_load_job(j:vx_job) -> bool:

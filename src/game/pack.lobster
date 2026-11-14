@@ -53,6 +53,23 @@ def sheet_texture(i:int) -> resource<texture>:
     return sheet_tex[i]
 let frames = []::Frame
 let frame_at = dictionary<string, int>(32768)
+// What each frame is, for the atmosphere's shade buffer (game/world_draw.lobster): something standing (a prop, a
+// building), a unit, or a shadow on the ground. A frame not named here stands.
+let ROLE_STAND = 0
+let ROLE_UNIT = 1
+let ROLE_CAST = 2
+let frame_role = []::int
+
+def set_frame_role(f:int, role:int):
+    while frame_role.length <= f: frame_role.push(ROLE_STAND)
+    frame_role[f] = role
+
+def frame_role_of(f:int) -> int: return if f < frame_role.length: frame_role[f] else: ROLE_STAND
+
+// The next frame (frames.length) is called name; a "<name>~shadow" is a shadow on the ground.
+def frame_named(name:string):
+    frame_at.set(name, frames.length)
+    if ends_with(name, "~shadow"): set_frame_role(frames.length, ROLE_CAST)
 let looks = dictionary<string, Look>(512)
 var arch_of = []::string  // per player
 let doodads = dictionary<string, int>(64)
