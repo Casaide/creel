@@ -509,7 +509,35 @@ def ui_button(at:float2, size:float2, label:string, primary:bool) -> bool:
     if label != "":  // (bold, as theme.gd's buttons)
         let fs = if ui_label_px > 0: ui_label_px else: int(min(18.0 * u, size.y * 0.45))
         ui_text_f(at + lift + float2 { (size.x - ui_text_wf(label, fs, 1)) / 2.0, (size.y - float(fs)) / 2.0 - 2.0 * u }, label, fs, ui_look.text, 1, 0.0)
+    if focused: ui_pad_badge_at(at + lift, size)
     return (over and ui_clicked()) or (focused and ui_pad_a)
+
+// The pad's A badge on the focused button, so it's clear what's picked and how to press it (the console way;
+// Godot's pad_mode.gd): inside a wide button's right end (its words are centred), beside a small one on its
+// right, or on its left at the screen's right edge. Sized to the button.
+def ui_pad_badge_at(at:float2, size:float2):
+    let u = ui()
+    let d = clamp(size.y * 0.55, 22.0 * u, 40.0 * u)
+    var x = at.x + size.x + 10.0 * u
+    if size.x >= 4.0 * d: x = at.x + size.x - d * 1.45
+    elif x + d > float(gl.window_size().x) - 4.0 * u: x = at.x - d - 10.0 * u
+    ui_pad_badge(float2 { x + d / 2.0, at.y + size.y / 2.0 }, d / 2.0, "A")
+
+// A pad button's badge: a light disc with a dark rim and its letter (plain and neutral, like the Deck's own buttons).
+def ui_pad_badge(c:float2, r:float, letter:string):
+    let rim = float4 { 0.0, 0.0, 0.0, 0.55 }
+    let fill = float4 { 0.925, 0.886, 0.784, 1.0 }   // #ece2c8
+    let ink = float4 { 0.165, 0.133, 0.098, 1.0 }    // #2a2219
+    let inset = max(1.5, r * 0.1)
+    if ui_batching:
+        ui_batch_disc(c, r, 20, rim)
+        ui_batch_disc(c, r - inset, 20, fill)
+    else:
+        gl.set_shader("color")
+        gl.color(rim): gl.translate(c): gl.circle(r, 20)
+        gl.color(fill): gl.translate(c): gl.circle(r - inset, 20)
+    let fs = int(r * 1.15)
+    ui_text_f(c - float2 { ui_text_wf(letter, fs, 1) / 2.0, float(fs) / 2.0 + r * 0.08 }, letter, fs, ink, 1, 0.0)
 
 // A titled panel: a raised box with a caption in the title colour.
 def ui_panel(at:float2, size:float2, title:string):
