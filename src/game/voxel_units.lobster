@@ -485,9 +485,10 @@ def vx_tick(budget:float, calm:bool):
 
 // The queue baked on for up to `budget` seconds of this frame (in play, and on the lobby's pages). Not calm (a fight, a
 // huge match): only a look a unit is waiting for, and no saves: a cell runs to 20 ms, a PNG to 180 ms, and they'd be seen.
-def vx_bake_tick(budget:float, calm:bool = true):
+// Not `save` (a menu, which must answer every frame): the finished looks wait in vx_unsaved for a calm frame in play.
+def vx_bake_tick(budget:float, calm:bool = true, save:bool = true):
     if perf_for > 0.0 and not perf_live: return  // (a perf run measures the drawing alone; perflive, the bakes too)
-    if calm and vx_unsaved.length:
+    if calm and save and vx_unsaved.length:
         vx_save(vx_unsaved.pop())
         return
     let until = seconds_elapsed() + budget
