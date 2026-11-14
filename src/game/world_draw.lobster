@@ -487,6 +487,47 @@ def collect_props():
                 let sh = frame_index(name + "~shadow")
                 if sh >= 0: add(sh, at.x, at.y - up, -200000.0 + at.y, float4 { 1.0, 1.0, 1.0, shade })
 
+let SHADE_FOOT_BACK = 3.0  // art px: a unit reads the ground's shade this far behind its feet, toward the sun (its own shadow falls the other way)
+
+// What a drawable is in the shade buffer (pack's sprite_shade): flat on the ground (or not a sprite) nothing, a unit its
+// foot on the screen (read back toward the sun: screen px, y down), anything else standing a clear.
+def shade_of(d:Drawable, cam_px:float2, ws:float2, back:float2) -> float4:
+    if d.f < 0 or d.y <= -50000.0: return SHADE_NONE
+    let role = frame_role_of(d.f)
+    if role == ROLE_UNIT: return atmo_stand_colour((float2 { d.x, d.ay } - cam_px) * zoom + ws / 2.0 + back)
+    return if role == ROLE_CAST: SHADE_NONE else: SHADE_CLEAR
+
+// The shade buffer (view/atmosphere.lobster), when the mood shades: the ground's shadows go into it, joining into one
+// shade instead of piling up black on the world; then the world's own sprite batches again (kept as they were drawn,
+// so back to front), what stands up out of the shade cleared of it (props, buildings: lit by their own bake) and each
+// unit given the shade of the ground at its feet. What lies flat on the ground is shaded as the ground is. After the
+// world.
+def draw_shade(cam_px:float2, ws:float2):
+    flush_sprites()
+    let was = gl.blend(blend_none)
+    atmo_shade_begin()
+    sprite_shader = "atmo_shade_cast"
+    gl.translate(ws / 2.0):
+        gl.scale(zoom):
+            gl.translate(-cam_px):
+                b_sheet = -1
+                for(draws) d:
+                    if d.f >= 0 and frame_role_of(d.f) == ROLE_CAST: sprite(d.f, d.x, d.ay, float4_1)
+                flush_sprites()
+    sprite_shader = "sprite"
+    b_sheet = -1
+    atmo_shade_standing()
+    gl.set_shader("atmo_shade_stand_or_clear")
+    gl.translate(ws / 2.0):
+        gl.scale(zoom):
+            gl.translate(-cam_px):
+                for(shade_batches) b:
+                    gl.set_primitive_texture(0, sheet_texture(b.sheet))
+                    gl.draw_mesh("PCT", b.pos, b.col, []::float3, b.tc, []::float2, b.idx)
+    shade_batches = []
+    gl.blend(was)
+    atmo_rebind()
+
 def draw_world(alpha:float):
     atlas_pack()
     let ground_now = tick - ground_tick >= 10 or not ground_mesh
@@ -514,6 +555,7 @@ def draw_world(alpha:float):
     let cam_px = float2 { floor(cam.x * zoom), floor(cam.y * zoom) } / zoom  // (on a whole device px, as the sprites: #358)
     sprite_snap = zoom
     let atmo_drawn = atmo_begin(float4 { 0.05, 0.05, 0.05, 1.0 })  // (the world into the atmosphere's texture, view/atmosphere.lobster)
+    let shading = atmo_drawn and atmo_shading()
     let ground_stale_was = ground_stale
     let ground_step_was = ground_tex_step
     draw_ground_cached(gl.window_size(), cam_px, zoom, zoom / ART_K)  // (screen px an art px: finer art, D-173)
@@ -540,7 +582,11 @@ def draw_world(alpha:float):
                 qsort_in_place(draws) a, b: a.y < b.y or (a.y == b.y and a.seq < b.seq)
                 perf_lap(3)
                 b_sheet = -1
+                shade_keep = shading  // (the sprites kept as they're drawn, for the shade buffer: draw_shade)
+                let sun = normalize(atmo_sun_dir)
+                let back = float2 { sun.x, -sun.y } * SHADE_FOOT_BACK * zoom
                 for(draws) d:
+                    if shading: sprite_shade = shade_of(d, cam_px, ws, back)
                     if d.f == -2:
                         flush_sprites()
                         draw_occluder(occluders[int(d.x)], zoom / ART_K)
@@ -558,10 +604,12 @@ def draw_world(alpha:float):
                         flush_sprites()
                         gl.scale(1.5): draw_cracks_of(int(d.x))
                         b_sheet = -1
+                    elif shading and d.f >= 0 and frame_role_of(d.f) == ROLE_CAST: pass()  // (into the shade buffer instead: draw_shade)
                     elif d.f == -5: sprite_faded(int(d.xf[1]), d.x, d.ay, d.col, d.xf[0])  // a ruin fading out
                     elif d.xf.length: sprite_xf(d.f, d.xf, d.col)
                     else: sprite(d.f, d.x, d.ay, d.col)
                 flush_sprites()
+                shade_keep = false
                 perf_lap(4)
                 gl.scale(1.5):
                     draw_town()
@@ -569,4 +617,5 @@ def draw_world(alpha:float):
                     fx_draw() id: unit_anchor(id)
                 if not rec_clean: draw_marks(alpha)
                 perf_lap(5)
+    if shading: draw_shade(cam_px, ws)
     sprite_snap = 1.0

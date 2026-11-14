@@ -144,6 +144,33 @@ SHADER atmo_shade_stand
         vec2 g = vec2(0.0);
         for (int i = -2; i <= 2; i++) g += texelFetch(tex1, clamp(foot + ivec2(i * 4, 0), ivec2(0), size - 1), 0).rg;
         frag_color = vec4(g / 5.0, 1.0, 1.0);
+// (the world's sprites drawn again in their own order, each saying by its colour's alpha what it is: 0 lies flat on the
+// ground and is shaded as the ground is (nothing drawn), a half stands up out of the shade (atmo_shade_clear's, its
+// edge cut at half its alpha), 1 is a unit, its colour its foot (atmo_shade_stand's). Blending off.)
+SHADER atmo_shade_stand_or_clear
+    VERTEX
+        INPUTS apos:4 atc:2 acolor:4
+        UNIFORMS mvp
+        gl_Position = mvp * apos;
+        itc = atc;
+        icolor = acolor;
+    PIXEL
+        INPUTS itc:2 icolor:4
+        UNIFORMS tex0 tex1
+        if (icolor.a < 0.25) discard;
+        float a = texture(tex0, itc).a;
+        if (icolor.a < 0.75) {
+            if (a < 0.5) discard;
+            frag_color = vec4(0.0, 0.0, 0.0, 1.0);
+        } else {
+            if (a < 0.02) discard;
+            ivec3 c = ivec3(icolor.rgb * 255.0 + 0.5);
+            ivec2 foot = ivec2(c.r * 16 + c.g / 16, (c.g % 16) * 256 + c.b);
+            ivec2 size = textureSize(tex1, 0);
+            vec2 g = vec2(0.0);
+            for (int i = -2; i <= 2; i++) g += texelFetch(tex1, clamp(foot + ivec2(i * 4, 0), ivec2(0), size - 1), 0).rg;
+            frag_color = vec4(g / 5.0, 1.0, 1.0);
+        }
 SHADER atmo_copy
     VERTEX
         INPUTS apos:4

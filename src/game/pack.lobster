@@ -53,6 +53,23 @@ def sheet_texture(i:int) -> resource<texture>:
     return sheet_tex[i]
 let frames = []::Frame
 let frame_at = dictionary<string, int>(32768)
+// What each frame is, for the atmosphere's shade buffer (game/world_draw.lobster): something standing (a prop, a
+// building), a unit, or a shadow on the ground. A frame not named here stands.
+let ROLE_STAND = 0
+let ROLE_UNIT = 1
+let ROLE_CAST = 2
+let frame_role = []::int
+
+def set_frame_role(f:int, role:int):
+    while frame_role.length <= f: frame_role.push(ROLE_STAND)
+    frame_role[f] = role
+
+def frame_role_of(f:int) -> int: return if f < frame_role.length: frame_role[f] else: ROLE_STAND
+
+// The next frame (frames.length) is called name; a "<name>~shadow" is a shadow on the ground.
+def frame_named(name:string):
+    frame_at.set(name, frames.length)
+    if ends_with(name, "~shadow"): set_frame_role(frames.length, ROLE_CAST)
 let looks = dictionary<string, Look>(512)
 var arch_of = []::string  // per player
 let doodads = dictionary<string, int>(64)
@@ -250,6 +267,23 @@ var sprite_snap = 1.0  // device px a world art px while the world is drawn: a s
 var sprite_shader = "sprite"  // what flush_sprites draws with (the atmosphere's shade buffer draws the same sprites through its own)
 var sprite_even = false       // art px all the same size at a zoom between whole numbers (sharp bilinear; docs/settings.md)
 
+// The world's sprites kept as they're drawn, for the atmosphere's shade buffer (world_draw's draw_shade): each batch
+// again with a colour per sprite that says what it is in the buffer (sprite_shade: SHADE_NONE, SHADE_CLEAR, or a
+// unit's foot, atmo_stand_colour), so the buffer is drawn from the same vertices instead of every sprite again.
+class ShadeBatch:
+    sheet:int
+    pos:[float3]
+    col:[float4]
+    tc:[float2]
+    idx:[int]
+
+let SHADE_NONE = float4_0                             // lies flat: shaded as the ground is
+let SHADE_CLEAR = float4 { 0.0, 0.0, 0.0, 128.0 / 255.0 }  // stands up out of the shade: lit by its own bake
+var shade_keep = false
+var sprite_shade = SHADE_NONE
+var b_scol = []::float4
+var shade_batches = []::ShadeBatch
+
 def flush_sprites():
     ui_batch_flush()  // (fills batched before these sprites go under them; and out before a bust's framebuffer)
     if b_pos.length:
@@ -257,10 +291,12 @@ def flush_sprites():
         if sprite_shader == "sprite": gl.set_uniform("even", if sprite_even: 1.0 else: 0.0)
         gl.set_primitive_texture(0, sheet_texture(b_sheet))
         gl.draw_mesh("PCT", b_pos, b_col, []::float3, b_tc, []::float2, b_idx)
+        if shade_keep and b_scol.length == b_pos.length: shade_batches.push(ShadeBatch { b_sheet, b_pos, b_scol, b_tc, b_idx })
     b_pos = []::float3
     b_col = []::float4
     b_tc = []::float2
     b_idx = []::int
+    b_scol = []::float4
 
 // ---- atlas pages
 // Every baked frame is a sheet of its own (a part's facing, a prop, a building's stage), so sprites drawn one after
@@ -383,6 +419,8 @@ def sprite(f:int, x:float, y:float, col:float4):
     b_tc.push(float2 { u1, v1 })
     b_tc.push(float2 { u0, v1 })
     for(4): b_col.push(float4 { col.x, col.y, col.z, col.w * SPRITE_LIGHT })
+    if shade_keep:
+        for(4): b_scol.push(sprite_shade)
     b_idx.push(n)
     b_idx.push(n + 2)
     b_idx.push(n + 1)
@@ -417,4 +455,6 @@ def sprite_xf(f:int, xf:[float], col:float4):
     b_tc.push((at + float2 { float(fr.w), float(fr.h) }) / s)
     b_tc.push((at + float2 { 0.0, float(fr.h) }) / s)
     for(4): b_col.push(float4 { col.x, col.y, col.z, col.w * SPRITE_LIGHT })
+    if shade_keep:
+        for(4): b_scol.push(sprite_shade)
     for([ n, n + 2, n + 1, n, n + 3, n + 2 ]) k: b_idx.push(k)
