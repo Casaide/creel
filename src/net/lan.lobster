@@ -23,24 +23,44 @@ def lan_files(dir:string) -> [string]:
         if sizes[k] >= 0 and ends_with(n, ".json"): out.push(n)
     return sorted_strs(out)
 
-// This build's network version: the protocol and every data file the sim reads (sorted), hashed.
+// Data files only the looks and sounds read: two builds that differ in them still play together.
+let net_look_only = [ "atmosphere.json", "audio.json", "tips.json", "ui.json" ]
+
+// This build's network version: the protocol and every data file the sim reads (sorted), hashed. A file's
+// name goes in relative to the data folder, so where the game is installed doesn't matter.
 def net_version() -> string:
     if net_version_cache != "": return net_version_cache
     var all = "aow-net-{NET_PROTOCOL}"
-    for([ lib_root + "/", lib_root + "/rules/", lib_root + "/maps/" ]) dir:
+    for([ "", "rules/", "maps/" ]) sub:
+        let dir = lib_root + "/" + sub
         for(lan_files(dir)) f:
-            all += dir + f
-            all += read_file(dir + f) or ""
+            if sub != "" or not has_s(net_look_only, f):
+                all += sub + f
+                all += read_file(dir + f) or ""
     net_version_cache = substring(sha256_text(all), 0, 12)
     return net_version_cache
 
-// This machine's address on the home network (macOS, then Linux / the Deck), or "" if none.
+// The first IPv4 address in a tool's output that isn't this machine's loopback ("192.168.0.3", "inet 10.0.0.7/24 ..."), or "".
+def ipv4_in(out:string) -> string:
+    for(tokenize(out, " \n\t", "")) t:
+        let a = if find_string(t, "/") >= 0: substring(t, 0, find_string(t, "/")) else: t  // (ip's 192.168.0.5/24)
+        let parts = tokenize(a, ".", "")
+        if parts.length == 4 and not starts_with(a, "127."):
+            var ok = true
+            for(parts) p:
+                if not p.length or p.length > 3 or string_to_int(p) > 255: ok = false
+                for(p) c: if c < '0' or c > '9': ok = false
+            if ok: return a
+    return ""
+
+// This machine's address on the home network (macOS, then Linux / the Deck), or "" if none. (SteamOS's
+// hostname has no -I, so the Deck asks ip; hostname -I stays for other Linuxes without ip.)
 def my_ipv4() -> string:
-    for([ [ "ipconfig", "getifaddr", "en0" ], [ "ipconfig", "getifaddr", "en1" ], [ "hostname", "-I" ] ]) cmd:
+    for([ [ "ipconfig", "getifaddr", "en0" ], [ "ipconfig", "getifaddr", "en1" ], [ "ip", "-4", "-o", "addr", "show", "scope", "global" ], [ "hostname", "-I" ] ]) cmd:
         let code, out = launch_subprocess(cmd)
         if code == 0 and out:
-            let first = filter(tokenize(out, " \n\t", "")) t: t.length > 0
-            if first.length and tokenize(first[0], ".", "").length == 4: return first[0]
+            let a = ipv4_in(out)
+            if a != "": return a
     return ""
 
 // Ask every address nearby; the hosts that answered within `seconds`. (Blocks: a lobby button.)
