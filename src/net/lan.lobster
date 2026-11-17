@@ -121,7 +121,7 @@ def lan_scan(seconds:float, port:int) -> [LanHost]:
                             l.closed = true
             tcp.wait(nil, nil, false, 0.01)
         for(links) l, k:
-            if l.error != "" and lan_seen.error == "" and not ends_with(l.error, "error 111") and not ends_with(l.error, "error 61"):
+            if l.error != "" and lan_seen.error == "" and not join_refused(l.error):
                 lan_seen.error = "{these[k]}: {l.error}"  // (refused, 111 / 61, is just an address with no game)
             l.sock = nil  // (closed now, not when they're collected)
         links = []
@@ -186,6 +186,11 @@ def door_tick(d:HostDoor) -> Link?:
                         k.closed = true
     d.knocking = filter(d.knocking) k: not k.closed and (not joined or k != joined)
     return joined
+
+// A connection refused (macOS 61, Linux 111, Windows 10061): the machine is there but isn't hosting yet, so a
+// joiner waits and tries again (#515) instead of giving up.
+def join_refused(error:string) -> bool:
+    return ends_with(error, "error 61") or ends_with(error, "error 111") or ends_with(error, "error 10061")
 
 // The joiner's side: once connected, say who's joining (with our version).
 def join_hello(link:Link): net_send(link, 'J', net_version() + "|" + net_packs())
