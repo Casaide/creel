@@ -7,6 +7,7 @@
     "test": "sh test/pipe_check.sh"
   },
   "dependencies": {
+    "b4a": "^1.6.0",
     "bare-fs": "^4.0.0",
     "bare-os": "^3.0.0",
     "bare-process": "^4.5.1",

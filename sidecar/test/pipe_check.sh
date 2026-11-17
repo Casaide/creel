@@ -12,9 +12,9 @@ node -e "require('net').createServer(s => s.on('data', d => s.write('host:' + d)
 while [ ! -s $logs/bs ]; do sleep 0.1; done
 BS=$(cat $logs/bs)
 "$BARE" sidecar.js host --game-port 47816 --bootstrap $BS --watch $$ --out $logs/host & SH=$!
-while ! grep -q '^key' $logs/host 2>/dev/null; do sleep 0.1; done
-KEY=$(awk '/^key/{print $2}' $logs/host)
-"$BARE" sidecar.js join $KEY --port 47817 --bootstrap $BS --watch $$ --out $logs/join & SJ=$!
+while ! grep -q '^code' $logs/host 2>/dev/null; do sleep 0.1; done
+CODE=$(awk '/^code/{print $2}' $logs/host)
+"$BARE" sidecar.js join $CODE --port 47817 --bootstrap $BS --watch $$ --out $logs/join & SJ=$!
 while ! grep -q '^listening' $logs/join 2>/dev/null; do sleep 0.1; done
 node -e "
 const s = require('net').connect(47817, '127.0.0.1', () => s.write('hello'))

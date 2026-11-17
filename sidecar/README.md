@@ -1,20 +1,22 @@
-# Online play sidecar (spike)
+# Online play sidecar
 
-Spike for [age-of-whatever#44](https://github.com/Casaide/age-of-whatever/issues/44): players find each other with a shared Hyperswarm key, with no lobby and no server of ours.
+Online play by join code ([age-of-whatever#44](https://github.com/Casaide/age-of-whatever/issues/44), [#514](https://github.com/Casaide/age-of-whatever/issues/514)): players find each other with a short code over Hyperswarm, with no lobby and no server of ours. A game drives it through `src/net/swarm.lobster` (`swarm_host`, `swarm_join`, `swarm_poll`, `join_code_in`).
 
 `sidecar.js` is a small Bare program. It joins a Hyperswarm topic and pipes bytes between the other players and the game's existing lockstep TCP link on localhost, so Creel's `src/net/lockstep.lobster` and Lobster itself are unchanged.
 
 ```
-bare sidecar.js host [--game-port 47816]   prints "key <z32>"; for every peer that joins,
-                                           dials the game's host port and pipes
-bare sidecar.js join <key> [--port 47817]  listens on 127.0.0.1:<port>; the game does
-                                           net_join("127.0.0.1", <port>)
+bare sidecar.js host [--game-port 47816]    prints "code abcde-fghij"; for every peer that
+                                            joins, dials the game's host port and pipes
+bare sidecar.js join <code> [--port 47817]  listens on 127.0.0.1:<port> (0: any free one); the
+                                            game does net_join("127.0.0.1", <port>)
   --out <file>     status lines go to this file instead of stdout
   --watch <pid>    exit once that process (the game) is gone
   --bootstrap h:p  use a test DHT instead of the public one
 ```
 
-Status lines: `key <z32>`, `announced`, `listening <port>`, `peer <pubkey>`, `closed <pubkey>`, `error <text>`.
+The join code is 10 z32 characters (50 random bits), shown as `abcde-fghij`, and the topic is a BLAKE2b hash of it, so the code is all players share. It's enough for casual matches: a stranger can't guess it, and the game still checks versions on join.
+
+Status lines: `code <code>`, `announced`, `listening <port>`, `peer <pubkey>`, `closed <pubkey>`, `error <text>`.
 
 ## What the spike showed
 
@@ -23,9 +25,10 @@ Run in a Linux cloud container on 2026-11-17, with Lobster built headless from `
 - **`test/pipe_check.sh`** (`npm test`): two sidecars find each other by key on a local test DHT, and bytes go both ways. Passes.
 - **`test/swarm_check.sh`**: the game's own `net_check.lobster`, a real headless lockstep match, with the host and the joiners only connected through sidecars and the key. 2 players over 2000 ticks and 3 players over 4000 ticks both finish with the same final hash on every side and no desync. The only thing that changes is that each joiner is given `port:<its sidecar's port>`. The 3-player run shows that the host's star (`ls.more`) works through the sidecar too: each peer becomes its own connection to the host's door.
 - **Nagle matters.** Without `noDelay` on the sidecar's localhost sockets, the 3-player 4000-tick run took 11.7 s instead of 1.2 s (0.86 s for direct TCP). With `noDelay` the sidecar adds very little.
+- **In the game** (#514): the game's `src/swarm_check.sh` plays `net_check` host to joiner by code through `net/swarm.lobster`, and the real game windows (Xvfb) found each other by code.
 - **`test/launch_check.lobster`**: Lobster starts the sidecar with the existing `launch_subprocess`, reads the key from the `--out` file within 0.25 s, and the sidecar exits within a second of the game exiting (`--watch $PPID`). Two catches:
   - `launch_subprocess` waits for the process to end, so the sidecar has to be started in the background with `/bin/sh -c '... &'`. A bare `sh` without a path fails (-1).
-  - The child keeps the game's stdout and stderr pipes open (subprocess.h doesn't close the parent's pipe ends), so `launch_subprocess` never returns. The command closes fds 3 to 9 first (`exec 3<&- ...`). This works on Linux and macOS. Windows would need something else.
+  - The child keeps the game's stdout and stderr pipes open (subprocess.h doesn't close the parent's pipe ends), so `launch_subprocess` never returns. In a game those fds can have any number, so `net/swarm.lobster` runs bash and closes every fd past 2 first (`launch_check` closes 3 to 9 only, which is enough for a bare script). This works on Linux and macOS. Windows would need something else.
 - **Public DHT:** a host sidecar in the container announced on the real DHT, but the first `flushed()` took about 24 s. The key is printed straight away now, and `announced` follows later. A join from inside the same container didn't connect, which is likely the sandbox's networking (even local UDP between non-loopback sockets fails here). **The real test is Mac to Deck.**
 
 ## Size

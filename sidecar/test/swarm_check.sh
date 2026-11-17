@@ -18,8 +18,8 @@ BS=$(cat $logs/bs)
 cd $GAME/src
 "$LOBSTER" net_check.lobster -- host $ticks port:47816 players:$people > $logs/host 2>&1 & H=$!
 (sleep 120 | $B $SC/sidecar.js host --game-port 47816 --bootstrap $BS > $logs/sc_host) &
-while ! grep -q '^key' $logs/sc_host 2>/dev/null; do sleep 0.1; done
-KEY=$(awk '/^key/{print $2}' $logs/sc_host)
+while ! grep -q '^code' $logs/sc_host 2>/dev/null; do sleep 0.1; done
+KEY=$(awk '/^code/{print $2}' $logs/sc_host)
 echo "key: $KEY"
 n=1
 while [ $n -lt $people ]; do

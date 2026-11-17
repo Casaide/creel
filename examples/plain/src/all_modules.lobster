@@ -59,6 +59,7 @@ import view.bake_cache
 import view.atmosphere
 import net.lockstep
 import net.lan
+import net.swarm
 import game.audio
 import game.pack
 import game.relief

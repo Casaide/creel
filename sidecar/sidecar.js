@@ -1,12 +1,15 @@
 // Creel net sidecar: finds the other players by a shared key over Hyperswarm and pipes bytes
 // between them and the game's own lockstep TCP link on localhost. The game's net code is unchanged.
 //
-//   bare sidecar.js host --game-port 47816          prints "key <z32>", then for every peer that
-//                                                   joins, dials the game's host port and pipes.
-//   bare sidecar.js join <key> --port 47817          listens on 127.0.0.1:47817; the game does
-//                                                   net_join("127.0.0.1", 47817) and is piped to the host.
+//   bare sidecar.js host --game-port 47816          prints "code abcde-fghij", then for every peer
+//                                                   that joins, dials the game's host port and pipes.
+//   bare sidecar.js join <code> --port 47817         listens on 127.0.0.1:47817 (0: any free port); the
+//                                                   game does net_join("127.0.0.1", port), piped to the host.
 //
-// Lines tell the game what happens: "key <z32>", "announced", "listening <port>", "peer <pubkey>",
+// The join code is 10 z32 characters (50 random bits); the topic is a hash of it, so the code is all
+// players share. Plenty for casual matches: it can't be guessed, and the game checks versions on join.
+//
+// Lines tell the game what happens: "code <code>", "announced", "listening <port>", "peer <pubkey>",
 // "closed <pubkey>", "error <text>". They go to stdout, or appended to --out <file>.
 // Lobster's launch_subprocess waits for the process to end, so the game starts this in the
 // background (sh -c '... &') and reads --out. --watch <pid>: exit once that process (the game) is
@@ -17,6 +20,7 @@ const Hyperswarm = require('hyperswarm')
 const DHT = require('hyperdht')
 const crypto = require('hypercore-crypto')
 const z32 = require('z32')
+const b4a = require('b4a')
 const tcp = require('bare-tcp')
 const process = require('bare-process')
 const os = require('bare-os')
@@ -35,6 +39,28 @@ const swarm = new Hyperswarm(bootstrap
   ? { dht: new DHT({ bootstrap: bootstrap.split(',').map(parseHost), host: '127.0.0.1' }) }
   : {})
 
+const CODE_CHARS = 'ybndrfg8ejkmcpqxot1uwisza345h769' // (z32: no 0/l/v/2, easy to read out)
+const CODE_LEN = 10
+
+function newCode () {
+  const bytes = crypto.randomBytes(CODE_LEN)
+  let code = ''
+  for (const b of bytes) code += CODE_CHARS[b & 31]
+  return code
+}
+
+// What a player typed: any case, dashes and spaces ignored. Null if it isn't a code.
+function readCode (s) {
+  const code = String(s).toLowerCase().replace(/[\s-]/g, '')
+  if (code.length !== CODE_LEN) return null
+  for (const c of code) if (!CODE_CHARS.includes(c)) return null
+  return code
+}
+
+function showCode (code) { return code.slice(0, 5) + '-' + code.slice(5) }
+
+function topicOf (code) { return crypto.hash(b4a.from('creel/join/1/' + code)) }
+
 function parseHost (s) {
   const [host, port] = s.split(':')
   return { host, port: Number(port) }
@@ -47,7 +73,10 @@ function say (line) {
   else process.stdout.write(line + '\n')
 }
 
-function quit () { swarm.destroy().then(() => process.exit(0)) }
+function quit () {
+  if (out) try { fs.unlinkSync(out) } catch {}
+  swarm.destroy().then(() => process.exit(0))
+}
 
 function pipe (a, b) {
   a.pipe(b).on('error', () => {})
@@ -59,7 +88,9 @@ function pipe (a, b) {
 
 async function host () {
   const gamePort = Number(opt('game-port', 47816))
-  const topic = opt('key') ? z32.decode(opt('key')) : crypto.randomBytes(32)
+  const code = opt('code') ? readCode(opt('code')) : newCode()
+  if (!code) throw new Error('not a join code: ' + opt('code'))
+  const topic = topicOf(code)
   swarm.on('connection', (peer) => {
     const id = z32.encode(peer.remotePublicKey)
     say('peer ' + id)
@@ -67,15 +98,17 @@ async function host () {
     pipe(peer, game)
     peer.on('close', () => say('closed ' + id))
   })
-  // The key is known at once, so show it now; the first announce on the public DHT can take
+  // The code is known at once, so show it now; the first announce on the public DHT can take
   // 20 s or more, and "announced" says when a joiner can surely find us.
-  say('key ' + z32.encode(topic))
+  say('code ' + showCode(code))
   await swarm.join(topic, { server: true, client: false }).flushed()
   say('announced')
 }
 
 async function join () {
-  const topic = z32.decode(args[1])
+  const code = readCode(args[1] || '')
+  if (!code) throw new Error('not a join code: ' + args[1])
+  const topic = topicOf(code)
   const port = Number(opt('port', 47817))
   let peer = null
   let waiting = null
@@ -107,4 +140,4 @@ if (watch) {
 
 if (mode === 'host') host().catch((e) => say('error ' + e.message))
 else if (mode === 'join') join().catch((e) => say('error ' + e.message))
-else { say('error usage: host [--game-port n] | join <key> [--port n]'); process.exit(1) }
+else { say('error usage: host [--game-port n] | join <code> [--port n]'); process.exit(1) }
