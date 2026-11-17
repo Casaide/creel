@@ -60,6 +60,7 @@ import view.atmosphere
 import net.lockstep
 import net.lan
 import net.swarm
+import net.room
 import game.audio
 import game.pack
 import game.relief
