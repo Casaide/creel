@@ -1,0 +1,21 @@
+{
+  "name": "creel-net-sidecar",
+  "private": true,
+  "description": "Creel online play: finds players by a shared Hyperswarm key and pipes the lockstep TCP link",
+  "main": "sidecar.js",
+  "scripts": {
+    "test": "sh test/pipe_check.sh"
+  },
+  "dependencies": {
+    "b4a": "^1.6.0",
+    "bare-fs": "^4.0.0",
+    "bare-os": "^3.0.0",
+    "bare-process": "^4.5.1",
+    "bare-runtime": "^1.38.0",
+    "bare-tcp": "^2.6.1",
+    "hypercore-crypto": "^3.7.0",
+    "hyperdht": "^6.0.0",
+    "hyperswarm": "^4.17.2",
+    "z32": "^1.1.0"
+  }
+}
