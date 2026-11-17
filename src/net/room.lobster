@@ -5,7 +5,7 @@
 // world as a match always went. Messages ride the link's framing (lockstep.lobster):
 //   host -> joiner: L the lobby (JSON: map, mode, sides), A the side you hold, X refused (and the link closes),
 //                   W at Start: "<your side>|<people's sides>|<every side's AI level>"
-//   joiner -> host: T take a side, P my army's words
+//   joiner -> host: T take a side, P my army: "<reroll>|<words>"
 
 let ROOM_HOST = "host"
 let ROOM_AI = "ai"
@@ -15,6 +15,7 @@ class RoomSide:
     who = ROOM_AI
     team = 0
     prompt = ""  // a player's words (the host's and the AIs' are the host's lobby's)
+    reroll = 0   // which take of those words (the generator's reroll)
     guest = -1   // which joiner holds it
 
 class Room:
@@ -32,7 +33,7 @@ def room_open(port:int, name:string, map_id:string) -> Room:
     return r
 
 // The host's sides (the lobby's, each frame): their count and teams, the host's own; a joiner keeps its side while it lasts.
-def room_sides(r:Room, side_teams:[int], side_words:[string]):
+def room_sides(r:Room, side_teams:[int], side_words:[string], side_rerolls:[int]):
     while r.sides.length > side_teams.length:
         let s = r.sides.pop()
         if s.guest >= 0: room_drop(r, s.guest, "the host changed the map: that side is gone")
@@ -40,7 +41,9 @@ def room_sides(r:Room, side_teams:[int], side_words:[string]):
     for(r.sides) s, i:
         s.team = side_teams[i]
         if i == 0: s.who = ROOM_HOST
-        if s.who != ROOM_PLAYER: s.prompt = side_words[i]
+        if s.who != ROOM_PLAYER:
+            s.prompt = side_words[i]
+            s.reroll = side_rerolls[i]
 
 def room_side_of(r:Room, g:int) -> int:
     for(r.sides) s, i: if s.who == ROOM_PLAYER and s.guest == g: return i
@@ -51,6 +54,7 @@ def room_free(r:Room, side:int):
     s.who = ROOM_AI
     s.guest = -1
     s.prompt = ""
+    s.reroll = 0
     r.changed = true
 
 def room_drop(r:Room, g:int, why:string):
@@ -64,11 +68,13 @@ def room_take(r:Room, g:int, side:int) -> bool:
     if side < 0 or side >= r.sides.length or r.sides[side].who != ROOM_AI: return false
     let had = room_side_of(r, g)
     let prompt = if had >= 0: r.sides[had].prompt else: ""
+    let reroll = if had >= 0: r.sides[had].reroll else: 0
     if had >= 0: room_free(r, had)
     let s = r.sides[side]
     s.who = ROOM_PLAYER
     s.guest = g
     s.prompt = prompt
+    s.reroll = reroll
     r.changed = true
     net_send(r.guests[g], 'A', string(side))
     return true
@@ -92,6 +98,7 @@ def room_json(r:Room) -> string:
         set(so, "who", jstr(s.who))
         set(so, "team", jint(s.team))
         set(so, "prompt", jstr(s.prompt))
+        set(so, "reroll", jint(s.reroll))
         list.push(so)
     set(o, "sides", jarr(list))
     return stringify(o)
@@ -112,9 +119,15 @@ def room_tick(r:Room):
                 if f[0] == "T": room_take(r, g, string_to_int(f[1]))
                 elif f[0] == "P":
                     let side = room_side_of(r, g)
-                    if side >= 0 and r.sides[side].prompt != f[1]:
-                        r.sides[side].prompt = f[1]
-                        r.changed = true
+                    let bar = find_string(f[1], "|")
+                    if side >= 0 and bar > 0:
+                        let s = r.sides[side]
+                        let words = substring(f[1], bar + 1, f[1].length - bar - 1)
+                        let reroll = string_to_int(substring(f[1], 0, bar))
+                        if s.prompt != words or s.reroll != reroll:
+                            s.prompt = words
+                            s.reroll = reroll
+                            r.changed = true
             if k.closed: room_drop(r, g, "")
     let now = room_json(r)
     if now != r.sent:
@@ -143,6 +156,7 @@ class Guest:
     error = ""
     said = false
     prompt = ""      // the words sent last
+    reroll = 0       // and their take
     seats = []::int  // at Start: the people's sides
     levels = []::string
     world = ""            // the match, once the host starts
@@ -164,7 +178,7 @@ def guest_tick(g:Guest):
         elif f[0] == "L": g.lobby = parse_json(f[1])
         elif f[0] == "A":
             g.side = string_to_int(f[1])
-            if g.prompt != "": net_send(g.link, 'P', g.prompt)
+            if g.prompt != "": net_send(g.link, 'P', "{g.reroll}|{g.prompt}")
         elif f[0] == "X": g.error = f[1]
         elif f[0] == "W":
             let w = tokenize(f[1], "|", "")
@@ -176,7 +190,9 @@ def guest_tick(g:Guest):
 
 def guest_take(g:Guest, side:int): if g.said: net_send(g.link, 'T', string(side))
 
-def guest_prompt(g:Guest, text:string):
-    if text == g.prompt: return
+// The joiner's army: its words and which take of them (the generator's reroll).
+def guest_prompt(g:Guest, text:string, reroll:int):
+    if text == g.prompt and reroll == g.reroll: return
     g.prompt = text
-    if g.side >= 0: net_send(g.link, 'P', text)
+    g.reroll = reroll
+    if g.side >= 0: net_send(g.link, 'P', "{reroll}|{text}")
