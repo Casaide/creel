@@ -29,10 +29,11 @@ def dir_settled(d:int, v:float2) -> int:
 
 let WITH_BLOCK = 400  // milli-tiles from its place: nearer than this a unit in a block is only keeping up with it
 
-// Is unit i going along with its block, not at a foe or back to its place? (#252)
+// Is unit i going along with its block, not at a foe or back to its place? (#252) Near its place but walking across or
+// against the block's way, it's still coming back to it (from a chase past it): it faces the way it walks (#96).
 def with_block(i:int) -> bool:
     let b = u_block[i] - 1
-    return b >= 0 and fb_state[b] == BLOCK_MARCHING and fb_held[b] == 0 and u_foe[i] == 0 and dist2(u_x[i], u_y[i], fb_x[b] + u_bx[i], fb_y[b] + u_by[i]) <= WITH_BLOCK * WITH_BLOCK
+    return b >= 0 and fb_state[b] == BLOCK_MARCHING and fb_held[b] == 0 and u_foe[i] == 0 and dist2(u_x[i], u_y[i], fb_x[b] + u_bx[i], fb_y[b] + u_by[i]) <= WITH_BLOCK * WITH_BLOCK and u_vx[i] * fb_dx[b] + u_vy[i] * fb_dy[b] >= abs(u_vx[i] * fb_dy[b] - u_vy[i] * fb_dx[b])
 
 // Is unit i walking this tick (by its own order: the crowd's pushes move it too, every way, and don't count), and the way
 // it then faces, from d: where it's making for, not this tick's step; a unit going along with its block as the block does. (px, py): where it was.
