@@ -148,6 +148,17 @@ def cmd_stop(p:int, ids:[int]):
 
 var cmd_log = false
 
+// Rules economy.hands_off (#94): the roster slots whose units take no orders from their player.
+def hands_off(uid:int) -> bool:
+    let i = index_of(uid)
+    if i < 0: return false
+    let slots = gstrs(rules_part("economy"), "hands_off")
+    let slot = t_slot[u_kind[i]]
+    return slots.length > 0 and (find(slots): _ == slot) >= 0
+
+// Rules economy.town_builds (#94): a building is laid with no workers named; the pack's rules say who builds it.
+def town_builds() -> bool: return gbool(rules_part("economy"), "town_builds", false)
+
 def run(c0:Cmd):
     var c = c0
     let p = c.player
@@ -155,6 +166,14 @@ def run(c0:Cmd):
         var s = "cmd {c.run_tick} {c.code} {c.player} {c.queue} {c.a} {c.b} {c.c} {c.d} {c.ids.length}"
         for(c.ids) id: s += " {id}"
         print s
+    if c.ids.length:
+        let ids = filter(c.ids) uid: not hands_off(uid)
+        if ids.length != c.ids.length:
+            if not ids.length and c.code != CMD_BUILD: return
+            c = copy_cmd(c, ids)
+    if c.code == CMD_BUILD and not c.ids.length:
+        if town_builds(): lay_foundation(p, []::int, build_type(p, c.a), c.b, c.c, c.d)
+        return
     if c.code == CMD_BUILD and c.queue == 1:
         // Shift-placed: the foundation goes down now; building it joins each unit's queue.
         let bid = lay_foundation(p, c.ids, build_type(p, c.a), c.b, c.c, c.d)

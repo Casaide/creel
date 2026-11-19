@@ -12,7 +12,7 @@ var drag_from = float2_0
 var dragging = false
 
 def selected_units() -> [int]: return filter(selected) id: index_of(id) >= 0
-def selected_workers() -> [int]: return filter(selected_units()) id: t_worker[u_kind[index_of(id)]] != 0
+def selected_workers() -> [int]: return filter(selected_units()) id: t_worker[u_kind[index_of(id)]] != 0 and not hands_off(id)  // (the workers we can order)
 
 def unit_at_screen(m:float2, mine:bool) -> int:
     var best = -1
@@ -171,7 +171,7 @@ def order(m:float2, attack_move:bool = false):
     if rallying >= 0 and b_owner[rallying] == ME and not selected.length:
         issue_cmd(ME, CMD_RALLY, []::int, sel_building, x, y, 0)
         return
-    let all = selected_units()
+    let all = filter(selected_units()) id: not hands_off(id)  // (rules hands_off: the town runs them, #94)
     if not all.length: return
     say(ME, "ack")
     let herd = filter(all) id: is_animal(index_of(id))
@@ -262,7 +262,7 @@ def place_cell() -> int2:
 def place_here(more:bool):
     let cx, cy = place_at()
     let ws = selected_workers()
-    if ws.length: issue_cmd(ME, CMD_BUILD, ws, placing, cx, cy, 0, if more: 1 else: 0)
+    if ws.length or town_builds(): issue_cmd(ME, CMD_BUILD, ws, placing, cx, cy, 0, if more: 1 else: 0)  // (town_builds: laid with nobody named, #94)
     if not more: placing = -1
 
 // The cells of a line from a to b (straight or diagonal: the cells a line through them crosses).
@@ -277,7 +277,7 @@ def wall_cells(a:int2, b:int2) -> [int2]:
 // A wall or gate dragged from a to b: a foundation a cell, built in order by the selected workers (more: keep placing).
 def place_wall(a:int2, b:int2, more:bool):
     let ws = selected_workers()
-    if ws.length:
+    if ws.length or town_builds():
         for(wall_cells(a, b)) c, k: issue_cmd(ME, CMD_BUILD, ws, placing, c.x, c.y, 0, if more or k > 0: 1 else: 0)
     wall_from = int2 { -1, -1 }
     if not more: placing = -1
@@ -324,7 +324,7 @@ def keys():
         if hit and not build_menu and (shown < 0 or b_owner[shown] != ME):
             recall_group(n)
             return
-    if gl.button("b") == 1 and selected_workers().length: build_menu = not build_menu
+    if gl.button("b") == 1 and (selected_workers().length or town_builds()): build_menu = not build_menu
     if build_menu:
         let menu = buildable()
         for(digit) hit, n:
@@ -382,7 +382,7 @@ def mouse():
         if gl.button("mouse1") >= 1: cam = (m - mm_top()) / mm_scale()  // look there
         if gl.button("mouse3") == 1:
             let p = iso_inv((m - mm_top()) / mm_scale())
-            let ids = selected_units()
+            let ids = filter(selected_units()) id: not hands_off(id)
             if ids.length:
                 say(ME, "ack")
                 issue_cmd(ME, if gl.button("left ctrl") >= 1 or gl.button("right ctrl") >= 1: CMD_ATTACK_MOVE else: CMD_MOVE, ids, int(p.x), int(p.y), 0, 0, if gl.button("left shift") >= 1: 1 else: 0)
