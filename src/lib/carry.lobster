@@ -32,18 +32,23 @@ def is_carrier_free(i:int, p:int) -> bool: return u_owner[i] == p and t_carrier[
 
 def mid_dist2(b:int, x:int, y:int) -> int: return dist2(x, y, b_cx[b] * TILE + b_sx[b] * TILE / 2, b_cy[b] * TILE + b_sy[b] * TILE / 2)
 
-// p's finished store nearest building `to` that offers r, not `to` itself; -1 if none.
+// Where building `to` gets r from: p's nearest workshop that offers it, else p's nearest store that does; never `to`
+// itself; -1 if none. (Goods go straight from who makes them to who wants them, and the stores keep the rest: else a
+// workshop nobody takes from stands full while the store runs dry, #98.)
 def carry_source(p:int, r:int, to:int) -> int:
     var best = -1
     var best_d2 = 1 << 62
+    var best_store = true
     let x = b_cx[to] * TILE + b_sx[to] * TILE / 2
     let y = b_cy[to] * TILE + b_sy[to] * TILE / 2
     for(b_id.length) b:
         if b != to and gives(b, p, r) and offered(b, r) > 0:
             let d2 = mid_dist2(b, x, y)
-            if d2 < best_d2:
+            let store = bt_store[b_kind[b]] != 0
+            if (best_store and not store) or (store == best_store and d2 < best_d2):
                 best_d2 = d2
                 best = b
+                best_store = store
     return best
 
 // p's free carrier nearest building b; -1 if none.
@@ -93,7 +98,9 @@ def carry_match(p:int):
                         return
                     start_job(i, src, b, r, min(b_want[b][r], min(offered(src, r), r_carrier_load)), true)
                     jobs++
-    for(b_id.length) b:
+    let n = b_id.length
+    for(n) k:  // (from a building that turns with the clock: each workshop's goods get their turn, not the first few's, #98)
+        let b = (tick + k) % n
         if b_owner[b] == p and b_done[b] != 0 and bt_store[b_kind[b]] == 0:
             for(num_resources) r:
                 while jobs < CARRY_MATCHES and bt_offer[b_kind[b]][r] != 0 and offered(b, r) > 0:
