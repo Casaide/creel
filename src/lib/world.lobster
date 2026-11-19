@@ -50,6 +50,7 @@ def step():
     work()
     trade_tick()
     recipes_tick()
+    homes_tick()
     carry_tick()
     pack_tick()
     repair_tick()
@@ -432,6 +433,7 @@ def load_extras():
         bt_ladder.push(bw[o2 + 2])
         bt_road.push(-1)  // (a scenario has no road plans)
         bt_bridge.push(0)
+        bt_beds.push(0)
         bt_walkway.push(bw[o2 + 3])
         bt_blocks_flyers.push(bw[o2 + 4])
         let nr = bw[o2 + 5]

@@ -111,7 +111,7 @@ def add_unit(owner:int, k:int, x:int, y:int) -> int:
     let v = [ next_id, x, y, x, y, 0, 0, x, y, 0, 0, -1, -1, 0,
               t_hp[k], 0, 0, 0, t_posture[k], x, y, 0, 0, -1,
               T_NONE, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-              0, 0, 0, 0, 0, 0, 0, 0, x, y,
+              0, 0, 0, 0, 0, 0, 0, 0, x, y, 0,
               owner, k, t_speed[k], t_radius[k], t_mclass[k], 0, 0, 0, 0, 0 ]
     unit_changes++
     for(unit_columns()) col, n: col.push(v[n])

@@ -29,6 +29,7 @@ import lib.heroes
 import lib.match
 import lib.trade
 import lib.recipes
+import lib.homes
 import lib.carry
 import lib.animals
 import lib.bridges
