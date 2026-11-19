@@ -53,6 +53,7 @@ def place(player:int, k:int, cx:int, cy:int, along:int = 0) -> int:
     clear_rubble(footprint(b))  // built over a breach: the rubble goes
     occupy(footprint(b), b_id[b], if bt_gate[k]: teams[player] else: -1, bt_blocks_flyers[k] != 0)
     if bt_ladder[k]: set_walk_over(footprint(b), true)  // walked over at the wall's foot
+    if bt_road[k] >= 0: set_walk_over(footprint(b), true)  // a road plan is walked over while it's built (#51)
     if bt_gate[k]: refresh_lanes()                      // the team's first gate gives it lanes of its own
     return b
 
@@ -542,6 +543,13 @@ def clear_farm(b:int):
         refresh(c)
 
 // A finished farm turns its ground into crops; the builder who finished it starts the harvest.
+// A road plan built: its cells become road and the plan goes; its builder takes the next plan nearby (#51).
+def become_road(b:int):
+    let cells = footprint(b)
+    for(cells) c: set_road(c, bt_road[b_kind[b]])
+    set_walk_over(cells, false)
+    demolish(b)
+
 def become_ground(b:int, i:int):
     let k = b_kind[b]
     let cells = footprint(b)
@@ -731,7 +739,8 @@ def build_job(i:int):
             if b_site[b].length:  // its goods are used up
                 for(b_site[b]) c, r: b_hold[b][r] -= c
                 b_site[b] = []
-            if bt_farm[k]: become_ground(b, i)
+            if bt_road[k] >= 0: become_road(b)
+            elif bt_farm[k]: become_ground(b, i)
             elif bt_pen_animals[k] > 0: pen_opened(b)  // a pen: walked into
             else: gather_after_camp(b)
     elif u_moving[i] == 0:

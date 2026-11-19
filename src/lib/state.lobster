@@ -272,23 +272,6 @@ var jb_want = []::int    // 1: the job answers a want (0: a workshop's goods on 
 var next_job = 1
 var carry_dirty = []::int  // per player: 1 when its wants, stores or carriers changed since it was last matched
 
-// Saves outlive builds (D-141): a per-unit or per-building variable added since a save was made comes back from it
-// empty (flexbuffers give a missing field its empty value), so it's padded here with 0 for every unit and building.
-// Anything else whose empty value is wrong mid-match needs its own fix after loading.
-def pad_saved_columns():
-    while t_form_r.length < t_gap.length: t_form_r.push(0)
-    while u_mount.length < u_id.length: u_mount.push([])
-    while b_hold.length < b_id.length: b_hold.push([])  // (a save from before #48: a pool economy's empty holds)
-    while b_want.length < b_id.length: b_want.push([])
-    while b_resv.length < b_id.length: b_resv.push([])
-    while b_coming.length < b_id.length: b_coming.push([])
-    while b_make.length < b_id.length: b_make.push(0)
-    while b_site.length < b_id.length: b_site.push([])
-    for(unit_columns()) col:
-        while col.length < u_id.length: col.push(0)
-    for(building_columns()) col:
-        while col.length < b_id.length: col.push(0)
-
 def building_columns() -> [[int]]:
     return [ b_id, b_owner, b_kind, b_cx, b_cy, b_sx, b_sy, b_hp, b_progress, b_done, b_train, b_rally_x, b_rally_y, b_cooldown, b_diag ]
 
@@ -338,6 +321,7 @@ var bt_special = []::int  // pens, gates, ladders, walls you stand on: not in th
 var bt_drop = []::[int]   // per resource: 1 if it takes it in
 var bt_hold = []::[int]   // per resource: how much of it a building of this type holds (buildings.json holds; 0: none)
 var bt_store = []::int    // 1: what it holds counts as its owner's stock (a storehouse); stocked economies only
+var bt_road = []::int     // the road kind a road plan of this type lays when built (rules economy.roads), or -1 (#51)
 var bt_in = []::[int]     // per resource: what one round of its recipe takes (buildings.json makes.in; lib/recipes, #50)
 var bt_out = []::[int]    // per resource: what one round makes (makes.out)
 var bt_offer = []::[int]  // per resource: 1 if carriers may take it from here to whoever asks (makes.out, and "offers")
@@ -592,3 +576,21 @@ var tr_decay_every = 100
 var tr_decay = 1
 var tr_trail = 30
 var tr_speed_pct = 0
+
+// Saves outlive builds (D-141): a per-unit or per-building variable added since a save was made comes back from it
+// empty (flexbuffers give a missing field its empty value), so it's padded here with 0 for every unit and building.
+// Anything else whose empty value is wrong mid-match needs its own fix after loading.
+def pad_saved_columns():
+    while t_form_r.length < t_gap.length: t_form_r.push(0)
+    while u_mount.length < u_id.length: u_mount.push([])
+    while b_hold.length < b_id.length: b_hold.push([])  // (a save from before #48: a pool economy's empty holds)
+    while b_want.length < b_id.length: b_want.push([])
+    while b_resv.length < b_id.length: b_resv.push([])
+    while b_coming.length < b_id.length: b_coming.push([])
+    while b_make.length < b_id.length: b_make.push(0)
+    while b_site.length < b_id.length: b_site.push([])
+    while bt_road.length < bt_ladder.length: bt_road.push(-1)  // (a save from before road plans, #51)
+    for(unit_columns()) col:
+        while col.length < u_id.length: col.push(0)
+    for(building_columns()) col:
+        while col.length < b_id.length: col.push(0)

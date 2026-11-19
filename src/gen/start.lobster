@@ -188,6 +188,9 @@ def setup_btypes():
         let holds = gobj(b, "holds")  // {"<resource>": how much, "*": any resource}
         bt_hold.push(map(resource_names) r: gint(holds, r, gint(holds, "*", 0)))
         bt_store.push(if gbool(b, "store", false): 1 else: 0)
+        let road_name = gstr(b, "road", "")  // a road plan: built, it lays this road kind and goes (#51)
+        bt_road.push(if road_name == "": -1 else: find(rd_names): _ == road_name)
+        assert road_name == "" or bt_road[bt_road.length - 1] >= 0
         let mk = gobj(b, "makes")  // {"in": {"<resource>": n}, "out": {...}, "time": seconds}
         let ins = gobj(mk, "in")
         let outs = gobj(mk, "out")
