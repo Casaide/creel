@@ -458,7 +458,15 @@ def nearest_drop_off(i:int) -> int:
 // ---- tasks
 
 // Send worker i to gather `kind` at `cell` (Economy.start_gather).
+// Rules economy.gatherers (#88): when set, only units of these roster slots gather; anyone else told to (by an order, a
+// camp it finished, going back to work, a pack's rules) is left as it was.
+def may_gather(i:int) -> bool:
+    let slots = gstrs(rules_part("economy"), "gatherers")
+    let slot = t_slot[u_kind[i]]
+    return not slots.length or (find(slots): _ == slot) >= 0
+
 def start_gather(i:int, cell:int, kind:int):
+    if not may_gather(i): return
     let c = pick(i, cell, kind)
     if u_carry[i] > 0 and u_carry_kind[i] != kind: u_carry[i] = 0
     u_carry_kind[i] = kind
