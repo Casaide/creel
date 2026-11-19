@@ -137,8 +137,7 @@ def pens_tick():
                 let herd = pen_animals(b, true)
                 let n = min(herd.length, bt_pen_animals[k])
                 if feed and n > 0:
-                    stock[food][b_owner[b]] += n * bt_pen_food[k]
-                    gathered[food][b_owner[b]] += n * bt_pen_food[k]
+                    gathered[food][b_owner[b]] += stock_add(food, b_owner[b], n * bt_pen_food[k])
                 if breed and n >= 2 and pen_animals(b, false).length < bt_pen_animals[k]:
                     let parent = herd[0]
                     let cx, cy = b_centre(b)

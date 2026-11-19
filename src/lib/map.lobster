@@ -205,7 +205,7 @@ def sync_map():
         let ln = key % LANES
         let op = []::int
         let cl = []::int
-        var stale = false
+        var stale = road.length > 0  // (with roads on the map a field solves again: the patches count every step the same)
         if ln < lanes:
             for(opened[ln]) c:
                 if touches(f, c):
@@ -236,12 +236,37 @@ def sync_map():
     field_vals = reverse_list(keep_vals)
     clear_fresh()
 
+// ------------------------------------------------------------------ roads (#51)
+// A road kind on a cell makes a walker faster there (rules economy.roads: speed_pct), and flow fields count it cheaper
+// to cross, so paths take a road when it's quicker. Nothing is allocated until the first road is laid: a map with no road
+// solves and patches its fields as before.
+
+// Movement class c's speed on the cell, per cent: its terrain's, times the road's (flyers ignore roads).
+def set_cell_speed(cell:int, c:int):
+    var pct = speed_row[c][terrain[cell]]
+    if road.length and road[cell] > 0 and c != FLYING: pct = pct * rd_pct[road[cell] - 1] / 100
+    speed_pct[c][cell] = pct
+
+// Lay road kind k on the cell (-1 takes it up). Every cached field is dropped: they solve again with the road in them.
+def set_road(cell:int, k:int):
+    if not road.length:
+        road = zeros(W * H)
+        step_s = map(W * H): STRAIGHT
+        step_d = map(W * H): DIAGONAL
+    road[cell] = k + 1
+    let pct = if k >= 0: rd_pct[k] else: 100
+    step_s[cell] = max(STRAIGHT * 100 / pct, 1)
+    step_d[cell] = max(DIAGONAL * 100 / pct, 1)
+    for(speed_pct.length) c: set_cell_speed(cell, c)
+    field_keys = []
+    field_vals = []
+
 // A cell's terrain changed: its speed for each movement class follows (GDScript looks it up from the terrain each time;
 // a carcass left in a swamp no longer kept the swamp's speed).
 def set_cell_terrain(cell:int, k:int):
     terrain[cell] = k
     if fog_watch.length: fog_watch[cell] = 1  // (watched by the fog's memory from now on)
-    for(speed_pct) row, c: row[cell] = speed_row[c][k]
+    for(speed_pct.length) c: set_cell_speed(cell, c)
 
 // The map as each player remembers it (Fog's fog_ground and fog_left): the map as made, following the truth only where
 // they see now, so a farm sown in the dark stays grass to them until they look. Only cells that held a resource or ever

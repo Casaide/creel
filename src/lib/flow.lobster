@@ -28,7 +28,52 @@ def walkable(x:int, y:int, k:int) -> bool:
 def cell_walkable(cx:int, cy:int, k:int) -> bool:
     return cx >= 0 and cy >= 0 and cx < W and cy < H and walks[k][cy * W + cx] == 1
 
+// With a road on the map: as solve, but each cell costs what step_s and step_d say to cross (#51).
+def solve_roads(srcs:[int], cutoff:int, k:int) -> Flow:
+    let walk = walks[k]
+    let dist = map(W * H): INF
+    let next = map(W * H): -1
+    let ndx = [ 0, 1, 0, -1, 1, 1, -1, -1 ]
+    let ndy = [ -1, 0, 1, 0, -1, 1, 1, -1 ]
+    var pending = 0
+    for(srcs) src:
+        dist[src] = 0
+        ring[0].push(src)
+        pending++
+    var pops = 0
+    var cost = 0
+    while pending > 0 and cost <= cutoff:
+        let bucket = ring[cost % RING]
+        var bi = 0
+        while bi < bucket.length:
+            let c = bucket[bi]
+            bi++
+            pending--
+            if dist[c] != cost: continue
+            pops++
+            let cx = c % W
+            let cy = c / W
+            let from_blocked = walk[c] == 0
+            for(8) dir:
+                let x = cx + ndx[dir]
+                let y = cy + ndy[dir]
+                if x >= 0 and y >= 0 and x < W and y < H and walk[y * W + x] == 1:
+                    let m = y * W + x
+                    let diag = dir >= 4
+                    if not diag or from_blocked or (walk[cy * W + x] == 1 and walk[y * W + cx] == 1):
+                        let to = cost + (if diag: step_d[m] else: step_s[m])
+                        if to < dist[m]:
+                            dist[m] = to
+                            next[m] = c
+                            ring[to % RING].push(m)
+                            pending++
+        bucket.remove_range(0, bucket.length)
+        cost++
+    for(ring) b: b.remove_range(0, b.length)
+    return Flow { srcs, cutoff, pops, dist, next }
+
 def solve(srcs:[int], cutoff:int, k:int) -> Flow:
+    if road.length: return solve_roads(srcs, cutoff, k)
     let w = W
     let h = H
     let n = w * h
@@ -260,6 +305,7 @@ def ahead(f:Flow, cell:int, x:int, y:int, n:int, r:int, k:int) -> int:
         if not clear and not clear_walk(walk, room, w, h, x, y, gx * TILE + TILE / 2, gy * TILE + TILE / 2, r):
             break
         best = c
+        if road.length and road[c] != road[cell]: break  // (on a road it looks ahead only along it, so it keeps to it; off one, only as far as where it joins: #51)
         c = nxt[c]
     return best
 

@@ -254,6 +254,23 @@ var b_cooldown = []::int  // shooting buildings: ticks until the next volley
 var b_diag = []::int      // 0: the whole rect; 1 or 2: a diagonal gate, the cells on one diagonal of its square
 var b_queue = []::[int]   // unit type indexes, head first
 var b_inside = []::[int]  // units sheltering inside (garrison.gd): REC_SIZE ints each, by id
+var b_hold = []::[int]    // per resource: what the building holds now (stocked economies; empty in a pool one)
+var b_want = []::[int]    // per resource: still to be brought to it, not yet a carrier's job (lib/carry, #49)
+var b_resv = []::[int]    // per resource: of what it holds, how much carriers are on their way to fetch
+var b_coming = []::[int]  // per resource: on its way to it in a carrier's job
+var b_make = []::int      // ticks left of the round its recipe is making (0: idle; lib/recipes, #50)
+var b_site = []::[int]    // per resource: a stocked economy's site, what it costs (empty once built, and in a pool economy; #59)
+var produced = []::[int]      // [resource][player]: what recipes made, for the record (like gathered)
+var jb_id = []::int       // carriers' jobs (lib/carry), by id: the carrier's id, from and to (building ids), what, how many, phase
+var jb_unit = []::int
+var jb_from = []::int
+var jb_to = []::int
+var jb_res = []::int
+var jb_n = []::int
+var jb_phase = []::int
+var jb_want = []::int    // 1: the job answers a want (0: a workshop's goods on their way to a store)
+var next_job = 1
+var carry_dirty = []::int  // per player: 1 when its wants, stores or carriers changed since it was last matched
 
 // Saves outlive builds (D-141): a per-unit or per-building variable added since a save was made comes back from it
 // empty (flexbuffers give a missing field its empty value), so it's padded here with 0 for every unit and building.
@@ -261,6 +278,12 @@ var b_inside = []::[int]  // units sheltering inside (garrison.gd): REC_SIZE int
 def pad_saved_columns():
     while t_form_r.length < t_gap.length: t_form_r.push(0)
     while u_mount.length < u_id.length: u_mount.push([])
+    while b_hold.length < b_id.length: b_hold.push([])  // (a save from before #48: a pool economy's empty holds)
+    while b_want.length < b_id.length: b_want.push([])
+    while b_resv.length < b_id.length: b_resv.push([])
+    while b_coming.length < b_id.length: b_coming.push([])
+    while b_make.length < b_id.length: b_make.push(0)
+    while b_site.length < b_id.length: b_site.push([])
     for(unit_columns()) col:
         while col.length < u_id.length: col.push(0)
     for(building_columns()) col:
@@ -313,6 +336,12 @@ var bt_wet = []::int
 var bt_workers = []::int  // a farm: how many work it at once
 var bt_special = []::int  // pens, gates, ladders, walls you stand on: not in the spike
 var bt_drop = []::[int]   // per resource: 1 if it takes it in
+var bt_hold = []::[int]   // per resource: how much of it a building of this type holds (buildings.json holds; 0: none)
+var bt_store = []::int    // 1: what it holds counts as its owner's stock (a storehouse); stocked economies only
+var bt_in = []::[int]     // per resource: what one round of its recipe takes (buildings.json makes.in; lib/recipes, #50)
+var bt_out = []::[int]    // per resource: what one round makes (makes.out)
+var bt_offer = []::[int]  // per resource: 1 if carriers may take it from here to whoever asks (makes.out, and "offers")
+var bt_make_ticks = []::int  // one round's time (makes.time); 0: no recipe
 var bt_reseed = []::[int]
 var bm_hp = []::[int]  // [player][type]
 var bm_pop = []::[int]
@@ -358,7 +387,15 @@ var ages = []::int
 var auto_reseed = []::int
 var pop = []::int
 var pop_cap = []::int
-var stock = []::[int]  // [resource][player]
+var stock = []::[int]  // [resource][player]; in a stocked economy the sum of what the owner's stores hold
+var r_stocked = 0      // rules economy.model "stocked": goods sit in buildings (b_hold), not in one pool (#48)
+var r_carrier_load = 1  // rules economy.carrier_load: what a carrier takes on one trip (#49)
+var r_carrier_slots = []::string  // rules economy.carriers: the roster slots whose units carry (#61)
+var rd_names = []::string  // rules economy.roads: each road kind's name (#51)
+var rd_pct = []::int  // and a walker's speed on it, per cent
+var road = []::int  // per cell: 0, or 1 + the road kind on it; empty until the first road is laid (#51)
+var step_s = []::int  // per cell, with roads on the map: the flow field's cost to cross it straight (10, less on a road)
+var step_d = []::int  // and diagonally (14, less on a road)
 var gathered = []::[int]
 var gather_ticks = []::[int]  // [player][resource]
 var next_id = 0
@@ -435,9 +472,17 @@ var s_pushx = []::int
 var s_pushy = []::int
 var s_planted = []::int
 def remove_building(b:int):
+    if r_stocked and bt_store[b_kind[b]]:  // what a store held goes with it
+        for(b_hold[b]) n, r: stock[r][b_owner[b]] -= n
     for(building_columns()) col: col.remove(b)
     b_queue.remove(b)
     b_inside.remove(b)
+    b_hold.remove(b)
+    b_want.remove(b)
+    b_resv.remove(b)
+    b_coming.remove(b)
+    b_make.remove(b)
+    b_site.remove(b)
 
 // A unit back in the arrays under an id it had before (out of a building), in its place by id
 // (Units.insert, with units.gd _put's defaults). Its slot.
@@ -465,6 +510,7 @@ var t_eval_attack = []::int  // per unit type: its eval attack with research (th
 var t_bonus = []::[int]      // per unit type: its eval bonus vector with research
 var t_slot = []::string      // per unit type: its roster slot
 var t_trader = []::int
+var t_carrier = []::int  // per unit type: 1 for a carrier (tags "carrier"): it takes jobs from lib/carry (#49)
 var resource_names = []::string
 var staple_resources = []::int  // the resources bots buy when short (resources.json "staple")
 var tr_names = []::string

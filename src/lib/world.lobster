@@ -49,6 +49,8 @@ def step():
     tech_tick()
     work()
     trade_tick()
+    recipes_tick()
+    carry_tick()
     pack_tick()
     repair_tick()
     garrison_tick()
@@ -101,6 +103,8 @@ def state_hash() -> int:
     h = mix(h, next_id)
     h = mix(h, next_group)
     for(field_keys) k: h = mix(h, k)
+    for(road) v, c:  // (#51)
+        if v > 0: h = mix(h, c * 8 + v)
     for(hook_unit_cols) col:
         for(col) v: h = mix(h, v)
     for(hook_player_cols) col:
@@ -124,6 +128,14 @@ def state_hash() -> int:
         for(b_queue[b]) k: h = mix(h, k)
         h = mix(h, b_inside[b].length / REC_SIZE)
         for(b_inside[b]) v: h = mix(h, v)
+        for(b_hold[b]) v: h = mix(h, v)  // (empty in a pool economy: its hash is as it was)
+        for(b_want[b]) v: h = mix(h, v)
+        for(b_resv[b]) v: h = mix(h, v)
+        for(b_coming[b]) v: h = mix(h, v)
+        if r_stocked: h = mix(h, b_make[b])
+        for(b_site[b]) v: h = mix(h, v)
+    for([ jb_id, jb_unit, jb_from, jb_to, jb_res, jb_n, jb_phase, jb_want ]) col:
+        for(col) v: h = mix(h, v)
     for(hero_types.length) hn: h = mix(mix(h, hero_id[hn]), hero_fell[hn])
     h = mix(h, winner)
     for(wonder_ids) id, k: h = mix(mix(h, id), wonder_since[k])

@@ -57,6 +57,11 @@ def setup_world(seed_value:int, map_id:string, sides:[JV], rules:JV, team_ids:[i
     r_fog_building = gint(fc, "building", 4)
     r_fog_tower = gint(fc, "tower", 8)
     let ec = rules_part("economy")
+    r_stocked = if gstr(ec, "model", "pool") == "stocked": 1 else: 0
+    r_carrier_load = gint(ec, "carrier_load", 1)
+    r_carrier_slots = gstrs(ec, "carriers")
+    rd_names = map(glist(ec, "roads")): gstr(_, "name", "")
+    rd_pct = map(glist(ec, "roads")): gint(_, "speed_pct", 100)
     r_carry = as_int(at(ec, "carry"))
     r_queue_max = as_int(at(ec, "queue_max"))
     r_pop_max = as_int(at(ec, "pop_max"))
@@ -180,6 +185,17 @@ def setup_btypes():
         bt_cost.push(cost_vec(at(b, "cost")))
         let drop_off = gstrs(b, "drop_off")
         bt_drop.push(map(resource_names) r: if has_s(drop_off, r): 1 else: 0)
+        let holds = gobj(b, "holds")  // {"<resource>": how much, "*": any resource}
+        bt_hold.push(map(resource_names) r: gint(holds, r, gint(holds, "*", 0)))
+        bt_store.push(if gbool(b, "store", false): 1 else: 0)
+        let mk = gobj(b, "makes")  // {"in": {"<resource>": n}, "out": {...}, "time": seconds}
+        let ins = gobj(mk, "in")
+        let outs = gobj(mk, "out")
+        let offers = gstrs(b, "offers")
+        bt_in.push(map(resource_names) r: gint(ins, r, 0))
+        bt_out.push(map(resource_names) r: gint(outs, r, 0))
+        bt_offer.push(map(resource_names) r: if gint(outs, r, 0) > 0 or has_s(offers, r): 1 else: 0)
+        bt_make_ticks.push(gint(mk, "time", 0) * TICK_HZ)
         bt_reseed.push(cost_vec(gobj(b, "reseed")))
         bt_hp_base.push(as_int(at(b, "hp")))
         bt_food_base.push(gint(b, "food", 0))
@@ -343,6 +359,7 @@ def setup_starts():
     for(resource_names) r:
         stock.push(map(np): gint(start, r, 0))
         gathered.push(zeros(np))
+        produced.push(zeros(np))
     for(np) p:
         for(su_fx[p]) fx:
             if has(fx, "start"): stock[str_index(resource_names, rstr(fx, "start"))][p] += as_int(at(fx, "add"))
@@ -366,6 +383,8 @@ def setup_starts():
                 for(as_int(at(start, "workers"))):
                     let cell = spawn_cell(tc, worker)
                     add_unit(p, worker, (cell % W) * TILE + 500, (cell / W) * TILE + 500)
+    stock_settle()
+    carry_dirty = zeros(np)
     update_pop()
 
 // ---- animals (Animals.place): sheep and boar round each start, deer herds on the open map, seeded

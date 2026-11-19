@@ -100,7 +100,7 @@ def queue_or_clear(c:Cmd, formed:bool) -> [int]:
 def build_type(p:int, k:int) -> int: return if k < 0: -1 else: upgraded_type(p, k)
 
 def refund(p:int, cost:[int]):
-    for(cost) v, r: stock[r][p] += v
+    for(cost) v, r: stock_add(r, p, v)
 
 // What a building's queue entry cost: a unit type, or research / the age-up (Tech.entry_cost).
 def entry_cost(p:int, e:int) -> [int]:
