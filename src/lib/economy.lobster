@@ -19,6 +19,8 @@ def add_building(bid:int, owner:int, k:int, cx:int, cy:int, sx:int, sy:int, diag
     b_queue.push([]::int)
     b_inside.push([]::int)
     b_hold.push(if r_stocked: zeros(num_resources) else: []::int)
+    b_want.push(if r_stocked: zeros(num_resources) else: []::int)
+    b_resv.push(if r_stocked: zeros(num_resources) else: []::int)
     return b_id.length - 1
 
 // A footprint's size laid `along` (Economy.dims): gates turn, diagonals take a square.
@@ -156,7 +158,9 @@ def hold_room(b:int, r:int) -> int: return bt_hold[b_kind[b]][r] - b_hold[b][r]
 def hold_put(b:int, r:int, n:int) -> int:
     let m = min(n, max(0, hold_room(b, r)))
     b_hold[b][r] += m
-    if bt_store[b_kind[b]]: stock[r][b_owner[b]] += m
+    if bt_store[b_kind[b]]:
+        stock[r][b_owner[b]] += m
+        if m > 0: mark_carry(b_owner[b])
     return m
 
 // Take up to n of r out of building b: how much came out.

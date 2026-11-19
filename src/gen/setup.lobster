@@ -185,6 +185,7 @@ def add_type(player:int, e:JV) -> int:
     t_worker.push(if has_s(tags, "worker"): 1 else: 0)
     t_healer.push(if heal > 0: 1 else: 0)
     t_trader.push(if trader: 1 else: 0)
+    t_carrier.push(if has_s(tags, "carrier"): 1 else: 0)
     t_harmless.push(if trader or gstr(e, "targets", "") == "none": 1 else: 0)
     t_posture.push(if heal > 0 or trader: PASSIVE else: AGGRESSIVE)
     var mc = 0
