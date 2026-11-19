@@ -47,6 +47,7 @@ import gen.json
 import gen.sha256
 import gen.rng
 import gen.datalib
+import lua.parse
 import gen.mods
 import gen.setup
 import gen.modes
