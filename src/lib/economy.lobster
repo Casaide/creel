@@ -924,7 +924,7 @@ def can_place(player:int, k:int, cx:int, cy:int, along:int = 0) -> bool:
 // Pay for and place a BUILD's foundation; its id, or 0 when it can't be built there.
 def lay_foundation(player:int, ids:[int], k:int, cx:int, cy:int, along0:int = 0) -> int:
     if k < 0: return 0
-    if not own_workers(player, ids).length or build_barred(player, k): return 0
+    if (not own_workers(player, ids).length and not town_builds()) or build_barred(player, k): return 0
     let along = along_for(k, along0)
     if not can_place(player, k, cx, cy, along): return 0
     let sx, sy = dims(k, along)
