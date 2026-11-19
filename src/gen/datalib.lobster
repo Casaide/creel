@@ -148,7 +148,8 @@ def pack_apply(p:Pack):
         for(gstrs(lex, "stopwords")) w: push_new(lib_stopwords, w)
         lib_stopwords = sorted_strs(lib_stopwords)
     let res = pack_file(p, "resources.json")
-    if res: lib_resources = map(at(res, "resources").a) r: as_str(at(r, "id"))
+    if res:  // (added to what the packs before it have: #90)
+        for(at(res, "resources").a) r: push_new(lib_resources, as_str(at(r, "id")))
     let cc = pack_file(p, "cost_curves.json")
     if cc:
         for(cc.keys) id, n:
