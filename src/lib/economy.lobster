@@ -111,7 +111,7 @@ def add_unit(owner:int, k:int, x:int, y:int) -> int:
     let v = [ next_id, x, y, x, y, 0, 0, x, y, 0, 0, -1, -1, 0,
               t_hp[k], 0, 0, 0, t_posture[k], x, y, 0, 0, -1,
               T_NONE, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-              0, 0, 0, 0, 0, 0, 0, 0, x, y, 0,
+              0, 0, 0, 0, 0, 0, 0, 0, x, y,
               owner, k, t_speed[k], t_radius[k], t_mclass[k], 0, 0, 0, 0, 0 ]
     unit_changes++
     for(unit_columns()) col, n: col.push(v[n])
@@ -917,20 +917,7 @@ def can_place(player:int, k:int, cx:int, cy:int, along:int = 0) -> bool:
         if not can_build(c % W, c / W, 1, mc, bt_water[k] != 0, bt_line[k] != 0) and not replaceable(player, k, c): return false
         if bt_gate[k] and cliff[c] == 1: return false
     if bt_ladder[k] and not against_enemy_wall(player, cy * W + cx): return false  // a ladder only leans on an enemy walkway
-    if r_doors_on_roads and not door_on_road(player, k, cx, cy, sx, sy): return false
-    return true
-
-// The rule doors_on_roads: the tile in front of a building's door (below its bottom edge's middle) is road, or the
-// player's road plan. Roads themselves, walls and gates, and ladders have no door.
-def door_on_road(player:int, k:int, cx:int, cy:int, sx:int, sy:int) -> bool:
-    if bt_road[k] >= 0 or bt_line[k] or bt_ladder[k]: return true
-    let dx = cx + sx / 2
-    let dy = cy + sy
-    if dy >= H: return false
-    let c = dy * W + dx
-    if road.length and road[c] > 0: return true
-    let b = b_index_of(occupied[c])
-    return b >= 0 and b_owner[b] == player and bt_road[b_kind[b]] >= 0
+    return hook_can_place(player, k, cx, cy, sx, sy)
 
 // Pay for and place a BUILD's foundation; its id, or 0 when it can't be built there.
 def lay_foundation(player:int, ids:[int], k:int, cx:int, cy:int, along0:int = 0) -> int:

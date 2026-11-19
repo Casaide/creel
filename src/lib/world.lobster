@@ -50,7 +50,7 @@ def step():
     work()
     trade_tick()
     recipes_tick()
-    homes_tick()
+    hook_tick()
     carry_tick()
     pack_tick()
     repair_tick()
@@ -109,6 +109,8 @@ def state_hash() -> int:
     for(hook_unit_cols) col:
         for(col) v: h = mix(h, v)
     for(hook_player_cols) col:
+        for(col) v: h = mix(h, v)
+    for(hook_building_cols) col:
         for(col) v: h = mix(h, v)
     h = mix(h, -1)
     for(field_queue) k: h = mix(h, k)
@@ -433,7 +435,6 @@ def load_extras():
         bt_ladder.push(bw[o2 + 2])
         bt_road.push(-1)  // (a scenario has no road plans)
         bt_bridge.push(0)
-        bt_beds.push(0)
         bt_walkway.push(bw[o2 + 3])
         bt_blocks_flyers.push(bw[o2 + 4])
         let nr = bw[o2 + 5]
