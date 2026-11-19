@@ -33,7 +33,7 @@ def dims(k:int, along:int) -> int, int:
 
 def diag_of(along:int) -> int: return if along >= 2: along - 1 else: 0
 
-def along_for(k:int, along:int) -> int: return if bt_gate[k] and along >= 0 and along <= 3: along else: 0
+def along_for(k:int, along:int) -> int: return if (bt_gate[k] or (bt_bridge[k] and along <= 1)) and along >= 0 and along <= 3: along else: 0
 
 // The cells of a footprint with its top-left on (x0, y0), row by row: the rect, or a diagonal's (Buildings.cells).
 def cells_of(x0:int, y0:int, w:int, h:int, d:int) -> [int]:
@@ -53,6 +53,7 @@ def place(player:int, k:int, cx:int, cy:int, along:int = 0) -> int:
     clear_rubble(footprint(b))  // built over a breach: the rubble goes
     occupy(footprint(b), b_id[b], if bt_gate[k]: teams[player] else: -1, bt_blocks_flyers[k] != 0)
     if bt_ladder[k]: set_walk_over(footprint(b), true)  // walked over at the wall's foot
+    if bt_road[k] >= 0: set_walk_over(footprint(b), true)  // a road plan is walked over while it's built (#51)
     if bt_gate[k]: refresh_lanes()                      // the team's first gate gives it lanes of its own
     return b
 
@@ -110,7 +111,7 @@ def add_unit(owner:int, k:int, x:int, y:int) -> int:
     let v = [ next_id, x, y, x, y, 0, 0, x, y, 0, 0, -1, -1, 0,
               t_hp[k], 0, 0, 0, t_posture[k], x, y, 0, 0, -1,
               T_NONE, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-              0, 0, 0, 0, 0, 0, 0, 0, x, y,
+              0, 0, 0, 0, 0, 0, 0, 0, x, y, 0,
               owner, k, t_speed[k], t_radius[k], t_mclass[k], 0, 0, 0, 0, 0 ]
     unit_changes++
     for(unit_columns()) col, n: col.push(v[n])
@@ -542,6 +543,15 @@ def clear_farm(b:int):
         refresh(c)
 
 // A finished farm turns its ground into crops; the builder who finished it starts the harvest.
+// A road plan built: its cells become road and the plan goes; its builder takes the next plan nearby. A bridge plan
+// stands as a bridge (#51).
+def become_road(b:int):
+    let cells = footprint(b)
+    for(cells) c: set_road(c, bt_road[b_kind[b]])
+    if bt_bridge[b_kind[b]]: add_bridge(cells)
+    set_walk_over(cells, false)
+    demolish(b)
+
 def become_ground(b:int, i:int):
     let k = b_kind[b]
     let cells = footprint(b)
@@ -731,7 +741,8 @@ def build_job(i:int):
             if b_site[b].length:  // its goods are used up
                 for(b_site[b]) c, r: b_hold[b][r] -= c
                 b_site[b] = []
-            if bt_farm[k]: become_ground(b, i)
+            if bt_road[k] >= 0: become_road(b)
+            elif bt_farm[k]: become_ground(b, i)
             elif bt_pen_animals[k] > 0: pen_opened(b)  // a pen: walked into
             else: gather_after_camp(b)
     elif u_moving[i] == 0:
@@ -901,11 +912,25 @@ def can_place(player:int, k:int, cx:int, cy:int, along:int = 0) -> bool:
     let mc = t_mclass[worker_type(player)]
     let sx, sy = dims(k, along)
     if cx < 0 or cy < 0 or cx + sx > W or cy + sy > H: return false
+    if bt_bridge[k]: return bridge_fits(cx, cy, sx, sy)
     for(cells_of(cx, cy, sx, sy, diag_of(along))) c:
         if not can_build(c % W, c / W, 1, mc, bt_water[k] != 0, bt_line[k] != 0) and not replaceable(player, k, c): return false
         if bt_gate[k] and cliff[c] == 1: return false
     if bt_ladder[k] and not against_enemy_wall(player, cy * W + cx): return false  // a ladder only leans on an enemy walkway
+    if r_doors_on_roads and not door_on_road(player, k, cx, cy, sx, sy): return false
     return true
+
+// The rule doors_on_roads: the tile in front of a building's door (below its bottom edge's middle) is road, or the
+// player's road plan. Roads themselves, walls and gates, and ladders have no door.
+def door_on_road(player:int, k:int, cx:int, cy:int, sx:int, sy:int) -> bool:
+    if bt_road[k] >= 0 or bt_line[k] or bt_ladder[k]: return true
+    let dx = cx + sx / 2
+    let dy = cy + sy
+    if dy >= H: return false
+    let c = dy * W + dx
+    if road.length and road[c] > 0: return true
+    let b = b_index_of(occupied[c])
+    return b >= 0 and b_owner[b] == player and bt_road[b_kind[b]] >= 0
 
 // Pay for and place a BUILD's foundation; its id, or 0 when it can't be built there.
 def lay_foundation(player:int, ids:[int], k:int, cx:int, cy:int, along0:int = 0) -> int:

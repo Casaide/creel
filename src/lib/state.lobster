@@ -157,6 +157,7 @@ var u_wtime = []::int    // on a wall: ticks left climbing down, or 0
 var u_hull = []::int     // a turret: the way its hull last moved (tenths of a degree)
 var u_lx = []::int       // a turret: where the hull was when that was worked out
 var u_ly = []::int
+var u_house = []::int  // the id of the home it was born in (lib/homes), 0 for none
 var u_mount = []::[int]   // per unit: its mounts' aim, target and cooldown, in threes (combat.lobster)
 var u_orders = []::[Cmd]  // per unit: shift-queued orders, oldest first (units.orders)
 
@@ -165,7 +166,7 @@ def unit_columns() -> [[int]]:
     return [ u_id, u_x, u_y, u_tx, u_ty, u_moving, u_arrive, u_wx, u_wy, u_group, u_stuck, u_prog, u_fkey, u_pace,
              u_hp, u_foe, u_cooldown, u_stance, u_posture, u_gx, u_gy, u_amx, u_amy, u_amc,
              u_task, u_target, u_home, u_gspot, u_carry_kind, u_carry, u_work, u_reach, u_rx0, u_ry0, u_rx1, u_ry1, u_patient,
-             u_route, u_ready, u_perch, u_wgoal, u_wnext, u_wexit, u_wtime, u_hull, u_lx, u_ly,
+             u_route, u_ready, u_perch, u_wgoal, u_wnext, u_wexit, u_wtime, u_hull, u_lx, u_ly, u_house,
              u_owner, u_kind, u_speed, u_radius, u_mclass, u_block, u_bx, u_by, u_vx, u_vy ]
 
 // What hooks keep (hooks/active.lobster's hook_declare): saved and hashed like the sim's own. A column per name; a unit's
@@ -195,7 +196,7 @@ def hook_declare_player(name:string, players:int) -> int:
     hook_player_cols.push(map(players): 0)
     return hook_player_names.length - 1
 
-let UNIT_HASHED = 47    // the columns hashed (unit_fields)
+let UNIT_HASHED = 48    // the columns hashed (unit_fields)
 var t_tags = []::[int]  // per unit type: its eval's tags (class indexes), as its line stands
 var t_damage = []::int  // per unit type: its attack's class (0 melee, 1 pierce, ...)
 
@@ -272,23 +273,6 @@ var jb_want = []::int    // 1: the job answers a want (0: a workshop's goods on 
 var next_job = 1
 var carry_dirty = []::int  // per player: 1 when its wants, stores or carriers changed since it was last matched
 
-// Saves outlive builds (D-141): a per-unit or per-building variable added since a save was made comes back from it
-// empty (flexbuffers give a missing field its empty value), so it's padded here with 0 for every unit and building.
-// Anything else whose empty value is wrong mid-match needs its own fix after loading.
-def pad_saved_columns():
-    while t_form_r.length < t_gap.length: t_form_r.push(0)
-    while u_mount.length < u_id.length: u_mount.push([])
-    while b_hold.length < b_id.length: b_hold.push([])  // (a save from before #48: a pool economy's empty holds)
-    while b_want.length < b_id.length: b_want.push([])
-    while b_resv.length < b_id.length: b_resv.push([])
-    while b_coming.length < b_id.length: b_coming.push([])
-    while b_make.length < b_id.length: b_make.push(0)
-    while b_site.length < b_id.length: b_site.push([])
-    for(unit_columns()) col:
-        while col.length < u_id.length: col.push(0)
-    for(building_columns()) col:
-        while col.length < b_id.length: col.push(0)
-
 def building_columns() -> [[int]]:
     return [ b_id, b_owner, b_kind, b_cx, b_cy, b_sx, b_sy, b_hp, b_progress, b_done, b_train, b_rally_x, b_rally_y, b_cooldown, b_diag ]
 
@@ -338,6 +322,9 @@ var bt_special = []::int  // pens, gates, ladders, walls you stand on: not in th
 var bt_drop = []::[int]   // per resource: 1 if it takes it in
 var bt_hold = []::[int]   // per resource: how much of it a building of this type holds (buildings.json holds; 0: none)
 var bt_store = []::int    // 1: what it holds counts as its owner's stock (a storehouse); stocked economies only
+var bt_road = []::int     // the road kind a road plan of this type lays when built (rules economy.roads), or -1 (#51)
+var bt_bridge = []::int   // a road plan that spans water: built, it stands as a bridge (lib/bridges) (#51)
+var bt_beds = []::int     // beds in a home: workers are born there while one is free and its larder has food (lib/homes, #73)
 var bt_in = []::[int]     // per resource: what one round of its recipe takes (buildings.json makes.in; lib/recipes, #50)
 var bt_out = []::[int]    // per resource: what one round makes (makes.out)
 var bt_offer = []::[int]  // per resource: 1 if carriers may take it from here to whoever asks (makes.out, and "offers")
@@ -393,6 +380,9 @@ var r_carrier_load = 1  // rules economy.carrier_load: what a carrier takes on o
 var r_carrier_slots = []::string  // rules economy.carriers: the roster slots whose units carry (#61)
 var rd_names = []::string  // rules economy.roads: each road kind's name (#51)
 var rd_pct = []::int  // and a walker's speed on it, per cent
+var r_doors_on_roads = 0  // rules economy.doors_on_roads: a building goes up only with its door on a road or a road plan
+var r_born_ticks = 0  // rules economy.homes.born_every, in ticks: how often a home with a free bed and food has a child (0: off; #73)
+var r_foods = []::int  // rules economy.homes.foods: the resources a larder keeps and a birth takes one of
 var road = []::int  // per cell: 0, or 1 + the road kind on it; empty until the first road is laid (#51)
 var step_s = []::int  // per cell, with roads on the map: the flow field's cost to cross it straight (10, less on a road)
 var step_d = []::int  // and diagonally (14, less on a road)
@@ -492,7 +482,7 @@ def insert_unit(uid:int, owner:int, k:int, x:int, y:int, speed:int, radius:int, 
     let v = [ uid, x, y, x, y, 0, 0, x, y, 0, 0, -1, -1, 0,
               hp, 0, 0, 0, 0, x, y, 0, 0, -1,
               0, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-              0, 0, 0, 0, 0, 0, 0, 0, x, y,
+              0, 0, 0, 0, 0, 0, 0, 0, x, y, 0,
               owner, k, speed, radius, 0, 0, 0, 0, 0, 0 ]
     unit_changes++
     for(unit_columns()) col, n: col.insert(at, v[n])
@@ -592,3 +582,23 @@ var tr_decay_every = 100
 var tr_decay = 1
 var tr_trail = 30
 var tr_speed_pct = 0
+
+// Saves outlive builds (D-141): a per-unit or per-building variable added since a save was made comes back from it
+// empty (flexbuffers give a missing field its empty value), so it's padded here with 0 for every unit and building.
+// Anything else whose empty value is wrong mid-match needs its own fix after loading.
+def pad_saved_columns():
+    while t_form_r.length < t_gap.length: t_form_r.push(0)
+    while u_mount.length < u_id.length: u_mount.push([])
+    while b_hold.length < b_id.length: b_hold.push([])  // (a save from before #48: a pool economy's empty holds)
+    while b_want.length < b_id.length: b_want.push([])
+    while b_resv.length < b_id.length: b_resv.push([])
+    while b_coming.length < b_id.length: b_coming.push([])
+    while b_make.length < b_id.length: b_make.push(0)
+    while b_site.length < b_id.length: b_site.push([])
+    while bt_road.length < bt_ladder.length: bt_road.push(-1)  // (a save from before road plans, #51)
+    while bt_bridge.length < bt_ladder.length: bt_bridge.push(0)
+    while bt_beds.length < bt_ladder.length: bt_beds.push(0)
+    for(unit_columns()) col:
+        while col.length < u_id.length: col.push(0)
+    for(building_columns()) col:
+        while col.length < b_id.length: col.push(0)

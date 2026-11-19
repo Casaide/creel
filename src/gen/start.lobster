@@ -62,6 +62,11 @@ def setup_world(seed_value:int, map_id:string, sides:[JV], rules:JV, team_ids:[i
     r_carrier_slots = gstrs(ec, "carriers")
     rd_names = map(glist(ec, "roads")): gstr(_, "name", "")
     rd_pct = map(glist(ec, "roads")): gint(_, "speed_pct", 100)
+    r_doors_on_roads = if gbool(ec, "doors_on_roads", false): 1 else: 0
+    let hc = gobj(ec, "homes")
+    r_born_ticks = gint(hc, "born_every", 0) * TICK_HZ
+    r_foods = map(gstrs(hc, "foods")) f: find(resource_names): _ == f
+    for(r_foods) r: assert r >= 0
     r_carry = as_int(at(ec, "carry"))
     r_queue_max = as_int(at(ec, "queue_max"))
     r_pop_max = as_int(at(ec, "pop_max"))
@@ -188,7 +193,14 @@ def setup_btypes():
         let holds = gobj(b, "holds")  // {"<resource>": how much, "*": any resource}
         bt_hold.push(map(resource_names) r: gint(holds, r, gint(holds, "*", 0)))
         bt_store.push(if gbool(b, "store", false): 1 else: 0)
+        let road_name = gstr(b, "road", "")  // a road plan: built, it lays this road kind and goes (#51)
+        bt_road.push(if road_name == "": -1 else: find(rd_names): _ == road_name)
+        assert road_name == "" or bt_road[bt_road.length - 1] >= 0
+        bt_bridge.push(if gbool(b, "bridge", false): 1 else: 0)  // a road plan over water
+        bt_beds.push(gint(b, "beds", 0))
+        assert not gbool(b, "bridge", false) or road_name != ""
         let mk = gobj(b, "makes")  // {"in": {"<resource>": n}, "out": {...}, "time": seconds}
+        assert bt_beds[bt_beds.length - 1] == 0 or gint(mk, "time", 0) == 0  // (a home counts down in b_make, a recipe's clock)
         let ins = gobj(mk, "in")
         let outs = gobj(mk, "out")
         let offers = gstrs(b, "offers")
