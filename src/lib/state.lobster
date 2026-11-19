@@ -259,6 +259,7 @@ var b_want = []::[int]    // per resource: still to be brought to it, not yet a 
 var b_resv = []::[int]    // per resource: of what it holds, how much carriers are on their way to fetch
 var b_coming = []::[int]  // per resource: on its way to it in a carrier's job
 var b_make = []::int      // ticks left of the round its recipe is making (0: idle; lib/recipes, #50)
+var b_site = []::[int]    // per resource: a stocked economy's site, what it costs (empty once built, and in a pool economy; #59)
 var produced = []::[int]      // [resource][player]: what recipes made, for the record (like gathered)
 var jb_id = []::int       // carriers' jobs (lib/carry), by id: the carrier's id, from and to (building ids), what, how many, phase
 var jb_unit = []::int
@@ -282,6 +283,7 @@ def pad_saved_columns():
     while b_resv.length < b_id.length: b_resv.push([])
     while b_coming.length < b_id.length: b_coming.push([])
     while b_make.length < b_id.length: b_make.push(0)
+    while b_site.length < b_id.length: b_site.push([])
     for(unit_columns()) col:
         while col.length < u_id.length: col.push(0)
     for(building_columns()) col:
@@ -474,6 +476,7 @@ def remove_building(b:int):
     b_resv.remove(b)
     b_coming.remove(b)
     b_make.remove(b)
+    b_site.remove(b)
 
 // A unit back in the arrays under an id it had before (out of a building), in its place by id
 // (Units.insert, with units.gd _put's defaults). Its slot.

@@ -131,6 +131,7 @@ def state_hash() -> int:
         for(b_resv[b]) v: h = mix(h, v)
         for(b_coming[b]) v: h = mix(h, v)
         if r_stocked: h = mix(h, b_make[b])
+        for(b_site[b]) v: h = mix(h, v)
     for([ jb_id, jb_unit, jb_from, jb_to, jb_res, jb_n, jb_phase, jb_want ]) col:
         for(col) v: h = mix(h, v)
     for(hero_types.length) hn: h = mix(mix(h, hero_id[hn]), hero_fell[hn])

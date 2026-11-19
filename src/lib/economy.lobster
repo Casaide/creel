@@ -23,6 +23,7 @@ def add_building(bid:int, owner:int, k:int, cx:int, cy:int, sx:int, sy:int, diag
     b_resv.push(if r_stocked: zeros(num_resources) else: []::int)
     b_coming.push(if r_stocked: zeros(num_resources) else: []::int)
     b_make.push(0)
+    b_site.push([]::int)
     return b_id.length - 1
 
 // A footprint's size laid `along` (Economy.dims): gates turn, diagonals take a square.
@@ -154,7 +155,18 @@ def pay(player:int, cost:[int]):
 // the sum of what p's finished stores hold, kept equal to it here, so readers of stock never change.
 
 // Room left in building b for resource r (stocked economies).
-def hold_room(b:int, r:int) -> int: return bt_hold[b_kind[b]][r] - b_hold[b][r]
+def hold_room(b:int, r:int) -> int:
+    if b_site[b].length: return b_site[b][r] - b_hold[b][r]  // a site: what it still lacks of its cost (#59)
+    return bt_hold[b_kind[b]][r] - b_hold[b][r]
+
+// A site's share of its cost delivered, in per-mille (1000 once built or with nothing to bring).
+def site_permille(b:int) -> int:
+    var need = 0
+    var got = 0
+    for(b_site[b]) c, r:
+        need += c
+        got += min(c, b_hold[b][r])
+    return if need == 0: 1000 else: got * 1000 / need
 
 // Put up to n of r in building b: how much went in.
 def hold_put(b:int, r:int, n:int) -> int:
@@ -710,11 +722,15 @@ def build_job(i:int):
         if pct != 0:
             u_work[i]++
             st += u_work[i] * pct / 100 - (u_work[i] - 1) * pct / 100
-        b_progress[b] = min(bt_build_ticks[k], b_progress[b] + st)
+        let cap = if b_site[b].length: bt_build_ticks[k] * site_permille(b) / 1000 else: bt_build_ticks[k]  // no further than the goods brought
+        b_progress[b] = max(b_progress[b], min(cap, b_progress[b] + st))
         b_hp[b] = max(1, max_hp * b_progress[b] / bt_build_ticks[k])
         if b_progress[b] >= bt_build_ticks[k]:
             b_done[b] = 1
             b_hp[b] = max_hp
+            if b_site[b].length:  // its goods are used up
+                for(b_site[b]) c, r: b_hold[b][r] -= c
+                b_site[b] = []
             if bt_farm[k]: become_ground(b, i)
             elif bt_pen_animals[k] > 0: pen_opened(b)  // a pen: walked into
             else: gather_after_camp(b)
@@ -900,11 +916,17 @@ def lay_foundation(player:int, ids:[int], k:int, cx:int, cy:int, along0:int = 0)
     let sx, sy = dims(k, along)
     let cells = cells_of(cx, cy, sx, sy, diag_of(along))
     let cost = repair_cost(player, k, cells)
-    if not can_afford(player, cost): return 0
-    pay(player, cost)
+    if not r_stocked:
+        if not can_afford(player, cost): return 0
+        pay(player, cost)
     for(cells) c:
         if replaceable(player, k, c): demolish(b_index_of(occupied[c]))  // a gate dropped into a wall takes its place
-    return b_id[place(player, k, cx, cy, along)]
+    let b = place(player, k, cx, cy, along)
+    if r_stocked:  // the site asks for its cost; carriers bring it (#59)
+        b_site[b] = copy(cost)
+        for(cost) c, r:
+            if c > 0: want(b, r, c)
+    return b_id[b]
 
 def cmd_build(player:int, ids:[int], k:int, cx:int, cy:int, along:int = 0):
     let bid = lay_foundation(player, ids, k, cx, cy, along)
