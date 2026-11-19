@@ -5,7 +5,7 @@
 // The packs are merged (gen/mods.lobster): the game's turn to work out what it derives from the data.
 def packs_loaded(root:string): return
 
-// The state the rules keep, declared at the match start (hook_declare_unit, hook_declare_player).
+// The state the rules keep, declared at the match start (hook_declare_unit, hook_declare_player, hook_declare_building).
 def hook_declare(): return
 
 // A blow or shot is about to land on unit slot `target` from unit id `by`: the damage it does.
@@ -19,6 +19,12 @@ def hook_on_death(i:int, killer:int): return
 
 // Each tick, for each unit whose type asks ("tick": true in its row of the table).
 def hook_unit_tick(i:int): return
+
+// Once a tick, after the economy's steps (recipes, before the carriers): rules of the game's own, like births in homes.
+def hook_tick(): return
+
+// Whether player p may put a building of type k at cx, cy (its size sx, sy), once the engine's own checks pass.
+def hook_can_place(p:int, k:int, cx:int, cy:int, sx:int, sy:int) -> bool: return true
 
 // An order with a code from HOOK_ORDER_BASE up. ids: the unit ids it was given to; x, y: its two arguments.
 def hook_on_order(code:int, p:int, ids:[int], x:int, y:int): return
