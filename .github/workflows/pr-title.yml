@@ -1,0 +1,20 @@
+# Pull request titles follow Conventional Commits (CONTRIBUTING.md): `type(scope): summary`, with `!` for a breaking change.
+name: PR title
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  conventional:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          types='feat|fix|perf|refactor|docs|test|build|ci|chore|style|revert'
+          if printf '%s' "$TITLE" | grep -Eq "^($types)(\([a-z0-9._/-]+\))?!?: [^ ].*"; then
+            echo "ok: $TITLE"
+          else
+            echo "::error::PR title must follow Conventional Commits, like 'fix(devlog): shorten a summary'. Types: ${types//|/, }. Got: $TITLE"
+            exit 1
+          fi
