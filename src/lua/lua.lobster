@@ -548,8 +548,8 @@ def lx_ret(v:int): rets.push(v)
 
 // string.sub's and string.find's positions, Lua style (1-based, negative from the end), as a 0-based start and length.
 def lx_str_range(len:int, i:int, j:int) -> int, int:
-    var s = if i < 0: max(len + i + 1, 1) elif i == 0: 1 else: i
-    var e = if j < 0: len + j + 1 elif j > len: len else: j
+    let s = if i < 0: max(len + i + 1, 1) elif i == 0: 1 else: i
+    let e = if j < 0: len + j + 1 elif j > len: len else: j
     if s > e: return 0, 0
     return s - 1, e - s + 1
 
@@ -797,6 +797,7 @@ def lua_reset():
     lerr = ""
     lfail = false
     lprint = []
+    lua_quiet = false
     ldepth = 0
     lb_names = append(L_BASE_NAMES, l_api_names)
 
