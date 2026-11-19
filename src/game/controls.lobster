@@ -12,7 +12,7 @@ var drag_from = float2_0
 var dragging = false
 
 def selected_units() -> [int]: return filter(selected) id: index_of(id) >= 0
-def selected_workers() -> [int]: return filter(selected_units()) id: t_worker[u_kind[index_of(id)]] != 0
+def selected_workers() -> [int]: return filter(selected_units()) id: t_worker[u_kind[index_of(id)]] != 0 and not hands_off(id)  // (the workers we can order)
 
 def unit_at_screen(m:float2, mine:bool) -> int:
     var best = -1
@@ -176,7 +176,7 @@ def order(m:float2, attack_move:bool = false):
     say(ME, "ack")
     let herd = filter(all) id: is_animal(index_of(id))
     let ids = filter(all) id: not is_animal(index_of(id))
-    let workers = filter(selected_workers()) id: not hands_off(id)
+    let workers = selected_workers()
     let c = cell_of(x, y)
     let b = building_at(mm)
     let foe = unit_at_screen(m, false)
@@ -324,7 +324,7 @@ def keys():
         if hit and not build_menu and (shown < 0 or b_owner[shown] != ME):
             recall_group(n)
             return
-    if gl.button("b") == 1 and selected_workers().length: build_menu = not build_menu
+    if gl.button("b") == 1 and (selected_workers().length or town_builds()): build_menu = not build_menu
     if build_menu:
         let menu = buildable()
         for(digit) hit, n:
