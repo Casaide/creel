@@ -81,7 +81,8 @@ def vx_style_of(body:string, body_id:string) -> float3, float3, float3:
 def vx_def_of(r:JV) -> vx_unit_def:
     let cid = gstr(r, "creature", "")
     let fid = gstr(r, "family", "")
-    let body = vx_culture_body(vx_body_for(rstr(r, "body"), cid), cid, if has(lib_families, fid): family(fid) else: jobj())
+    let fam = if has(lib_families, fid): family(fid) else: jobj()
+    let body = vx_culture_body(vx_body_for(rstr(r, "body"), cid), cid, fam)
     var skin, pale, mark = vx_palette(gstr(r, "skin", ""))
     var crew:vx_unit_def? = nil
     if has(r, "crew"):  // an engine or a war beast: its frame in its style, its crew in their own colours
@@ -104,13 +105,13 @@ def vx_def_of(r:JV) -> vx_unit_def:
         fused = gbool(mo, "fused", false)
         mount = vx_body_for(gstr(c, "mount_body", gstr(c, "body", "")), mc)
         coat, mane, coat_mark = vx_palette(rstr(mo, "skin"))
-    return vx_unit_def { gstr(r, "name", ""), body, skin, pale, mark, gear, mount, fused, coat, mane, coat_mark, crew }
+    return vx_unit_def { gstr(r, "name", ""), body, skin, pale, mark, gear, mount, fused, coat, mane, coat_mark, crew, culture: gstr(gobj(fam, "bodies"), "human", "") }
 
 // The look key of a unit def (what it's drawn as), its crew's too.
 def vx_key_of(u:vx_unit_def) -> string:
     let c = u.crew
     let ck = if c: " crew \{" + vx_key_of(c) + "\}" else: ""
-    return "{u.body} {u.skin} {u.pale} {u.mark} {u.gear} {u.mount} {u.fused} {u.coat} {u.mane} {u.coat_mark}{ck}"
+    return "{u.body} {u.skin} {u.pale} {u.mark} {u.gear} {u.mount} {u.fused} {u.coat} {u.mane} {u.coat_mark} {u.culture}{ck}"
 
 // The look a recipe is drawn in (made the first time it's asked for; not baked until planned).
 def vx_look_for(r:JV) -> int: return vx_look_of(vx_def_of(r), gstr(r, "role", "") == "worker")

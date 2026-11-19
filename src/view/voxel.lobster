@@ -566,6 +566,7 @@ class vx_body_spec:
     wide:float
     looks:[float]              // per look: the skin shade
     hair:[float3]              // and hair colour
+    helm_k:float = 1.0  // a culture's helmet on this body: this much bigger than its spot's radius says (a long skull under big ears)
     crew:[float3] = []         // an engine: where its crew stand (on their own legs, walking as it moves)
     seats:[float3] = []        // a war beast: where its crew sit (a howdah), at their seat height
     style_names:[string] = []  // an engine in each culture's style (siege.<kind>.<style>): its skin, pale, mark
@@ -687,6 +688,7 @@ def vx_parse_body(id:string, o:JV) -> vx_body_spec:
     if has(o, "helm"):
         b.helm_pt, b.helm = vx_pt(at(at(o, "helm"), "at"))
         b.helm_r = as_float(at(at(o, "helm"), "r"))
+        b.helm_k = gfloat(at(o, "helm"), "culture", 1.0)
     if has(o, "armour"):
         let fo = at(o, "armour")
         b.fit_pa, b.fit_a = vx_pt(at(fo, "a"))
@@ -1124,6 +1126,7 @@ class vx_unit_def:
     mane:float3
     coat_mark:float3
     crew:vx_unit_def?  // an engine's or a war beast's crew (each of its body's crew spots and seats)
+    culture:string = ""  // its culture's own human body (the family's `bodies.human`), or "": whose fit a worn piece takes on a body with none of its own
 
 var vx_variant = 0          // the look being built
 var vx_seated = false       // a rider being built: no legs of its own (shapes with `unless: seated` left off)
@@ -1546,8 +1549,24 @@ def vx_worn(out:[vx_prim], u:vx_unit_def, b:vx_body_spec, p:vx_points, flags:[st
         assert gs
         if gs.hand == 0:
             var k = find(gs.fit_ids) i: i == b.id
-            if k < 0: k = find(gs.fit_ids) i: i == "*"
-            if k >= 0: for(gs.fits[k]) s: vx_emit(out, s, p, vx_X, vx_Y, vx_Z, flags, b)
+            let ck = if k < 0 and u.culture != "" and vx_has_flag(gs, "helm"): find(gs.fit_ids) i: i == u.culture else: -1
+            if ck >= 0:  // (a culture's piece on another body: its own fit, moved from the culture's body onto this one's spot)
+                let cb = vx_body_of(u.culture)
+                for(gs.fits[ck]) s: vx_emit(out, vx_refit(s, cb, b), p, vx_X, vx_Y, vx_Z, flags, b)
+            else:
+                if k < 0: k = find(gs.fit_ids) i: i == "*"
+                if k >= 0: for(gs.fits[k]) s: vx_emit(out, s, p, vx_X, vx_Y, vx_Z, flags, b)
+
+def vx_has_flag(gs:vx_gear_spec, f:string) -> bool: return (find(gs.flags) x: x == f) >= 0
+
+// A culture's helmet or hat (drawn for its own body cb) moved onto body b: from cb's helmet spot to b's, scaled by their
+// radii, keeping its upright (Casaide/age-of-whatever#505: a hellenic bear wears the Greek helmet, not a plain cap). Armour
+// isn't moved: a human's cuirass and skirt don't sit on a crouched or long trunk, so it keeps the body's own fit.
+def vx_refit(s:vx_spec, cb:vx_body_spec, b:vx_body_spec) -> vx_spec:
+    assert s.kind == vx_k_model and s.pb == "" and s.pa == cb.helm_pt
+    let k = b.helm_r * b.helm_k / cb.helm_r
+    return vx_spec { s.kind, s.hard, s.mirror, b.helm_pt, b.helm + (s.a - cb.helm) * k, "", float3_0, s.ra * k, s.rb, s.mat, s.mat2,
+                     s.n, s.half, s.pts, s.offs, s.step, s.taper, s.need, s.avoid, model: s.model, flip: s.flip }
 
 // A body going down as it dies: its hips drop and its trunk folds forward over them, so its knees bend (its feet stay), #263.
 let vx_SLUMP_HIPS = 0.6
