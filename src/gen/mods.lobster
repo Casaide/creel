@@ -184,11 +184,12 @@ def mod_check_match_data(d:JV) -> string:
     let slots = []::string
     for(d.keys) f:
         if starts_with(f, "rules/"):
-            for(glist(at(d, f), "roster")) e: push_new(slots, gstr(e, "slot", ""))
+            for([ "roster", "+roster" ]) key:
+                for(glist(at(d, f), key)) e: push_new(slots, gstr(e, "slot", ""))
     for(glist(load_rules("default"), "roster")) e: push_new(slots, gstr(e, "slot", ""))
     for(after.keys) id:
         for(append(gstrs(at(after, id), "trains"), gstrs(at(after, id), "+trains"))) s:
-            if has(mine, id) and not has_s(slots, s) and not has_s(gstrs(at(before, id), "trains"), s):
+            if has(mine, id) and not has_s(slots, s) and not has_s(gstrs(gobj(before, id), "trains"), s):
                 return "buildings.json {id}: trains \'{s}\', which no roster has"
     let there = filter(after.keys) id: not starts_with(id, "_")
     let tech = data_merge(lib_data("tech.json"), gobj(d, "tech.json"))
