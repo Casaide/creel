@@ -279,7 +279,7 @@ def lx_lex(src:string):
             i++
             var out = ""
             while i < n and src[i] != c and lex_err == "":
-                var ch = src[i]
+                let ch = src[i]
                 if ch == '\n':
                     lex_err = "{line}: unfinished string"
                 elif ch == '\\':
