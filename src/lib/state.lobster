@@ -390,6 +390,7 @@ var pop_cap = []::int
 var stock = []::[int]  // [resource][player]; in a stocked economy the sum of what the owner's stores hold
 var r_stocked = 0      // rules economy.model "stocked": goods sit in buildings (b_hold), not in one pool (#48)
 var r_carrier_load = 1  // rules economy.carrier_load: what a carrier takes on one trip (#49)
+var r_carrier_slots = []::string  // rules economy.carriers: the roster slots whose units carry (#61)
 var gathered = []::[int]
 var gather_ticks = []::[int]  // [player][resource]
 var next_id = 0
