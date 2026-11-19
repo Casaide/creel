@@ -233,7 +233,7 @@ def data_merge(a:JV, b:JV) -> JV:
         let old = get(out, key)
         if starts_with(key, "+") or starts_with(key, "-"): out = mod_merge(out, jobj_with(key, v))
         elif v.kind == J_OBJ and gbool(v, "remove", false): out = jobj_without(out, key)
-        elif v.kind == J_OBJ and has(v, "extends"): set(out, key, data_merge(at(out, gstr(v, "extends", "")), jobj_without(v, "extends")))
+        elif v.kind == J_OBJ and has(v, "extends"): set(out, key, data_merge(at(out, gstr(v, "extends", "")), v))  // (it keeps "extends": what it was made from, #76)
         elif old and old.kind == J_OBJ and v.kind == J_OBJ: set(out, key, data_merge(old, v))
         elif old and old.kind == J_ARR and v.kind == J_ARR and v.a.length and item_key(v.a[0]) != "": set(out, key, jarr(list_merge(old.a, v.a)))
         else: set(out, key, deep_copy(v))
