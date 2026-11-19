@@ -475,7 +475,9 @@ def atmo_mood_problems(name:string, m:JV) -> [string]:
     let out = []::string
     if m.kind != J_OBJ: return [ "mood {name} isn\'t an object" ]
     for(m.keys) k:
-        if not has_s(ATMO_NUMS, k) and not has_s(ATMO_COLS, k) and not has_s(ATMO_OPT, k) and not has_s(ATMO_OPT_COLS, k) and not starts_with(k, "_"): out.push("mood {name}: no knob \'{k}\'")
+        let known = has_s(ATMO_NUMS, k) or has_s(ATMO_COLS, k) or has_s(ATMO_OPT, k) or has_s(ATMO_OPT_COLS, k)
+        // ("extends": the mood it was made from, which data_merge keeps; "_": a note)
+        if not known and k != "extends" and not starts_with(k, "_"): out.push("mood {name}: no knob \'{k}\'")
     for(ATMO_OPT) k, i:
         let v = get(m, k)
         if v and (not atmo_is_num(v) or as_float(v) < 0.0 or as_float(v) > ATMO_OPT_MAX[i]): out.push("mood {name}: \'{k}\' must be a number from 0 to {ATMO_OPT_MAX[i]}")
