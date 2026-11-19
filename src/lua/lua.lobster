@@ -1,7 +1,7 @@
 // ------------------------------------------------------------------ Lua for mods' rules (#82)
 // A Lua interpreter, written in Lobster so it needs nothing from outside it and runs the same in every build. It runs
 // the part of Lua 5.4 that rule code needs, cut to what lockstep allows:
-// - integers only (60 bits): float literals, `/` and `^` are refused when a file loads; `//` and `%` floor as in Lua.
+// - integers only (61 bits, signed): float literals, `/` and `^` are refused when a file loads; `//` and `%` floor as in Lua.
 // - no hidden state: a pack's files run once, at the match start; after that the tables, globals and file-level locals
 //   they made are read-only, and state that lasts goes in the sim's declared hook columns (lua/api.lobster).
 // - `pairs` goes in insertion order, the same on every machine.
@@ -163,6 +163,7 @@ class LNode:
     line:int
     a:[LNode]
     s:[int]
+    c = -1  // a global's value, once the load is over (they're read-only then); -1 until it's looked up
 
 class LProto:
     name:string
@@ -177,6 +178,7 @@ var l_protos = []::LProto
 
 // ------------------------------------------------------------------ errors and the budget
 var lerr = ""         // the error the running code stopped on ("" while all is well)
+var lfail = false     // lerr is set
 var lerr_file = ""
 var lline = 0
 var lsteps = 0
@@ -185,7 +187,9 @@ var ldepth = 0
 let L_MAX_DEPTH = 200
 
 def lua_fail(msg:string):
-    if lerr == "": lerr = "{lerr_file}:{lline}: {msg}"
+    if not lfail:
+        lerr = "{lerr_file}:{lline}: {msg}"
+        lfail = true
 
 def lv_type_name(v:int) -> string:
     let t = v & 7
@@ -857,6 +861,18 @@ def lx_floor_mod(a:int, b:int) -> int:
     return if r != 0 and ((r < 0) != (b < 0)): r + b else: r
 
 def lx_arith(op:int, a:int, b:int) -> int:
+    if ((a | b) & 7) == 0:  // (both integers: the usual case first)
+        if op == OP_ADD: return a + b
+        if op == OP_SUB: return a - b
+        if op == OP_LT: return lv_bool(a < b)
+        if op == OP_EQ: return lv_bool(a == b)
+        if op == OP_NE: return lv_bool(a != b)
+        if op == OP_LE: return lv_bool(a <= b)
+        if op == OP_GT: return lv_bool(a > b)
+        if op == OP_GE: return lv_bool(a >= b)
+    return lx_arith_slow(op, a, b)
+
+def lx_arith_slow(op:int, a:int, b:int) -> int:
     if op == OP_EQ: return lv_bool(a == b)
     if op == OP_NE: return lv_bool(a != b)
     if op == OP_CONCAT:
@@ -902,12 +918,16 @@ def lx_eval(e:LNode) -> int:
         case N_NIL: return LV_NIL
         case N_TRUE: return LV_TRUE
         case N_FALSE: return LV_FALSE
-        case N_GLOBAL: return lua_get(l_env, e.n)
+        case N_GLOBAL:
+            if e.c != -1: return e.c
+            let v = lua_get(l_env, e.n)
+            if l_loaded: e.c = v
+            return v
         case N_INDEX:
             let o = lx_eval(e.a[0])
             let key = lx_eval(e.a[1])
             if (o & 7) != LT_TAB:
-                if lerr == "": lua_fail("can\'t index a {lv_type_name(o)}{lx_index_hint(e)}")
+                if not lfail: lua_fail("can\'t index a {lv_type_name(o)}{lx_index_hint(e)}")
                 return LV_NIL
             return lua_get(o, key)
         case N_CALL, N_METHOD:
@@ -1001,7 +1021,7 @@ def lx_eval_call(e:LNode) -> bool:
     else:
         f = lx_eval(e.a[0])
         args = lx_eval_list(e.a, 1)
-    if lerr != "": return false
+    if lfail: return false
     let t = f & 7
     if t != LT_FUN and t != LT_BUILTIN:
         let fnode = e.a[0]
@@ -1018,12 +1038,12 @@ def lx_eval_call(e:LNode) -> bool:
 
 // Calls a function value with these arguments: its results in rets. False on an error (lerr says it).
 def lua_call(f:int, args:[int]) -> bool:
-    if lerr != "": return false
+    if lfail: return false
     if not lx_step_count(): return false
     if (f & 7) == LT_BUILTIN:
-        rets = []
+        truncate(rets, 0)
         lua_builtin(f >> 3, args)
-        return lerr == ""
+        return not lfail
     if (f & 7) != LT_FUN:
         lua_fail("can\'t call a {lv_type_name(f)}")
         return false
@@ -1045,7 +1065,7 @@ def lua_call(f:int, args:[int]) -> bool:
     ldepth++
     let r = lx_exec_block(proto.body)
     ldepth--
-    if r != RUN_RETURN: rets = []
+    if r != RUN_RETURN: truncate(rets, 0)
     truncate(lst, lfb)
     lfb = fb0
     lclo = clo0
@@ -1068,7 +1088,7 @@ def lx_assign(t:LNode, v:int):
             let o = lx_eval(t.a[0])
             let key = lx_eval(t.a[1])
             if (o & 7) != LT_TAB:
-                if lerr == "": lua_fail("can\'t index a {lv_type_name(o)}{lx_index_hint(t)}")
+                if not lfail: lua_fail("can\'t index a {lv_type_name(o)}{lx_index_hint(t)}")
             else:
                 lua_set(o, key, v)
         default: lua_fail("can\'t assign to that")
@@ -1079,7 +1099,7 @@ def lx_exec(s:LNode) -> int:
     switch s.k:
         case N_LOCALS:
             let vals = lx_eval_list(s.a, 0)
-            if lerr != "": return RUN_ERR
+            if lfail: return RUN_ERR
             for(s.s) slot, j: lx_init_local(slot, if j < vals.length: vals[j] else: LV_NIL)
         case N_LOCALFN:
             lx_init_local(s.n, LV_NIL)
@@ -1087,11 +1107,11 @@ def lx_exec(s:LNode) -> int:
         case N_ASSIGN:
             if s.n == 1:
                 let v = lx_eval(s.a[1])
-                if lerr != "": return RUN_ERR
+                if lfail: return RUN_ERR
                 lx_assign(s.a[0], v)
             else:
                 let vals = lx_eval_list(s.a, s.n)
-                if lerr != "": return RUN_ERR
+                if lfail: return RUN_ERR
                 for(s.n) j: lx_assign(s.a[j], if j < vals.length: vals[j] else: LV_NIL)
         case N_CALLST:
             lx_eval_call(s.a[0])
@@ -1100,14 +1120,14 @@ def lx_exec(s:LNode) -> int:
             let conds = s.a.length - s.n
             while j < conds:
                 let c = lx_eval(s.a[j])
-                if lerr != "": return RUN_ERR
+                if lfail: return RUN_ERR
                 if lv_truthy(c): return lx_exec_block(s.a[j + 1])
                 j += 2
             if s.n == 1: return lx_exec_block(s.a[s.a.length - 1])
         case N_WHILE:
             while true:
                 let c = lx_eval(s.a[0])
-                if lerr != "": return RUN_ERR
+                if lfail: return RUN_ERR
                 if not lv_truthy(c): break
                 if not lx_step_count(): return RUN_ERR
                 let r = lx_exec_block(s.a[1])
@@ -1120,13 +1140,13 @@ def lx_exec(s:LNode) -> int:
                 if r == RUN_BREAK: break
                 if r != RUN_OK: return r
                 let c = lx_eval(s.a[1])
-                if lerr != "": return RUN_ERR
+                if lfail: return RUN_ERR
                 if lv_truthy(c): break
         case N_NUMFOR:
             let a0 = lx_eval(s.a[0])
             let a1 = lx_eval(s.a[1])
             let a2 = lx_eval(s.a[2])
-            if lerr != "": return RUN_ERR
+            if lfail: return RUN_ERR
             if not lv_is_int(a0) or not lv_is_int(a1) or not lv_is_int(a2):
                 lua_fail("a \'for\' needs integers")
                 return RUN_ERR
@@ -1147,7 +1167,7 @@ def lx_exec(s:LNode) -> int:
             return lx_exec_genfor(s)
         case N_RETURN:
             let vals = lx_eval_list(s.a, 0)
-            if lerr != "": return RUN_ERR
+            if lfail: return RUN_ERR
             rets = vals
             return RUN_RETURN
         case N_BREAK:
@@ -1156,13 +1176,13 @@ def lx_exec(s:LNode) -> int:
             return lx_exec_block(s)
         default:
             lua_fail("a statement this Lua can\'t run")
-    return if lerr != "": RUN_ERR else: RUN_OK
+    return if lfail: RUN_ERR else: RUN_OK
 
 // for k, v in f, s, ctl: ipairs and pairs (in insertion order) are walked directly; any other f is called as Lua does.
 def lx_exec_genfor(s:LNode) -> int:
     let block = s.a[s.a.length - 1]
     let vals = lx_eval_list(s.a.slice(0, s.a.length - 1), 0)
-    if lerr != "": return RUN_ERR
+    if lfail: return RUN_ERR
     let f = if vals.length > 0: vals[0] else: LV_NIL
     let st = if vals.length > 1: vals[1] else: LV_NIL
     var ctl = if vals.length > 2: vals[2] else: LV_NIL
@@ -1279,7 +1299,7 @@ def lua_builtin(id:int, a:[int]):
         case B_IPAIRS_NEXT:
             let t = lx_want_tab(a, 0, "ipairs")
             let n = lx_want_int(a, 1, "ipairs") + 1
-            if lerr == "":
+            if not lfail:
                 let v = lua_get(t, lv_int(n))
                 if v != LV_NIL:
                     lx_ret(lv_int(n))
@@ -1287,7 +1307,7 @@ def lua_builtin(id:int, a:[int]):
                 else: lx_ret(LV_NIL)
         case B_PAIRS_NEXT, B_NEXT:
             let tv = lx_want_tab(a, 0, "next")
-            if lerr == "":
+            if not lfail:
                 let t = tv >> 3
                 let key = lx_arg_of(a, 1)
                 // the position after key: the array part, then the rest in insertion order
@@ -1299,7 +1319,7 @@ def lua_builtin(id:int, a:[int]):
                         if at < 0: lua_fail("next: a key that isn\'t in the table")
                         j = lt_arr[t].length + at + 1
                 var done = false
-                while not done and lerr == "":
+                while not done and not lfail:
                     if j < lt_arr[t].length:
                         if lt_arr[t][j] != LV_NIL:
                             lx_ret(lv_int(j + 1))
@@ -1366,7 +1386,7 @@ def lua_builtin(id:int, a:[int]):
             var out = ""
             var j = 0
             var arg = 1
-            while j < fmt.length and lerr == "":
+            while j < fmt.length and not lfail:
                 let c = fmt[j]
                 if c == '%' and j + 1 < fmt.length:
                     let d = fmt[j + 1]
@@ -1385,7 +1405,7 @@ def lua_builtin(id:int, a:[int]):
             lx_ret(lv_str(out))
         case B_TAB_INSERT:
             let t = lx_want_tab(a, 0, "table.insert")
-            if lerr == "":
+            if not lfail:
                 let n = lua_len(t)
                 if a.length == 2: lua_set(t, lv_int(n + 1), a[1])
                 elif a.length == 3:
@@ -1393,14 +1413,14 @@ def lua_builtin(id:int, a:[int]):
                     if pos < 1 or pos > n + 1: lua_fail("table.insert: position out of bounds")
                     else:
                         var j = n
-                        while j >= pos and lerr == "":
+                        while j >= pos and not lfail:
                             lua_set(t, lv_int(j + 1), lua_get(t, lv_int(j)))
                             j--
                         lua_set(t, lv_int(pos), a[2])
                 else: lua_fail("table.insert: wrong number of arguments")
         case B_TAB_REMOVE:
             let t = lx_want_tab(a, 0, "table.remove")
-            if lerr == "":
+            if not lfail:
                 let n = lua_len(t)
                 let pos = if a.length > 1: lx_want_int(a, 1, "table.remove") else: n
                 if n == 0: lx_ret(LV_NIL)
@@ -1408,20 +1428,20 @@ def lua_builtin(id:int, a:[int]):
                 else:
                     lx_ret(lua_get(t, lv_int(pos)))
                     var j = pos
-                    while j < n and lerr == "":
+                    while j < n and not lfail:
                         lua_set(t, lv_int(j), lua_get(t, lv_int(j + 1)))
                         j++
                     lua_set(t, lv_int(n), LV_NIL)
         case B_TAB_CONCAT:
             let t = lx_want_tab(a, 0, "table.concat")
             let sep = if a.length > 1: lx_want_str(a, 1, "table.concat") else: ""
-            if lerr == "":
+            if not lfail:
                 let parts = map(lt_arr[t >> 3]) v: lua_tostring(v)
                 lx_ret(lv_str(concat_string(parts, sep)))
         case B_TAB_SORT:  // (a stable merge sort: the same order everywhere)
             let t = lx_want_tab(a, 0, "table.sort")
             let cmp = lx_arg_of(a, 1)
-            if lerr == "":
+            if not lfail:
                 if l_loaded and (t >> 3) < l_frozen_tab: lua_fail("a table made at load is read-only (state that lasts goes in hook columns)")
                 else:
                     let arr = lt_arr[t >> 3]
@@ -1435,14 +1455,14 @@ def lua_less(x:int, y:int, cmp:int) -> bool:
     return rets.length > 0 and lv_truthy(rets[0])
 
 def lua_sort(v:[int], cmp:int) -> [int]:
-    if v.length <= 1 or lerr != "": return v
+    if v.length <= 1 or lfail: return v
     let half = v.length / 2
     let l = lua_sort(v.slice(0, half), cmp)
     let r = lua_sort(v.slice(half, -1), cmp)
     let out = []::int
     var i = 0
     var j = 0
-    while i < l.length and j < r.length and lerr == "":
+    while i < l.length and j < r.length and not lfail:
         if lua_less(r[j], l[i], cmp):
             out.push(r[j])
             j++
@@ -1488,6 +1508,7 @@ def lua_reset():
     l_packs = []
     l_loaded = false
     lerr = ""
+    lfail = false
     lprint = []
     ldepth = 0
     lb_names = append(L_BASE_NAMES, l_api_names)
@@ -1567,6 +1588,7 @@ def lua_run(pk:LPack, f:int, args:[int], budget:int) -> bool:
     if not ok:
         pk.error = lerr
         lerr = ""
+        lfail = false
         print "Lua: the pack \'{pk.id}\' stopped: {pk.error}"
     l_env = env0
     if ldepth == 0:

@@ -27,43 +27,43 @@ def lx_la_name(id:int) -> string: return LA_NAMES[id]
 // Arguments that are slots or types: in range, or an error.
 def lx_a_unit(a:[int], j:int, id:int) -> int:
     let i = lx_want_int(a, j, lx_la_name(id))
-    if lerr == "" and (i < 0 or i >= u_x.length): lua_fail("{lx_la_name(id)}: no unit slot {i} (there are {u_x.length})")
-    return if lerr == "": i else: -1
+    if not lfail and (i < 0 or i >= u_x.length): lua_fail("{lx_la_name(id)}: no unit slot {i} (there are {u_x.length})")
+    return if not lfail: i else: -1
 
 def lx_a_building(a:[int], j:int, id:int) -> int:
     let b = lx_want_int(a, j, lx_la_name(id))
-    if lerr == "" and (b < 0 or b >= b_id.length): lua_fail("{lx_la_name(id)}: no building slot {b} (there are {b_id.length})")
-    return if lerr == "": b else: -1
+    if not lfail and (b < 0 or b >= b_id.length): lua_fail("{lx_la_name(id)}: no building slot {b} (there are {b_id.length})")
+    return if not lfail: b else: -1
 
 def lx_a_btype(a:[int], j:int, id:int) -> int:
     let k = lx_want_int(a, j, lx_la_name(id))
-    if lerr == "" and (k < 0 or k >= bt_build_ticks.length): lua_fail("{lx_la_name(id)}: no building type {k}")
-    return if lerr == "": k else: -1
+    if not lfail and (k < 0 or k >= bt_build_ticks.length): lua_fail("{lx_la_name(id)}: no building type {k}")
+    return if not lfail: k else: -1
 
 def lx_a_utype(a:[int], j:int, id:int) -> int:
     let k = lx_want_int(a, j, lx_la_name(id))
-    if lerr == "" and (k < 0 or k >= t_pop.length): lua_fail("{lx_la_name(id)}: no unit type {k}")
-    return if lerr == "": k else: -1
+    if not lfail and (k < 0 or k >= t_pop.length): lua_fail("{lx_la_name(id)}: no unit type {k}")
+    return if not lfail: k else: -1
 
 def lx_a_res(a:[int], j:int, id:int) -> int:
     let r = lx_want_int(a, j, lx_la_name(id))
-    if lerr == "" and (r < 0 or r >= resource_names.length): lua_fail("{lx_la_name(id)}: no resource {r}")
-    return if lerr == "": r else: -1
+    if not lfail and (r < 0 or r >= resource_names.length): lua_fail("{lx_la_name(id)}: no resource {r}")
+    return if not lfail: r else: -1
 
 def lx_a_player(a:[int], j:int, id:int) -> int:
     let p = lx_want_int(a, j, lx_la_name(id))
-    if lerr == "" and (p < 0 or p >= pop.length): lua_fail("{lx_la_name(id)}: no player {p}")
-    return if lerr == "": p else: -1
+    if not lfail and (p < 0 or p >= pop.length): lua_fail("{lx_la_name(id)}: no player {p}")
+    return if not lfail: p else: -1
 
 def lx_a_cell(a:[int], j:int, id:int) -> int:
     let c = lx_want_int(a, j, lx_la_name(id))
-    if lerr == "" and (c < 0 or c >= W * H): lua_fail("{lx_la_name(id)}: no cell {c}")
-    return if lerr == "": c else: -1
+    if not lfail and (c < 0 or c >= W * H): lua_fail("{lx_la_name(id)}: no cell {c}")
+    return if not lfail: c else: -1
 
 def lx_a_col(a:[int], j:int, id:int, names:[string]) -> int:
     let c = lx_want_int(a, j, lx_la_name(id))
-    if lerr == "" and (c < 0 or c >= names.length): lua_fail("{lx_la_name(id)}: no column {c}")
-    return if lerr == "": c else: -1
+    if not lfail and (c < 0 or c >= names.length): lua_fail("{lx_la_name(id)}: no column {c}")
+    return if not lfail: c else: -1
 
 def lx_a_bool(a:[int], j:int) -> bool: return lv_truthy(lx_arg_of(a, j))
 
@@ -137,7 +137,7 @@ def lua_api(id:int, a:[int]):
         case 15, 16, 17, 18, 19:
             let i = lx_a_unit(a, 0, id)
             let v = lx_want_int(a, 1, lx_la_name(id))
-            if i >= 0 and lerr == "":
+            if i >= 0 and not lfail:
                 if id == 15: u_task[i] = v
                 elif id == 16: u_target[i] = v
                 elif id == 17: u_work[i] = v
@@ -171,7 +171,7 @@ def lua_api(id:int, a:[int]):
             let b = lx_a_building(a, 0, id)
             let x = lx_want_int(a, 1, lx_la_name(id))
             let y = lx_want_int(a, 2, lx_la_name(id))
-            if b >= 0 and lerr == "": lx_r_int(mid_dist2(b, x, y))
+            if b >= 0 and not lfail: lx_r_int(mid_dist2(b, x, y))
         case 34:
             let b = lx_a_building(a, 0, id)
             if b >= 0: lx_r_int(site_permille(b))
@@ -205,7 +205,7 @@ def lua_api(id:int, a:[int]):
         case 49:
             let p = lx_a_player(a, 0, id)
             let v = lx_want_int(a, 1, lx_la_name(id))
-            if p >= 0 and lerr == "": pop[p] = v
+            if p >= 0 and not lfail: pop[p] = v
         case 51, 52, 53, 54:
             let c = lx_a_cell(a, 0, id)
             if c >= 0:
@@ -219,7 +219,7 @@ def lua_api(id:int, a:[int]):
             let b = lx_a_building(a, 0, id)
             let r = lx_a_res(a, 1, id)
             let n = lx_want_int(a, 2, lx_la_name(id))
-            if b >= 0 and r >= 0 and lerr == "":
+            if b >= 0 and r >= 0 and not lfail:
                 if b_hold[b].length <= r: lua_fail("{lx_la_name(id)}: building {b} holds nothing (the economy isn\'t stocked)")
                 elif id == 57: want(b, r, n)
                 else: lx_r_int(hold_take(b, r, n))
@@ -235,16 +235,16 @@ def lua_api(id:int, a:[int]):
             let y = lx_want_int(a, 1, lx_la_name(id))
             let kind = lx_want_int(a, 2, lx_la_name(id))
             let i = lx_a_unit(a, 3, id)
-            if i >= 0 and lerr == "": lx_r_int(nearest_resource(x, y, kind, i, lx_a_bool(a, 4), lx_a_bool(a, 5), lx_a_bool(a, 6)))
+            if i >= 0 and not lfail: lx_r_int(nearest_resource(x, y, kind, i, lx_a_bool(a, 4), lx_a_bool(a, 5), lx_a_bool(a, 6)))
         case 62:
             let i = lx_a_unit(a, 0, id)
             let c = lx_a_cell(a, 1, id)
             let kind = lx_want_int(a, 2, lx_la_name(id))
-            if i >= 0 and c >= 0 and lerr == "": start_gather(i, c, kind)
+            if i >= 0 and c >= 0 and not lfail: start_gather(i, c, kind)
         case 63:
             let i = lx_a_unit(a, 0, id)
             let bid = lx_want_int(a, 1, lx_la_name(id))
-            if i >= 0 and lerr == "":
+            if i >= 0 and not lfail:
                 if b_index_of(bid) < 0: lua_fail("start_build: no building with id {bid}")
                 else: start_build(i, bid)
         case 64:
@@ -260,10 +260,10 @@ def lua_api(id:int, a:[int]):
             let y0 = lx_want_int(a, 2, lx_la_name(id))
             let x1 = lx_want_int(a, 3, lx_la_name(id))
             let y1 = lx_want_int(a, 4, lx_la_name(id))
-            if i >= 0 and lerr == "": lx_r_bool(in_reach(i, x0, y0, x1, y1))
+            if i >= 0 and not lfail: lx_r_bool(in_reach(i, x0, y0, x1, y1))
         case 67, 68, 69:
             let name = lx_want_str(a, 0, lx_la_name(id))
-            if lerr != "": return
+            if lfail: return
             if l_loaded: lua_fail("{lx_la_name(id)}: columns are declared as the files load, not in a hook")
             else:
                 let names = if id == 67: hook_unit_names elif id == 68: hook_building_names else: hook_player_names
@@ -279,7 +279,7 @@ def lua_api(id:int, a:[int]):
                 if id == 70: lx_r_int(hook_unit_get(c, i))
                 else:
                     let v = lx_want_int(a, 2, lx_la_name(id))
-                    if lerr == "": hook_unit_set(c, i, v)
+                    if not lfail: hook_unit_set(c, i, v)
         case 72, 73:
             let c = lx_a_col(a, 0, id, hook_building_names)
             let b = lx_a_building(a, 1, id)
@@ -287,7 +287,7 @@ def lua_api(id:int, a:[int]):
                 if id == 72: lx_r_int(hook_building_get(c, b))
                 else:
                     let v = lx_want_int(a, 2, lx_la_name(id))
-                    if lerr == "": hook_building_set(c, b, v)
+                    if not lfail: hook_building_set(c, b, v)
         case 74, 75:
             let c = lx_a_col(a, 0, id, hook_player_names)
             let p = lx_a_player(a, 1, id)
@@ -295,14 +295,14 @@ def lua_api(id:int, a:[int]):
                 if id == 74: lx_r_int(hook_player_cols[c][p])
                 else:
                     let v = lx_want_int(a, 2, lx_la_name(id))
-                    if lerr == "": hook_player_cols[c][p] = v
+                    if not lfail: hook_player_cols[c][p] = v
         case 76: lx_ret(lua_of_json(su_rules))
         case 77: lx_r_int(pop.length)
         case 78: lx_r_int(resource_names.length)
         case 79:
             let x = lx_want_int(a, 0, lx_la_name(id))
             let y = lx_want_int(a, 1, lx_la_name(id))
-            if lerr == "": lx_r_int(cell_of(x, y))
+            if not lfail: lx_r_int(cell_of(x, y))
         case 81:
             let i = lx_a_unit(a, 0, id)
             if i >= 0: lx_r_int(u_hp[i])
