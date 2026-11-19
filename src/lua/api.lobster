@@ -322,12 +322,14 @@ def lua_pack_files(p:Pack) -> [string]:
     return sorted_strs(out)
 
 var lua_on = false  // a pack has Lua: the hooks below have something to call
+var lua_rules = jobj()  // the rules the packs' Lua last loaded with: a new match or a loaded save loads it again
 
 // As a match starts (the game's hook_declare): every pack's Lua runs, the game's first, and is then read-only.
 def lua_declare():
     l_api_names = LA_NAMES
     lua_reset()
     lua_api_consts()
+    lua_rules = su_rules
     lua_on = false
     for(lib_packs) p:
         let files = lua_pack_files(p)
@@ -339,6 +341,11 @@ def lua_declare():
             lua_load_pack(p.id, map(files) f: p.id + "/hooks/" + f, sources)
     lua_freeze()
 
+// The packs' Lua for this match: loaded again if the rules aren't the ones it loaded with (a save was loaded).
+def lua_fresh() -> bool:
+    if lua_rules != su_rules: lua_declare()
+    return lua_on
+
 // The packs that stopped, and why (a load error, a run-time error or the step budget).
 def lua_errors() -> [string]:
     let out = []::string
@@ -347,17 +354,17 @@ def lua_errors() -> [string]:
     return out
 
 def lua_tick():
-    if not lua_on: return
-    lua_each("tick", []::int) r:
+    if not lua_fresh(): return
+    lua_each("on_tick", []::int) r:
         pass()
 
 def lua_unit_tick(i:int):
-    if not lua_on: return
-    lua_each("unit_tick", [ lv_int(i) ]) r:
+    if not lua_fresh(): return
+    lua_each("on_unit_tick", [ lv_int(i) ]) r:
         pass()
 
 def lua_can_place(p:int, k:int, cx:int, cy:int, sx:int, sy:int) -> bool:
-    if not lua_on: return true
+    if not lua_fresh(): return true
     var ok = true
     let args = map([ p, k, cx, cy, sx, sy ]) v: lv_int(v)
     lua_each("can_place", args) r:
@@ -365,7 +372,7 @@ def lua_can_place(p:int, k:int, cx:int, cy:int, sx:int, sy:int) -> bool:
     return ok
 
 def lua_on_hit(by:int, target:int, damage:int) -> int:
-    if not lua_on: return damage
+    if not lua_fresh(): return damage
     var d = damage
     for(l_packs) pk:
         let f = lua_hook_fn(pk, "on_hit")
@@ -375,17 +382,17 @@ def lua_on_hit(by:int, target:int, damage:int) -> int:
     return d
 
 def lua_on_hurt(target:int, by:int):
-    if not lua_on: return
+    if not lua_fresh(): return
     lua_each("on_hurt", [ lv_int(target), lv_int(by) ]) r:
         pass()
 
 def lua_on_death(i:int, killer:int):
-    if not lua_on: return
+    if not lua_fresh(): return
     lua_each("on_death", [ lv_int(i), lv_int(killer) ]) r:
         pass()
 
 def lua_on_order(code:int, p:int, ids:[int], x:int, y:int):
-    if not lua_on: return
+    if not lua_fresh(): return
     for(l_packs) pk:
         let f = lua_hook_fn(pk, "on_order")
         if f != LV_NIL:
@@ -394,7 +401,7 @@ def lua_on_order(code:int, p:int, ids:[int], x:int, y:int):
     lua_region_end()
 
 def lua_ai_train_score(p:int, slot:string, k:int, score:int) -> int:
-    if not lua_on: return score
+    if not lua_fresh(): return score
     var s = score
     for(l_packs) pk:
         let f = lua_hook_fn(pk, "ai_train_score")
@@ -406,7 +413,7 @@ def lua_ai_train_score(p:int, slot:string, k:int, score:int) -> int:
 // What the panel says unit slot i is doing, when a pack made the task up ("" for the engine's own tasks). It only
 // reads: the panel isn't the sim.
 def lua_task_name(i:int) -> string:
-    if not lua_on: return ""
+    if not lua_fresh(): return ""
     var name = ""
     lua_read_only = true
     lua_each("task_name", [ lv_int(i) ]) r:

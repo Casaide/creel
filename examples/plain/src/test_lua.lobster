@@ -16,6 +16,7 @@ def run(src:string) -> string:
     l_api_names = LA_NAMES
     lua_reset()
     lua_api_consts()
+    lua_rules = su_rules
     lua_quiet = true
     let why = lua_load_pack("t", [ "t.lua" ], [ src ])
     lua_freeze()
