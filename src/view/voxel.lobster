@@ -566,6 +566,7 @@ class vx_body_spec:
     wide:float
     looks:[float]              // per look: the skin shade
     hair:[float3]              // and hair colour
+    seat_out:float = 0.0       // a mount: the farthest out its rider's knees go (seat "out"), 0 for as far as clearing it takes (#68)
     helm_k:float = 1.0  // a culture's helmet on this body: this much bigger than its spot's radius says (a long skull under big ears)
     plates:[vx_spec] = []      // armour on a body no armour is fitted to: its plates at the core spots, in mats plate and plate_edge (the armour's)
     crew:[float3] = []         // an engine: where its crew stand (on their own legs, walking as it moves)
@@ -706,6 +707,7 @@ def vx_parse_body(id:string, o:JV) -> vx_body_spec:
         if sl.length == 2: b.astride_l = float2 { as_float(sl[0]), as_float(sl[1]) }
         if has(so, "at"): b.seat = vx_v3(at(so, "at"))
         b.wide = gfloat(so, "wide", 0.0)
+        b.seat_out = gfloat(so, "out", 0.0)
     if has(o, "looks"):
         b.looks = map(glist(o, "looks")) l: gfloat(l, "skin", 1.0)
         b.hair = map(glist(o, "looks")) l: vx_hex(gstr(l, "hair", "#1f1714"))
@@ -1702,6 +1704,7 @@ def vx_rider_prims(u:vx_unit_def, ph0:float) -> [vx_prim]:
         for(5) k:
             let f = float(k) / 4.0
             out_x = max(out_x, clear_x(knee.y + (ankle.y - knee.y) * f, knee.z + (ankle.z - knee.z) * f, 1.3))
+        if mb.seat_out > 0.0: out_x = min(out_x, max(abs(knee.x), mb.seat_out * ms))  // (not out along wings beside the seat)
         knee = float3 { side * out_x, knee.y, knee.z }
         ankle = float3 { side * out_x, ankle.y, ankle.z }
         out.push(vx_cap(hip, knee, 2.0, 1.7, b.astride[0]))
