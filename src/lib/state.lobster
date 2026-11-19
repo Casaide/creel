@@ -377,6 +377,7 @@ var r_carrier_load = 1  // rules economy.carrier_load: what a carrier takes on o
 var r_carrier_slots = []::string  // rules economy.carriers: the roster slots whose units carry (#61)
 var rd_names = []::string  // rules economy.roads: each road kind's name (#51)
 var rd_pct = []::int  // and a walker's speed on it, per cent
+var r_doors_on_roads = 0  // rules economy.doors_on_roads: a building goes up only with its door on a road or a road plan
 var road = []::int  // per cell: 0, or 1 + the road kind on it; empty until the first road is laid (#51)
 var step_s = []::int  // per cell, with roads on the map: the flow field's cost to cross it straight (10, less on a road)
 var step_d = []::int  // and diagonally (14, less on a road)
