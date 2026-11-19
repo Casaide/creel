@@ -6,6 +6,8 @@
 // (view/voxel), VM_VIEW.x = -e (view/voxel_mesh), LEVEL_PX = 20 * cos(e) / cos(30) (game/relief).
 var iso_k = 0.024  // how far down the screen a milli-tile along x or y goes (0.048 across: a tile is 2:1 at 30 degrees)
 
+def set_iso_k(k:float): iso_k = k  // a game's camera elevation, before anything is baked or drawn (above)
+
 def iso(x:float, y:float) -> float2: return float2 { (x - y) * 0.048, (x + y) * iso_k }
 
 def iso_inv(p:float2) -> float2:
