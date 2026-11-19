@@ -53,7 +53,8 @@ def place(player:int, k:int, cx:int, cy:int, along:int = 0) -> int:
     clear_rubble(footprint(b))  // built over a breach: the rubble goes
     occupy(footprint(b), b_id[b], if bt_gate[k]: teams[player] else: -1, bt_blocks_flyers[k] != 0)
     if bt_ladder[k]: set_walk_over(footprint(b), true)  // walked over at the wall's foot
-    if bt_road[k] >= 0: set_walk_over(footprint(b), true)  // a road plan is walked over while it's built (#51)
+    elif bt_road[k] >= 0: set_walk_over(footprint(b), true)  // a road plan is walked over while it's built (#51)
+    elif sites_walk_over(k): clear_walk_over(footprint(b))  // (a site walked over that went before it stood: #84)
     if bt_gate[k]: refresh_lanes()                      // the team's first gate gives it lanes of its own
     return b
 
@@ -738,6 +739,7 @@ def build_job(i:int):
         if b_progress[b] >= bt_build_ticks[k]:
             b_done[b] = 1
             b_hp[b] = max_hp
+            if sites_walk_over(k): set_walk_over(footprint(b), false)  // it stands: anyone inside steps out
             if b_site[b].length:  // its goods are used up
                 for(b_site[b]) c, r: b_hold[b][r] -= c
                 b_site[b] = []
@@ -938,7 +940,18 @@ def lay_foundation(player:int, ids:[int], k:int, cx:int, cy:int, along0:int = 0)
         b_site[b] = copy(cost)
         for(cost) c, r:
             if c > 0: want(b, r, c)
+    if sites_walk_over(k): set_walk_over(footprint(b), true)
     return b_id[b]
+
+// Cells that are walked over no longer, and only those (a refresh is a cell's walking redone).
+def clear_walk_over(cells:[int]):
+    for(cells) c:
+        if walk_over[c] != 0: set_walk_over([ c ], false)
+
+// Rules economy.sites_walk_over: a site of type k is open ground until it's built (#84). Roads and ladders are walked
+// over anyway, a farm is ground once built, a pen is walked into.
+def sites_walk_over(k:int) -> bool:
+    return bt_road[k] < 0 and not bt_ladder[k] and not bt_farm[k] and bt_pen_animals[k] == 0 and gbool(rules_part("economy"), "sites_walk_over", false)
 
 def cmd_build(player:int, ids:[int], k:int, cx:int, cy:int, along:int = 0):
     let bid = lay_foundation(player, ids, k, cx, cy, along)
