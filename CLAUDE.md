@@ -1,3 +1,1 @@
-# How we work
-
-@CONTRIBUTING.md
+@AGENTS.md
