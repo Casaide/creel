@@ -185,6 +185,14 @@ def setup_btypes():
         let holds = gobj(b, "holds")  // {"<resource>": how much, "*": any resource}
         bt_hold.push(map(resource_names) r: gint(holds, r, gint(holds, "*", 0)))
         bt_store.push(if gbool(b, "store", false): 1 else: 0)
+        let mk = gobj(b, "makes")  // {"in": {"<resource>": n}, "out": {...}, "time": seconds}
+        let ins = gobj(mk, "in")
+        let outs = gobj(mk, "out")
+        let offers = gstrs(b, "offers")
+        bt_in.push(map(resource_names) r: gint(ins, r, 0))
+        bt_out.push(map(resource_names) r: gint(outs, r, 0))
+        bt_offer.push(map(resource_names) r: if gint(outs, r, 0) > 0 or has_s(offers, r): 1 else: 0)
+        bt_make_ticks.push(gint(mk, "time", 0) * TICK_HZ)
         bt_reseed.push(cost_vec(gobj(b, "reseed")))
         bt_hp_base.push(as_int(at(b, "hp")))
         bt_food_base.push(gint(b, "food", 0))
@@ -348,6 +356,7 @@ def setup_starts():
     for(resource_names) r:
         stock.push(map(np): gint(start, r, 0))
         gathered.push(zeros(np))
+        produced.push(zeros(np))
     for(np) p:
         for(su_fx[p]) fx:
             if has(fx, "start"): stock[str_index(resource_names, rstr(fx, "start"))][p] += as_int(at(fx, "add"))

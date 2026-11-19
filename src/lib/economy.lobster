@@ -21,6 +21,8 @@ def add_building(bid:int, owner:int, k:int, cx:int, cy:int, sx:int, sy:int, diag
     b_hold.push(if r_stocked: zeros(num_resources) else: []::int)
     b_want.push(if r_stocked: zeros(num_resources) else: []::int)
     b_resv.push(if r_stocked: zeros(num_resources) else: []::int)
+    b_coming.push(if r_stocked: zeros(num_resources) else: []::int)
+    b_make.push(0)
     return b_id.length - 1
 
 // A footprint's size laid `along` (Economy.dims): gates turn, diagonals take a square.

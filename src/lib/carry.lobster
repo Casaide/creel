@@ -21,6 +21,9 @@ def want(b:int, r:int, n:int):
 
 def offered(b:int, r:int) -> int: return b_hold[b][r] - b_resv[b][r]
 
+// Does building b of player p give r to carriers? A store does, and so does a workshop's out slot (bt_offer).
+def gives(b:int, p:int, r:int) -> bool: return b_owner[b] == p and b_done[b] != 0 and (bt_store[b_kind[b]] != 0 or bt_offer[b_kind[b]][r] != 0)
+
 def job_index(jid:int) -> int:
     let found, at = binary_search(jb_id, jid)
     return if found: at else: -1
@@ -36,7 +39,7 @@ def carry_source(p:int, r:int, to:int) -> int:
     let x = b_cx[to] * TILE + b_sx[to] * TILE / 2
     let y = b_cy[to] * TILE + b_sy[to] * TILE / 2
     for(b_id.length) b:
-        if b != to and is_store(b, p) and offered(b, r) > 0:
+        if b != to and gives(b, p, r) and offered(b, r) > 0:
             let d2 = mid_dist2(b, x, y)
             if d2 < best_d2:
                 best_d2 = d2
@@ -55,7 +58,7 @@ def free_carrier(p:int, b:int) -> int:
                 best = i
     return best
 
-def start_job(i:int, src:int, dst:int, r:int, n:int):
+def start_job(i:int, src:int, dst:int, r:int, n:int, wanted:bool):
     let jid = next_job++
     jb_id.push(jid)
     jb_unit.push(u_id[i])
@@ -64,39 +67,70 @@ def start_job(i:int, src:int, dst:int, r:int, n:int):
     jb_res.push(r)
     jb_n.push(n)
     jb_phase.push(CARRY_TO_SOURCE)
+    jb_want.push(if wanted: 1 else: 0)
     b_resv[src][r] += n
-    b_want[dst][r] -= n
+    if wanted: b_want[dst][r] -= n
+    b_coming[dst][r] += n
     clear_task(i)
     u_task[i] = T_CARRY
     u_home[i] = jid
     u_target[i] = b_id[src]
     approach_building(i, src)
 
-// Pair p's wants with offers and free carriers. Stays dirty only if it stopped at the cap.
+// Pair p's wants with offers and free carriers, then send what workshops offer and nobody asked for to the nearest
+// store with room. Stays dirty only if it stopped at the cap.
 def carry_match(p:int):
-    var made = 0
+    var jobs = 0
     for(b_id.length) b:
         if b_owner[b] == p:
             for(num_resources) r:
-                while made < CARRY_MATCHES and b_want[b][r] > 0:
+                while jobs < CARRY_MATCHES and b_want[b][r] > 0:
                     let src = carry_source(p, r, b)
                     if src < 0: break
                     let i = free_carrier(p, src)
                     if i < 0:
                         carry_dirty[p] = 0
                         return
-                    start_job(i, src, b, r, min(b_want[b][r], min(offered(src, r), r_carrier_load)))
-                    made++
-    carry_dirty[p] = if made >= CARRY_MATCHES: 1 else: 0
+                    start_job(i, src, b, r, min(b_want[b][r], min(offered(src, r), r_carrier_load)), true)
+                    jobs++
+    for(b_id.length) b:
+        if b_owner[b] == p and b_done[b] != 0 and bt_store[b_kind[b]] == 0:
+            for(num_resources) r:
+                while jobs < CARRY_MATCHES and bt_offer[b_kind[b]][r] != 0 and offered(b, r) > 0:
+                    let dst = store_near(b, r)
+                    if dst < 0: break
+                    let i = free_carrier(p, b)
+                    if i < 0:
+                        carry_dirty[p] = 0
+                        return
+                    start_job(i, b, dst, r, min(offered(b, r), min(hold_room(dst, r) - b_coming[dst][r], r_carrier_load)), false)
+                    jobs++
+    carry_dirty[p] = if jobs >= CARRY_MATCHES: 1 else: 0
+
+// The owner's finished store nearest building `from` with room for r beyond what is on its way; -1 if none.
+def store_near(fb:int, r:int) -> int:
+    var best = -1
+    var best_d2 = 1 << 62
+    let x = b_cx[fb] * TILE + b_sx[fb] * TILE / 2
+    let y = b_cy[fb] * TILE + b_sy[fb] * TILE / 2
+    for(b_id.length) b:
+        if is_store(b, b_owner[fb]) and hold_room(b, r) - b_coming[b][r] > 0:
+            let d2 = mid_dist2(b, x, y)
+            if d2 < best_d2:
+                best_d2 = d2
+                best = b
+    return best
 
 def end_job(j:int):
-    for([ jb_id, jb_unit, jb_from, jb_to, jb_res, jb_n, jb_phase ]) col: col.remove(j)
+    for([ jb_id, jb_unit, jb_from, jb_to, jb_res, jb_n, jb_phase, jb_want ]) col: col.remove(j)
 
 // Give a job's reservations back (its carrier is gone or has other orders); what it carried stays in its hands.
 def cancel_job(j:int, p:int):
     let r = jb_res[j]
     let dst = b_index_of(jb_to[j])
-    if dst >= 0: b_want[dst][r] += jb_n[j]
+    if dst >= 0:
+        b_coming[dst][r] -= jb_n[j]
+        if jb_want[j]: b_want[dst][r] += jb_n[j]
     if jb_phase[j] == CARRY_TO_SOURCE:
         let src = b_index_of(jb_from[j])
         if src >= 0: b_resv[src][r] -= jb_n[j]
@@ -140,6 +174,8 @@ def carry_step(i:int):
             carry_done(i, j)
             return
         jb_to[j] = b_id[to]
+        jb_want[j] = 0
+        b_coming[to][r] += jb_n[j]
         approach_building(i, to)
     let x0, y0, x1, y1 = building_rect(to)
     if in_reach(i, x0, y0, x1, y1):
@@ -149,22 +185,28 @@ def carry_step(i:int):
             b_resv[to][r] -= jb_n[j]
             let n = hold_take(to, r, jb_n[j])  // (a cost may have taken reserved goods: less comes out)
             let dst = b_index_of(jb_to[j])
-            if dst >= 0 and n < jb_n[j]: b_want[dst][r] += jb_n[j] - n
+            if dst >= 0 and n < jb_n[j]:
+                b_coming[dst][r] -= jb_n[j] - n
+                if jb_want[j]: b_want[dst][r] += jb_n[j] - n
+            jb_n[j] = n
             if n == 0:
                 carry_done(i, j)
                 return
             u_carry[i] = n
             u_carry_kind[i] = r + 1
-            jb_n[j] = n
             jb_phase[j] = CARRY_TO_DEST
             u_target[i] = jb_to[j]
             approach_building(i, if dst >= 0: dst else: to)
         else:
+            b_coming[to][r] -= jb_n[j]
             u_carry[i] -= hold_put(to, r, u_carry[i])
             if u_carry[i] > 0:  // no room after all: on to a store
                 let s = store_with_room(i, r)
                 if s >= 0 and s != to:
                     jb_to[j] = b_id[s]
+                    jb_want[j] = 0
+                    jb_n[j] = u_carry[i]
+                    b_coming[s][r] += u_carry[i]
                     approach_building(i, s)
                     return
                 u_carry[i] = 0  // (lost)

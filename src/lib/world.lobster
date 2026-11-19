@@ -49,6 +49,7 @@ def step():
     tech_tick()
     work()
     trade_tick()
+    recipes_tick()
     carry_tick()
     pack_tick()
     repair_tick()
@@ -128,7 +129,9 @@ def state_hash() -> int:
         for(b_hold[b]) v: h = mix(h, v)  // (empty in a pool economy: its hash is as it was)
         for(b_want[b]) v: h = mix(h, v)
         for(b_resv[b]) v: h = mix(h, v)
-    for([ jb_id, jb_unit, jb_from, jb_to, jb_res, jb_n, jb_phase ]) col:
+        for(b_coming[b]) v: h = mix(h, v)
+        if r_stocked: h = mix(h, b_make[b])
+    for([ jb_id, jb_unit, jb_from, jb_to, jb_res, jb_n, jb_phase, jb_want ]) col:
         for(col) v: h = mix(h, v)
     for(hero_types.length) hn: h = mix(mix(h, hero_id[hn]), hero_fell[hn])
     h = mix(h, winner)

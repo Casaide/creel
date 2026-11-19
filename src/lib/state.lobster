@@ -257,6 +257,9 @@ var b_inside = []::[int]  // units sheltering inside (garrison.gd): REC_SIZE int
 var b_hold = []::[int]    // per resource: what the building holds now (stocked economies; empty in a pool one)
 var b_want = []::[int]    // per resource: still to be brought to it, not yet a carrier's job (lib/carry, #49)
 var b_resv = []::[int]    // per resource: of what it holds, how much carriers are on their way to fetch
+var b_coming = []::[int]  // per resource: on its way to it in a carrier's job
+var b_make = []::int      // ticks left of the round its recipe is making (0: idle; lib/recipes, #50)
+var produced = []::[int]      // [resource][player]: what recipes made, for the record (like gathered)
 var jb_id = []::int       // carriers' jobs (lib/carry), by id: the carrier's id, from and to (building ids), what, how many, phase
 var jb_unit = []::int
 var jb_from = []::int
@@ -264,6 +267,7 @@ var jb_to = []::int
 var jb_res = []::int
 var jb_n = []::int
 var jb_phase = []::int
+var jb_want = []::int    // 1: the job answers a want (0: a workshop's goods on their way to a store)
 var next_job = 1
 var carry_dirty = []::int  // per player: 1 when its wants, stores or carriers changed since it was last matched
 
@@ -276,6 +280,8 @@ def pad_saved_columns():
     while b_hold.length < b_id.length: b_hold.push([])  // (a save from before #48: a pool economy's empty holds)
     while b_want.length < b_id.length: b_want.push([])
     while b_resv.length < b_id.length: b_resv.push([])
+    while b_coming.length < b_id.length: b_coming.push([])
+    while b_make.length < b_id.length: b_make.push(0)
     for(unit_columns()) col:
         while col.length < u_id.length: col.push(0)
     for(building_columns()) col:
@@ -330,6 +336,10 @@ var bt_special = []::int  // pens, gates, ladders, walls you stand on: not in th
 var bt_drop = []::[int]   // per resource: 1 if it takes it in
 var bt_hold = []::[int]   // per resource: how much of it a building of this type holds (buildings.json holds; 0: none)
 var bt_store = []::int    // 1: what it holds counts as its owner's stock (a storehouse); stocked economies only
+var bt_in = []::[int]     // per resource: what one round of its recipe takes (buildings.json makes.in; lib/recipes, #50)
+var bt_out = []::[int]    // per resource: what one round makes (makes.out)
+var bt_offer = []::[int]  // per resource: 1 if carriers may take it from here to whoever asks (makes.out, and "offers")
+var bt_make_ticks = []::int  // one round's time (makes.time); 0: no recipe
 var bt_reseed = []::[int]
 var bm_hp = []::[int]  // [player][type]
 var bm_pop = []::[int]
@@ -462,6 +472,8 @@ def remove_building(b:int):
     b_hold.remove(b)
     b_want.remove(b)
     b_resv.remove(b)
+    b_coming.remove(b)
+    b_make.remove(b)
 
 // A unit back in the arrays under an id it had before (out of a building), in its place by id
 // (Units.insert, with units.gd _put's defaults). Its slot.
