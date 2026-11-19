@@ -414,6 +414,17 @@ def lua_can_place(p:int, k:int, cx:int, cy:int, sx:int, sy:int) -> bool:
     lua_read_only = ro
     return ok
 
+// Whether the packs let building slot b start a round of its recipe (lib/recipes: its inputs are in). It only reads.
+def lua_can_make(b:int) -> bool:
+    if not lua_fresh(): return true
+    var ok = true
+    let ro = lua_read_only
+    lua_read_only = true
+    lua_each("can_make", [ lv_int(b) ]) r:
+        if r.length and not lv_truthy(r[0]): ok = false
+    lua_read_only = ro
+    return ok
+
 def lua_on_hit(by:int, target:int, damage:int) -> int:
     if not lua_fresh(): return damage
     var d = damage
