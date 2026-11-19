@@ -357,6 +357,27 @@ def setup_rest():
     let ba = at(bc, "armour")
     for(ba.keys) k, n: br_arm[str_index(su_classes, k)] = as_int(ba.a[n])
 
+// A start building after the first: the nearest spot to (cx, cy), ring by ring in a fixed order, with a clear cell
+// round it (walkable, no building, no resource): its top-left cell, or -1 (#80).
+def start_spot(k:int, cx:int, cy:int) -> int:
+    let size = bt_size[k]
+    for(11) d0:
+        let d = d0 + 1
+        for(2 * d + 1) ey:
+            for(2 * d + 1) ex:
+                let x = cx + ex - d
+                let y = cy + ey - d
+                if max(abs(x - cx), abs(y - cy)) == d and start_clear(x - 1, y - 1, size + 2): return y * W + x
+    return -1
+
+def start_clear(x0:int, y0:int, n:int) -> bool:
+    if x0 < 0 or y0 < 0 or x0 + n > W or y0 + n > H: return false
+    for(n) dy:
+        for(n) dx:
+            let c = (y0 + dy) * W + x0 + dx
+            if walks[0][c] != 1 or occupied[c] != 0 or amount[c] != 0: return false
+    return true
+
 // Starting stocks, a finished Town Center on each start, its workers (Economy.setup).
 def setup_starts():
     let start = at(rules_part("economy"), "start")
@@ -375,16 +396,22 @@ def setup_starts():
     let bids = gstrs(start, "buildings")
     for(np) p:
         if bids.length or as_int(at(start, "workers")) != 0:
+            var first = -1
             for(bids) bid:
                 let k = btype_index(bid)
                 assert k >= 0
                 let size = bt_size[k]
-                let b = place(p, k, start_x[p] / TILE - size / 2, start_y[p] / TILE - size / 2)
+                let cx = start_x[p] / TILE - size / 2
+                let cy = start_y[p] / TILE - size / 2
+                let at_ = if first < 0: cy * W + cx else: start_spot(k, cx, cy)
+                assert at_ >= 0
+                let b = place(p, k, at_ % W, at_ / W)
                 b_done[b] = 1
                 b_hp[b] = bm_hp[p][k]
+                if first < 0: first = b
             let worker = type_of_slot(p, "worker")
             if b_id.length and worker >= 0:
-                let tc = b_id.length - 1
+                let tc = if first >= 0: first else: b_id.length - 1
                 for(as_int(at(start, "workers"))):
                     let cell = spawn_cell(tc, worker)
                     add_unit(p, worker, (cell % W) * TILE + 500, (cell / W) * TILE + 500)
