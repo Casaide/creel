@@ -567,6 +567,7 @@ class vx_body_spec:
     looks:[float]              // per look: the skin shade
     hair:[float3]              // and hair colour
     helm_k:float = 1.0  // a culture's helmet on this body: this much bigger than its spot's radius says (a long skull under big ears)
+    plates:[vx_spec] = []      // armour on a body no armour is fitted to: its plates at the core spots, in mats plate and plate_edge (the armour's)
     crew:[float3] = []         // an engine: where its crew stand (on their own legs, walking as it moves)
     seats:[float3] = []        // a war beast: where its crew sit (a howdah), at their seat height
     style_names:[string] = []  // an engine in each culture's style (siege.<kind>.<style>): its skin, pale, mark
@@ -635,6 +636,8 @@ class vx_gear_spec:
     flags:[string]
     legs:[vx_spec]  // worn gear's shapes on each leg (hip, knee, ankle) and arm (shoulder, elbow, hand), the right one
     arms:[vx_spec]  // given, mirrored on the left: power armour's greaves and gauntlets
+    plate:int = -1       // worn armour's `plates`: what a body's plates are made of when it has no fit for this body (#505)
+    plate_edge:int = -1  // and their rims
 
 class vx_rule:
     part:string
@@ -689,6 +692,7 @@ def vx_parse_body(id:string, o:JV) -> vx_body_spec:
         b.helm_pt, b.helm = vx_pt(at(at(o, "helm"), "at"))
         b.helm_r = as_float(at(at(o, "helm"), "r"))
         b.helm_k = gfloat(at(o, "helm"), "culture", 1.0)
+    if has(o, "plates"): b.plates = vx_parse_shapes(glist(o, "plates"))
     if has(o, "armour"):
         let fo = at(o, "armour")
         b.fit_pa, b.fit_a = vx_pt(at(fo, "a"))
@@ -1020,6 +1024,9 @@ def vx_load(dirs:[string]):
                                                   vx_parse_gear_shapes(glist(g, "shapes")), copy(fits.keys), map(fits.a) l: vx_parse_gear_shapes(l.a),
                                                   gstrs(g, "flags"), vx_parse_gear_shapes(glist(g, "legs")),
                                                   vx_parse_gear_shapes(glist(g, "arms")) })
+                if has(g, "plates"):
+                    let gp = assert vx_gears.get(name)
+                    gp.plate, gp.plate_edge = vx_mat(gstr(at(g, "plates"), "plate", "")), vx_mat(gstr(at(g, "plates"), "edge", ""))
         if has(go, "parts"):  // a mod's rules go first: they're more particular
             let rs = map(glist(go, "parts")) r: vx_rule { gstr(r, "part", ""), gstr(r, "tag", ""), gstr(r, "slot", ""), gstr(r, "gear", "") }
             for(vx_rules) r: rs.push(r)
@@ -1553,6 +1560,8 @@ def vx_worn(out:[vx_prim], u:vx_unit_def, b:vx_body_spec, p:vx_points, flags:[st
             if ck >= 0:  // (a culture's piece on another body: its own fit, moved from the culture's body onto this one's spot)
                 let cb = vx_body_of(u.culture)
                 for(gs.fits[ck]) s: vx_emit(out, vx_refit(s, cb, b), p, vx_X, vx_Y, vx_Z, flags, b)
+            elif k < 0 and gs.plate >= 0 and b.plates.length:  // (armour on a body that wears plates: its own plates in this armour's metal)
+                for(b.plates) s: vx_emit(out, vx_plated(s, gs), p, vx_X, vx_Y, vx_Z, flags, b)
             else:
                 if k < 0: k = find(gs.fit_ids) i: i == "*"
                 if k >= 0: for(gs.fits[k]) s: vx_emit(out, s, p, vx_X, vx_Y, vx_Z, flags, b)
@@ -1567,6 +1576,12 @@ def vx_refit(s:vx_spec, cb:vx_body_spec, b:vx_body_spec) -> vx_spec:
     let k = b.helm_r * b.helm_k / cb.helm_r
     return vx_spec { s.kind, s.hard, s.mirror, b.helm_pt, b.helm + (s.a - cb.helm) * k, "", float3_0, s.ra * k, s.rb, s.mat, s.mat2,
                      s.n, s.half, s.pts, s.offs, s.step, s.taper, s.need, s.avoid, model: s.model, flip: s.flip }
+
+// A body's plate in an armour's materials: its `plate` and `plate_edge` mats become the armour's.
+def vx_plated(s:vx_spec, gs:vx_gear_spec) -> vx_spec:
+    def m(x:int) -> int: return if x == vx_mat("plate"): gs.plate elif x == vx_mat("plate_edge"): gs.plate_edge else: x
+    return vx_spec { s.kind, s.hard, s.mirror, s.pa, s.a, s.pb, s.b, s.ra, s.rb, m(s.mat), m(s.mat2), s.n, s.half, s.pts, s.offs, s.step,
+                     s.taper, s.need, s.avoid, model: s.model, flip: s.flip, ax: s.ax, ay: s.ay, az: s.az, bone: s.bone, rest: s.rest }
 
 // A body going down as it dies: its hips drop and its trunk folds forward over them, so its knees bend (its feet stay), #263.
 let vx_SLUMP_HIPS = 0.6
