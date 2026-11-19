@@ -112,6 +112,8 @@ def state_hash() -> int:
         for(col) v: h = mix(h, v)
     for(hook_building_cols) col:
         for(col) v: h = mix(h, v)
+    for(hook_stopped) id:
+        for(id) c: h = mix(h, c)
     h = mix(h, -1)
     for(field_queue) k: h = mix(h, k)
     let n = u_x.length

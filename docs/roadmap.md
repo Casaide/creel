@@ -68,6 +68,6 @@ game. Still to come:
 
 ## Mods and hooks
 
-- [ ] Hook mods in sandboxed Lua, with step budgets and deterministic maths.
+- [x] Hook mods in sandboxed Lua, with step budgets and deterministic maths (#82, `docs/lua.md`).
 - [ ] More hook points, found from real needs: abilities, victory rules, match modes, UI.
 - [ ] New movement classes (ships), and orders and abilities from data.

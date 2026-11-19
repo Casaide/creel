@@ -71,8 +71,35 @@ class Pack:
     manifest:JV
     data:JV  // relative path (parts.json, rules/<id>.json, maps/<id>.json) -> parsed, as far as read
     sig = ""
+    lua_read = false           // its Lua (data/hooks/*.lua) read: gen/mods' pack_lua
+    lua_files = []::string     // by name
+    lua_sources = []::string   // their text, line ends as \n: the files checked are the files run
 
 var lib_packs = []::Pack  // in load order, the game first
+
+def lx_no_cr(text:string) -> string:
+    if find_string(text, "\r") < 0: return text
+    var out = ""
+    var k = 0
+    for(text) c, j:
+        if c == '\r':
+            out += substring(text, k, j - k)
+            k = j + 1
+    return out + substring(text, k, text.length - k)
+
+// A pack's Lua, data/hooks/*.lua by name, read once and kept on it (with \r\n read as \n): what's checked is what runs.
+def pack_lua(p:Pack):
+    if p.lua_read: return
+    p.lua_read = true
+    let names, sizes = scan_folder(p.root + "/hooks", true)
+    if not names or not sizes: return
+    let files = []::string
+    for(names) n, k:
+        if sizes[k] >= 0 and ends_with(n, ".lua"): files.push(n)
+    for(sorted_strs(files)) f:
+        let text = read_file(p.root + "/hooks/" + f)
+        p.lua_files.push(f)
+        p.lua_sources.push(if text: lx_no_cr(text) else: "")
 
 def pack_open(id:string, dir:string, manifest:JV) -> Pack:
     let d = gstr(manifest, "data", "data")

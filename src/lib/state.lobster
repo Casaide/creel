@@ -177,6 +177,8 @@ var hook_player_cols = []::[int]
 var hook_building_names = []::string
 var hook_building_cols = []::[int]
 var hook_tick_types = []::int  // the unit types that asked for hook_unit_tick
+var hook_stopped = []::string      // the packs whose rules (their Lua) stopped this match, by id: they stay stopped
+var hook_stopped_why = []::string  // and why
 
 def hook_declare_unit(name:string) -> int:
     hook_unit_names.push(name)
