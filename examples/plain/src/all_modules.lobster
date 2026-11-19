@@ -48,10 +48,12 @@ import gen.sha256
 import gen.rng
 import gen.datalib
 import gen.mods
-import hooks.active
 import gen.setup
 import gen.modes
 import gen.start
+import lua.lua
+import lua.api
+import hooks.active
 import view.facing
 import view.shot_look
 import view.node

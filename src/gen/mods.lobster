@@ -1,9 +1,9 @@
 // ------------------------------------------------------------------ mods (src/mods.gd, docs/modding.md)
 // A mod is a folder of more data (parts, creatures, cultures, palettes, words, rules, maps, shot looks)
-// plus models for the bake, with a manifest (pack.json, as the game has in data/). Used only when asked for (mods_use, from the
-// game's mods:a,b option). Merged over the base data in load order (the manifest's load_order, then
+// plus models for the bake and rules in Lua (hooks/*.lua, run by lua/), with a manifest (pack.json, as the game
+// has in data/). Used only when asked for (mods_use, from the game's mods:a,b option). Merged over the base data in load order (the manifest's load_order, then
 // id), each checked first: a mod that fails is refused with the reason and none of it is used. Each
-// mod's signature ("id@version#hash" of its parsed data) goes into the races made with it (the race
+// mod's signature ("id@version#hash" of its parsed data and its Lua) goes into the races made with it (the race
 // key), as in GDScript. The models are the bake's (Godot's, until step 6c).
 
 let mod_roots = [ "../mods", "../mods_private" ]  // (a later folder's copy of a mod wins)
@@ -103,11 +103,16 @@ def mod_read(rec:Pack) -> string:
     for(mod_files(root, "")) f:
         let base = if has_char(f, '/'): substring(f, 0, find_string(f, "/")) else: ""
         let model = starts_with(f, "voxel/models/") and ends_with(f, ".vox")
-        if not (has_s(MOD_DATA_FILES, f) or (has_s(MOD_DATA_DIRS, base) and ends_with(f, ".json")) or model):
-            return "data/{f} can\'t be modded yet (moddable: {concat_string(MOD_DATA_FILES, ", ")}, rules/*.json, maps/*.json, voxel/**.json, voxel/models/*.vox)"
+        let code = base == "hooks" and ends_with(f, ".lua") and find_string(substring(f, 6, f.length - 6), "/") < 0
+        if not (has_s(MOD_DATA_FILES, f) or (has_s(MOD_DATA_DIRS, base) and ends_with(f, ".json")) or model or code):
+            return "data/{f} can\'t be modded yet (moddable: {concat_string(MOD_DATA_FILES, ", ")}, rules/*.json, maps/*.json, voxel/**.json, voxel/models/*.vox, hooks/*.lua)"
         let text = read_file(root + "/" + f)
         if not text: return "data/{f} can\'t be read"
-        if model: models += f + sha256_text(text)
+        if code:  // (a pack's rules, in Lua: lua/; they're in its signature, so a changed rule is a different pack)
+            let why = lua_check_source("{rec.id}/{f}", text)
+            if why != "": return why
+            models += f + sha256_text(text)
+        elif model: models += f + sha256_text(text)
         else: set(rec.data, f, parse_json(text))
     // (the hash is of the parsed data, not the files' bytes: line endings differ between checkouts)
     rec.sig = "{rec.id}@{gstr(rec.manifest, "version", "")}#{substring(sha256_text(stringify(jobj_without(jobj_without(rec.data, "audio.json"), "atmosphere.json")) + models), 0, 8)}"
