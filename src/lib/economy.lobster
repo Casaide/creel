@@ -33,7 +33,7 @@ def dims(k:int, along:int) -> int, int:
 
 def diag_of(along:int) -> int: return if along >= 2: along - 1 else: 0
 
-def along_for(k:int, along:int) -> int: return if bt_gate[k] and along >= 0 and along <= 3: along else: 0
+def along_for(k:int, along:int) -> int: return if (bt_gate[k] or (bt_bridge[k] and along <= 1)) and along >= 0 and along <= 3: along else: 0
 
 // The cells of a footprint with its top-left on (x0, y0), row by row: the rect, or a diagonal's (Buildings.cells).
 def cells_of(x0:int, y0:int, w:int, h:int, d:int) -> [int]:
@@ -543,10 +543,12 @@ def clear_farm(b:int):
         refresh(c)
 
 // A finished farm turns its ground into crops; the builder who finished it starts the harvest.
-// A road plan built: its cells become road and the plan goes; its builder takes the next plan nearby (#51).
+// A road plan built: its cells become road and the plan goes; its builder takes the next plan nearby. A bridge plan
+// stands as a bridge (#51).
 def become_road(b:int):
     let cells = footprint(b)
     for(cells) c: set_road(c, bt_road[b_kind[b]])
+    if bt_bridge[b_kind[b]]: add_bridge(cells)
     set_walk_over(cells, false)
     demolish(b)
 
@@ -910,6 +912,7 @@ def can_place(player:int, k:int, cx:int, cy:int, along:int = 0) -> bool:
     let mc = t_mclass[worker_type(player)]
     let sx, sy = dims(k, along)
     if cx < 0 or cy < 0 or cx + sx > W or cy + sy > H: return false
+    if bt_bridge[k]: return bridge_fits(cx, cy, sx, sy)
     for(cells_of(cx, cy, sx, sy, diag_of(along))) c:
         if not can_build(c % W, c / W, 1, mc, bt_water[k] != 0, bt_line[k] != 0) and not replaceable(player, k, c): return false
         if bt_gate[k] and cliff[c] == 1: return false

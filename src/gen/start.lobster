@@ -192,6 +192,8 @@ def setup_btypes():
         let road_name = gstr(b, "road", "")  // a road plan: built, it lays this road kind and goes (#51)
         bt_road.push(if road_name == "": -1 else: find(rd_names): _ == road_name)
         assert road_name == "" or bt_road[bt_road.length - 1] >= 0
+        bt_bridge.push(if gbool(b, "bridge", false): 1 else: 0)  // a road plan over water
+        assert not gbool(b, "bridge", false) or road_name != ""
         let mk = gobj(b, "makes")  // {"in": {"<resource>": n}, "out": {...}, "time": seconds}
         let ins = gobj(mk, "in")
         let outs = gobj(mk, "out")

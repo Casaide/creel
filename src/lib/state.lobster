@@ -322,6 +322,7 @@ var bt_drop = []::[int]   // per resource: 1 if it takes it in
 var bt_hold = []::[int]   // per resource: how much of it a building of this type holds (buildings.json holds; 0: none)
 var bt_store = []::int    // 1: what it holds counts as its owner's stock (a storehouse); stocked economies only
 var bt_road = []::int     // the road kind a road plan of this type lays when built (rules economy.roads), or -1 (#51)
+var bt_bridge = []::int   // a road plan that spans water: built, it stands as a bridge (lib/bridges) (#51)
 var bt_in = []::[int]     // per resource: what one round of its recipe takes (buildings.json makes.in; lib/recipes, #50)
 var bt_out = []::[int]    // per resource: what one round makes (makes.out)
 var bt_offer = []::[int]  // per resource: 1 if carriers may take it from here to whoever asks (makes.out, and "offers")
@@ -591,6 +592,7 @@ def pad_saved_columns():
     while b_make.length < b_id.length: b_make.push(0)
     while b_site.length < b_id.length: b_site.push([])
     while bt_road.length < bt_ladder.length: bt_road.push(-1)  // (a save from before road plans, #51)
+    while bt_bridge.length < bt_ladder.length: bt_bridge.push(0)
     for(unit_columns()) col:
         while col.length < u_id.length: col.push(0)
     for(building_columns()) col:
