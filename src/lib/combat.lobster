@@ -528,7 +528,7 @@ def apply_hits(n:int):
         if c_hurt[jj] > 0 and u_hp[jj] > 0: hook_on_hurt(jj, c_hurt_by[jj])
         if c_hurt[jj] != 0 and u_hp[jj] <= 0 and t_animal[u_kind[jj]] == 0:
             let kk = index_of(c_hurt_by[jj])
-            if kk >= 0 and t_kill_gold[u_kind[kk]] != 0 and is_foe(u_owner[kk], u_owner[jj]): stock[gold][u_owner[kk]] += t_kill_gold[u_kind[kk]]
+            if kk >= 0 and t_kill_gold[u_kind[kk]] != 0 and is_foe(u_owner[kk], u_owner[jj]): stock_add(gold, u_owner[kk], t_kill_gold[u_kind[kk]])
     var j = n - 1
     while j >= 0:
         if u_hp[j] <= 0:

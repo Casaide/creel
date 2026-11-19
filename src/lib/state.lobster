@@ -254,6 +254,7 @@ var b_cooldown = []::int  // shooting buildings: ticks until the next volley
 var b_diag = []::int      // 0: the whole rect; 1 or 2: a diagonal gate, the cells on one diagonal of its square
 var b_queue = []::[int]   // unit type indexes, head first
 var b_inside = []::[int]  // units sheltering inside (garrison.gd): REC_SIZE ints each, by id
+var b_hold = []::[int]    // per resource: what the building holds now (stocked economies; empty in a pool one)
 
 // Saves outlive builds (D-141): a per-unit or per-building variable added since a save was made comes back from it
 // empty (flexbuffers give a missing field its empty value), so it's padded here with 0 for every unit and building.
@@ -261,6 +262,7 @@ var b_inside = []::[int]  // units sheltering inside (garrison.gd): REC_SIZE int
 def pad_saved_columns():
     while t_form_r.length < t_gap.length: t_form_r.push(0)
     while u_mount.length < u_id.length: u_mount.push([])
+    while b_hold.length < b_id.length: b_hold.push([])  // (a save from before #48: a pool economy's empty holds)
     for(unit_columns()) col:
         while col.length < u_id.length: col.push(0)
     for(building_columns()) col:
@@ -313,6 +315,8 @@ var bt_wet = []::int
 var bt_workers = []::int  // a farm: how many work it at once
 var bt_special = []::int  // pens, gates, ladders, walls you stand on: not in the spike
 var bt_drop = []::[int]   // per resource: 1 if it takes it in
+var bt_hold = []::[int]   // per resource: how much of it a building of this type holds (buildings.json holds; 0: none)
+var bt_store = []::int    // 1: what it holds counts as its owner's stock (a storehouse); stocked economies only
 var bt_reseed = []::[int]
 var bm_hp = []::[int]  // [player][type]
 var bm_pop = []::[int]
@@ -358,7 +362,8 @@ var ages = []::int
 var auto_reseed = []::int
 var pop = []::int
 var pop_cap = []::int
-var stock = []::[int]  // [resource][player]
+var stock = []::[int]  // [resource][player]; in a stocked economy the sum of what the owner's stores hold
+var r_stocked = 0      // rules economy.model "stocked": goods sit in buildings (b_hold), not in one pool (#48)
 var gathered = []::[int]
 var gather_ticks = []::[int]  // [player][resource]
 var next_id = 0
@@ -435,9 +440,12 @@ var s_pushx = []::int
 var s_pushy = []::int
 var s_planted = []::int
 def remove_building(b:int):
+    if r_stocked and bt_store[b_kind[b]]:  // what a store held goes with it
+        for(b_hold[b]) n, r: stock[r][b_owner[b]] -= n
     for(building_columns()) col: col.remove(b)
     b_queue.remove(b)
     b_inside.remove(b)
+    b_hold.remove(b)
 
 // A unit back in the arrays under an id it had before (out of a building), in its place by id
 // (Units.insert, with units.gd _put's defaults). Its slot.

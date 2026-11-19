@@ -18,6 +18,7 @@ def add_building(bid:int, owner:int, k:int, cx:int, cy:int, sx:int, sy:int, diag
         col.push([ bid, owner, k, cx, cy, sx, sy, 1, 0, 0, 0, -1, -1, 0, diag ][n])
     b_queue.push([]::int)
     b_inside.push([]::int)
+    b_hold.push(if r_stocked: zeros(num_resources) else: []::int)
     return b_id.length - 1
 
 // A footprint's size laid `along` (Economy.dims): gates turn, diagonals take a square.
@@ -143,7 +144,59 @@ def can_afford(player:int, cost:[int]) -> bool:
     return true
 
 def pay(player:int, cost:[int]):
-    for(cost) c, r: stock[r][player] -= c
+    for(cost) c, r: stock_take(r, player, c)
+
+// ---- goods in buildings (#48): in a pool economy stock[r][p] is all there is; in a stocked one it's
+// the sum of what p's finished stores hold, kept equal to it here, so readers of stock never change.
+
+// Room left in building b for resource r (stocked economies).
+def hold_room(b:int, r:int) -> int: return bt_hold[b_kind[b]][r] - b_hold[b][r]
+
+// Put up to n of r in building b: how much went in.
+def hold_put(b:int, r:int, n:int) -> int:
+    let m = min(n, max(0, hold_room(b, r)))
+    b_hold[b][r] += m
+    if bt_store[b_kind[b]]: stock[r][b_owner[b]] += m
+    return m
+
+// Take up to n of r out of building b: how much came out.
+def hold_take(b:int, r:int, n:int) -> int:
+    let m = min(n, b_hold[b][r])
+    b_hold[b][r] -= m
+    if bt_store[b_kind[b]]: stock[r][b_owner[b]] -= m
+    return m
+
+def is_store(b:int, p:int) -> bool: return b_owner[b] == p and b_done[b] != 0 and bt_store[b_kind[b]] != 0
+
+// Give p n of resource r (a refund, a bounty, a sale): into the pool, or into p's stores in id order. How much
+// was taken in; in a stocked economy what finds no room is lost.
+def stock_add(r:int, p:int, n:int) -> int:
+    if not r_stocked:
+        stock[r][p] += n
+        return n
+    var left = n
+    for(b_id.length) b:
+        if left > 0 and is_store(b, p): left -= hold_put(b, r, left)
+    return n - left
+
+// Take n of resource r from p (a cost): from the pool, or from p's stores in id order (can_afford checked first).
+def stock_take(r:int, p:int, n:int):
+    if not r_stocked:
+        stock[r][p] -= n
+        return
+    var left = n
+    for(b_id.length) b:
+        if left > 0 and is_store(b, p): left -= hold_take(b, r, left)
+    assert left == 0
+
+// At the start of a stocked match: what the rules gave each player goes into their stores (the rest is lost).
+def stock_settle():
+    if not r_stocked: return
+    for(num_resources) r:
+        for(num_players) p:
+            let n = stock[r][p]
+            stock[r][p] = 0
+            stock_add(r, p, n)
 
 // ---- rects
 
@@ -374,7 +427,8 @@ def nearest_drop_off(i:int) -> int:
     var best = -1
     var best_d2 = 1 << 62
     for(b_id.length) b:
-        if b_owner[b] == u_owner[i] and b_done[b] != 0 and u_carry_kind[i] > 0 and bt_drop[b_kind[b]][u_carry_kind[i] - 1] != 0:
+        if b_owner[b] == u_owner[i] and b_done[b] != 0 and u_carry_kind[i] > 0 and bt_drop[b_kind[b]][u_carry_kind[i] - 1] != 0 and
+           (not r_stocked or hold_room(b, u_carry_kind[i] - 1) > 0):
             let d2 = dist2(u_x[i], u_y[i], b_cx[b] * TILE + b_sx[b] * TILE / 2, b_cy[b] * TILE + b_sy[b] * TILE / 2)
             if d2 < best_d2:
                 best_d2 = d2
@@ -554,8 +608,13 @@ def return_home(i:int):
     if in_reach(i, x0, y0, x1, y1):
         let p = u_owner[i]
         if u_carry_kind[i] > 0:
-            stock[u_carry_kind[i] - 1][p] += u_carry[i]
-            gathered[u_carry_kind[i] - 1][p] += u_carry[i]
+            let r = u_carry_kind[i] - 1
+            let n = if r_stocked: hold_put(b, r, u_carry[i]) else: stock_add(r, p, u_carry[i])
+            gathered[r][p] += n
+            u_carry[i] -= n
+            if u_carry[i] > 0:  // full: on to the next store with room
+                to_drop_off(i)
+                return
         u_carry[i] = 0
         u_moving[i] = 0
         if u_home[i] >= 0:

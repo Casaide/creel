@@ -46,12 +46,12 @@ def cmd_trade(p:int, bid:int, r:int, buy:bool):
     if trade_barred(p, b, r, buy): return
     let g = resource_index("gold")
     if buy:
-        stock[g][p] -= quote(p, r, true)
-        stock[r][p] += LOT
+        stock_take(g, p, quote(p, r, true))
+        stock_add(r, p, LOT)
         market_price[r] = min(PRICE_HIGH, market_price[r] + PRICE_STEP)
     else:
-        stock[r][p] -= LOT
-        stock[g][p] += quote(p, r, false)
+        stock_take(r, p, LOT)
+        stock_add(g, p, quote(p, r, false))
         market_price[r] = max(PRICE_LOW, market_price[r] - PRICE_STEP)
 
 // ---- trade carts
@@ -119,7 +119,7 @@ def trade_step(i:int):
             u_work[i] = TRADE_HOME
             approach_building(i, home)
         else:
-            if u_carry[i] > 0: stock[u_carry_kind[i] - 1][u_owner[i]] += u_carry[i]
+            if u_carry[i] > 0: stock_add(u_carry_kind[i] - 1, u_owner[i], u_carry[i])
             u_carry[i] = 0
             u_carry_kind[i] = 0
             if far < 0 or route_barred(u_owner[i], home, far):

@@ -57,6 +57,7 @@ def setup_world(seed_value:int, map_id:string, sides:[JV], rules:JV, team_ids:[i
     r_fog_building = gint(fc, "building", 4)
     r_fog_tower = gint(fc, "tower", 8)
     let ec = rules_part("economy")
+    r_stocked = if gstr(ec, "model", "pool") == "stocked": 1 else: 0
     r_carry = as_int(at(ec, "carry"))
     r_queue_max = as_int(at(ec, "queue_max"))
     r_pop_max = as_int(at(ec, "pop_max"))
@@ -180,6 +181,9 @@ def setup_btypes():
         bt_cost.push(cost_vec(at(b, "cost")))
         let drop_off = gstrs(b, "drop_off")
         bt_drop.push(map(resource_names) r: if has_s(drop_off, r): 1 else: 0)
+        let holds = gobj(b, "holds")  // {"<resource>": how much, "*": any resource}
+        bt_hold.push(map(resource_names) r: gint(holds, r, gint(holds, "*", 0)))
+        bt_store.push(if gbool(b, "store", false): 1 else: 0)
         bt_reseed.push(cost_vec(gobj(b, "reseed")))
         bt_hp_base.push(as_int(at(b, "hp")))
         bt_food_base.push(gint(b, "food", 0))
@@ -366,6 +370,7 @@ def setup_starts():
                 for(as_int(at(start, "workers"))):
                     let cell = spawn_cell(tc, worker)
                     add_unit(p, worker, (cell % W) * TILE + 500, (cell / W) * TILE + 500)
+    stock_settle()
     update_pop()
 
 // ---- animals (Animals.place): sheep and boar round each start, deer herds on the open map, seeded
