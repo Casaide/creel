@@ -106,14 +106,18 @@ def mod_read(rec:Pack) -> string:
         let code = base == "hooks" and ends_with(f, ".lua") and find_string(substring(f, 6, f.length - 6), "/") < 0
         if not (has_s(MOD_DATA_FILES, f) or (has_s(MOD_DATA_DIRS, base) and ends_with(f, ".json")) or model or code):
             return "data/{f} can\'t be modded yet (moddable: {concat_string(MOD_DATA_FILES, ", ")}, rules/*.json, maps/*.json, voxel/**.json, voxel/models/*.vox, hooks/*.lua)"
+        if code: continue  // (read below)
         let text = read_file(root + "/" + f)
         if not text: return "data/{f} can\'t be read"
-        if code:  // (a pack's rules, in Lua: lua/; they're in its signature, so a changed rule is a different pack)
-            let why = lua_check_source("{rec.id}/{f}", text)
-            if why != "": return why
-            models += f + sha256_text(text)
-        elif model: models += f + sha256_text(text)
+        if model: models += f + sha256_text(text)
         else: set(rec.data, f, parse_json(text))
+    // (a pack's rules, in Lua: they're in its signature, so a changed rule is a different pack; a file's line ends don't
+    // count)
+    pack_lua(rec)
+    for(rec.lua_files) f, j:
+        let why = lua_check_source("{rec.id}/hooks/{f}", rec.lua_sources[j])
+        if why != "": return why
+        models += "hooks/" + f + sha256_text(rec.lua_sources[j])
     // (the hash is of the parsed data, not the files' bytes: line endings differ between checkouts)
     rec.sig = "{rec.id}@{gstr(rec.manifest, "version", "")}#{substring(sha256_text(stringify(jobj_without(jobj_without(rec.data, "audio.json"), "atmosphere.json")) + models), 0, 8)}"
     return ""

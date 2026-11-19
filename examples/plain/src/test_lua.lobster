@@ -11,6 +11,8 @@ def check(ok:bool, what:string):
         fails++
         print "FAIL: {what}"
 
+var load_budget = L_BUDGET_LOAD  // (smaller for the fuzz: a mutant that loops forever stops soon)
+
 // A pack of one file, loaded fresh: what it printed, joined by "|", or its error.
 def run(src:string) -> string:
     l_api_names = LA_NAMES
@@ -18,7 +20,8 @@ def run(src:string) -> string:
     lua_api_consts()
     lua_rules = su_rules
     lua_quiet = true
-    let why = lua_load_pack("t", [ "t.lua" ], [ src ])
+    stops_forgotten()
+    let why = lua_load_pack("t", [ "t.lua" ], [ src ], load_budget)
     lua_freeze()
     return if why != "": "error: " + why else: concat_string(lprint, "|")
 
@@ -32,7 +35,11 @@ def call(name:string, args:[int]) -> string:
     lua_region_end()
     return if not ok: "error: " + pk.error else: concat_string(lprint, "|")
 
+let given = []::string  // every gives(): its source, then what it printed (lua_diff.sh runs them in real Lua too)
+
 def gives(src:string, want:string):
+    given.push(src)
+    given.push(want)
     let got = run(src)
     check(got == want, "{src}\n  want: {want}\n  got:  {got}")
 
@@ -100,6 +107,9 @@ def test_refusals():
     fails_with("string.dump(print)", "field \'dump\'")
     fails_with("local x = 1 + nil", "arithmetic")
     fails_with("local x = 1 // 0", "division by zero")
+    fails_with("local x = -8 >> 1", "negative number shifted right")
+    fails_with("local x = -8 << -1", "negative number shifted right")
+    gives("print(8 >> 1, -8 << 1, 8 << -1, 1 << 64, 5 >> 70)", "4\t-16\t4\t0\t0")
     fails_with("local t = nil local y = t.x", "index a nil")
     fails_with("error(\'mine\')", "t.lua:1: mine")
     fails_with("local x = 1\nlocal y = {{}} + 1", "t.lua:2:")
@@ -125,15 +135,209 @@ def test_limits():
     run("function boom() error(\'once\') end")
     check(starts_with(call("boom", []), "error: "), "an error stops the call")
     check(lua_hook_fn(l_packs[0], "boom") == LV_NIL, "and the pack\'s hooks are off")
-    // the panel's read can't change the sim
+    // the panel's read can't change the sim, and a failure there doesn't stop the pack (it runs on one machine)
     run("function task_name(i) set_u_task(i, 3) return \'x\' end")
     lua_on = true
-    check(lua_task_name(0) == "" and find_string(l_packs[0].error, "only reads") >= 0, "task_name can\'t write")
+    check(lua_task_name(0) == "" and find_string(l_packs[0].view_error, "only reads") >= 0, "task_name can\'t write")
+    check(l_packs[0].error == "", "and the pack runs on")
     lua_on = false
 
 def test_check_source():
     check(lua_check_source("a.lua", "local x = 1") == "", "a good file checks")
     check(find_string(lua_check_source("a.lua", "local x = 1.0"), "a.lua:1") >= 0, "a bad file says where")
+
+// A call as the sim makes it (lua/api's lua_hook_run: the call's and the tick's budgets): "ok", or the error.
+def hook(name:string, args:[int]) -> string:
+    lprint = []
+    let pk = l_packs[0]
+    let f = lua_hook_fn(pk, name)
+    if f == LV_NIL: return "error: off ({pk.error})"
+    let ok = lua_hook_run(pk, f, args)
+    lua_region_end()
+    return if not ok: "error: " + pk.error else: "ok"
+
+def stops_forgotten():
+    hook_stopped = []
+    hook_stopped_why = []
+
+def test_crashes():  // (each was a crash of the VM, not an error in the pack)
+    gives("print(select(-1, \'a\', \'b\', \'c\'))", "c")
+    gives("print(select(-2, \'a\', \'b\', \'c\'))", "b\tc")
+    fails_with("select(-4, 1, 2)", "out of range")
+    fails_with("select(0, 1)", "out of range")
+    fails_with("local t = {{ 3, 1, 2, 5, 4 }} table.sort(t, function(a, b) t[#t] = nil return a < b end)", "table.sort")
+    fails_with("local t = {{ 3, 1, 2 }} table.sort(t, function(a, b) table.insert(t, 9) return a < b end)", "table.sort")
+    fails_with("local t = {{ 3, 1, 2 }} table.sort(t, function(a, b) error(\'cmp\') end)", "cmp")
+    fails_with("local s = \'x\' for i = 1, 40 do s = s .. s end", "over 1 MB")
+    fails_with("local s = string.rep(\'ab\', 1 << 59)", "string.rep")
+    fails_with("local s = string.rep(\'ab\', 1 << 58)", "string.rep")
+    fails_with("local t = {{}} for i = 1, 20 do t[i] = string.rep(\'x\', 100000) end local s = table.concat(t)", "over 1 MB")
+    fails_with("for i = 1, 400 do local s = string.rep(\'x\', 99990 + i % 10) .. i end", "16 MB")
+    fails_with("for i = 1, 400 do local s = string.format(\'%s%d\', string.rep(\'y\', 99999), i) end", "16 MB")
+    fails_with("local s = string.rep(\'z\', 100000) for i = 1, 400 do local u = s:sub(i) end", "16 MB")
+    // nesting: an error, never the stack
+    fails_with("local x = " + repeat_string("(", 5000) + "1" + repeat_string(")", 5000), "nested too deep")
+    fails_with("local x = " + repeat_string("{{", 5000) + repeat_string("}}", 5000), "nested too deep")
+    fails_with(repeat_string("do ", 5000) + repeat_string("end ", 5000), "nested too deep")
+    fails_with("local x = " + repeat_string("- ", 5000) + "1", "nested too deep")
+    fails_with("local x = " + repeat_string("not ", 5000) + "1", "nested too deep")
+    fails_with("local x = 1" + repeat_string(" + 1", 5000), "nested too deep")
+    fails_with("local x = \'a\'" + repeat_string(" .. \'a\'", 5000), "nested too deep")
+    fails_with("local t = {{}} local x = t" + repeat_string(".a", 5000), "nested too deep")
+    fails_with("local f = print " + repeat_string("f = function() ", 300) + repeat_string("end ", 300), "nested too deep")
+    gives("print(" + repeat_string("(", 150) + "1" + repeat_string(")", 150) + ")", "1")
+    // as deep as it goes, at the call limit too: still fine
+    gives("local function f(n) if n == 0 then return 0 end return " + repeat_string("1 + (", 10) + "f(n - 1)" + repeat_string(")", 10) + " end print(f(100))", "1000")
+    // deep code, deep calls: what's running is limited all together, not only call by call
+    fails_with("local function f(n) if n == 0 then return 0 end return " + repeat_string("1 + (", 90) + "f(n - 1)" + repeat_string(")", 90) + " end print(f(190))", "nested too deep")
+    fails_with("local function f(n) if n == 0 then return 0 end return " + repeat_string("1 + (", 20) + "f(n - 1)" + repeat_string(")", 20) + " end print(f(190))", "nested too deep")
+
+def test_view():  // (the placement preview and the panel ask too, on one machine: they mustn't change the sim)
+    lua_on = true
+    run("function task_name(i) error(\'boom\') end function on_tick() print(\'ticked\') end")
+    check(lua_task_name(0) == "" and l_packs[0].error == "", "a task_name that fails doesn\'t stop the pack")
+    check(call("on_tick", []) == "ticked", "and its on_tick still runs")
+    run("function can_place(p, k, x, y, sx, sy) if x > 5 then error(\'far\') end return x < 3 end")
+    hook_view = true
+    check(lua_can_place(0, 0, 9, 0, 1, 1) and l_packs[0].error == "", "the preview\'s can_place fails: allowed, and the pack runs on")
+    check(not lua_can_place(0, 0, 4, 0, 1, 1) and lua_can_place(0, 0, 1, 0, 1, 1), "and it still refuses and allows")
+    run("function can_place() while true do end end")
+    check(lua_can_place(0, 0, 1, 0, 1, 1) and l_packs[0].error == "" and find_string(l_packs[0].view_error, "budget ({L_BUDGET_VIEW}") >= 0,
+        "the preview has a small budget")
+    hook_view = false
+    check(lua_can_place(0, 0, 1, 0, 1, 1) and find_string(l_packs[0].error, "budget") >= 0, "the sim\'s can_place stops the pack")
+    check(hook_stopped.length == 1 and hook_stopped[0] == "t" and find_string(hook_stopped_why[0], "budget") >= 0, "and the match\'s state says so")
+    stops_forgotten()
+    // can_place only reads, even from the sim
+    run("function can_place(p, k, x, y, sx, sy) set_pop(0, 1) return true end")
+    lua_can_place(0, 0, 1, 0, 1, 1)
+    check(find_string(l_packs[0].error, "only reads") >= 0, "can_place can\'t write")
+    stops_forgotten()
+    // every writer is refused to a reader
+    for(LA_WRITE_NAMES) name:
+        run("function task_name(i) {name}() return \'x\' end")
+        lua_task_name(0)
+        check(find_string(l_packs[0].view_error, "{name}: this hook only reads") >= 0, "{name} is refused to a reader")
+    for(LA_NAMES) name:
+        if starts_with(name, "set_") or ends_with(name, "_set"): check((find(LA_WRITE_NAMES) n: n == name) >= 0, "{name} is a writer")
+    lua_on = false
+
+def test_budgets():
+    // a pack's calls in one tick share a budget: past it, the pack stops
+    run("function work(n) for i = 1, n do end end")
+    let n = lv_int(L_BUDGET_TICK / 3 + 1)
+    tick = 1000
+    check(hook("work", [ n ]) == "ok" and hook("work", [ n ]) == "ok", "two calls fit a tick")
+    tick++
+    check(hook("work", [ n ]) == "ok" and hook("work", [ n ]) == "ok", "and two more the next")
+    let third = hook("work", [ n ])
+    check(starts_with(third, "error: ") and find_string(third, "budget") >= 0, "a third the same tick is over its budget: {third}")
+    check(starts_with(hook("work", [ lv_int(1) ]), "error: off"), "and the pack is off")
+    stops_forgotten()
+    // one call can't take the whole tick's
+    run("function work(n) for i = 1, n do end end")
+    tick++
+    check(find_string(hook("work", [ lv_int(L_BUDGET_CALL) ]), "budget") >= 0, "one call has its own budget")
+    stops_forgotten()
+    tick = 0
+
+def test_dispatch():  // (two packs: each hook asks both, in load order)
+    l_api_names = LA_NAMES
+    lua_reset()
+    lua_api_consts()
+    lua_rules = su_rules
+    lua_quiet = true
+    lua_on = true
+    lua_load_pack("a", [ "a.lua" ], [ "function on_hit(by, t, d) return d * 2 end function ai_train_score(p, s, k, n) return n + 1 end function can_place() return true end" ])
+    lua_load_pack("b", [ "b.lua" ], [ "function on_hit(by, t, d) return d + 1 end function ai_train_score(p, s, k, n) return n * 10 end function can_place(p) return p ~= 1 end" ])
+    lua_freeze()
+    check(lua_on_hit(0, 0, 5) == 11, "on_hit: each pack\'s damage goes to the next")
+    check(lua_ai_train_score(0, "spear", 0, 4) == 50, "ai_train_score: the same")
+    check(lua_can_place(0, 0, 0, 0, 1, 1) and not lua_can_place(1, 0, 0, 0, 1, 1), "can_place: any pack refuses")
+    // one pack stopping leaves the other running
+    lua_reset()
+    lua_api_consts()
+    lua_quiet = true
+    lua_load_pack("a", [ "a.lua" ], [ "function on_hit(by, t, d) error(\'a broke\') end" ])
+    lua_load_pack("b", [ "b.lua" ], [ "function on_hit(by, t, d) return d + 1 end" ])
+    lua_freeze()
+    check(lua_on_hit(0, 0, 5) == 6 and lua_on_hit(0, 0, 5) == 6, "a stopped pack is passed over")
+    check(hook_stopped.length == 1 and hook_stopped[0] == "a", "and noted once")
+    stops_forgotten()
+    lua_on = false
+
+def test_tables_edges():
+    gives("local t = {{}} t[2] = \'b\' t[1] = \'a\' t[2] = nil t[2] = \'c\' table.insert(t, \'d\') print(#t, t[2], t[3])", "3\tc\td")
+    gives("local t = {{}} t[3] = 3 t[1] = 1 t[2] = 2 print(#t, t[3]) t[3] = nil print(#t) t[3] = 9 print(#t, t[3])", "3\t3|2|3\t9")
+    gives("local t = {{ 1, 2, 3 }} for k in pairs(t) do t[k] = nil end print(#t, next(t))", "0\tnil")
+    gives("local t = {{ a = 1, b = 2, c = 3 }} for k in pairs(t) do t[k] = nil end print(next(t))", "nil")
+    gives("local t = {{ 1, 2, 3, x = 1 }} t[2] = nil local n = 0 for k, v in pairs(t) do n = n + 1 end print(n)", "3")
+    gives("local t = {{}} t[-1] = \'m\' t[0] = \'z\' print(#t, t[-1], t[0])", "0\tm\tz")
+    gives("local t = {{}} for i = 1, 20 do t[\'k\' .. i] = i end for i = 1, 20, 2 do t[\'k\' .. i] = nil end local s = 0 for k, v in pairs(t) do s = s + v end print(s)", "110")
+    gives("local t = {{ 3, 1, 2 }} table.sort(t, function(a, b) return a > b end) print(t[1], t[2], t[3])", "3\t2\t1")
+    gives("local t = {{}} print(table.remove(t), #t)", "nil\t0")
+    fails_with("local t = {{}} t[nil] = 1", "index is nil")
+
+def test_lexer():
+    gives("print(\'a\\tb\', \"q\\\"q\", \'\\65\\066\')", "a\tb\tq\"q\tAB")
+    gives("print([==[a]]b]=]c]==])", "a]]b]=]c")
+    gives("print(#\'é\', #\'\\200\')", "2\t1")
+    gives("print(\'héllo\')", "héllo")
+    gives("print(string.format(\'é%dé\', 1))", "é1é")
+    fails_with("print(string.format(\'50%\'))", "nothing after it")
+    gives("print(string.format(\'50%%\'))", "50%")
+    fails_with("print(\'abc)", "unfinished string")
+    fails_with("print(\'abc\nd\')", "unfinished string")
+    fails_with("print([[abc)", "unfinished long string")
+    fails_with("--[[ never closed", "unfinished long comment")
+    fails_with("local x = 0x", "malformed number")
+    fails_with("local x = 12abc", "malformed number")
+    fails_with("local x = \'\\q\'", "escape")
+    fails_with("local x = \'\\300\'", "past 255")
+    fails_with("local x = 1152921504606846976", "too big")
+    fails_with("local x = 0x1000000000000000", "too big")
+    gives("print(1152921504606846975, -1152921504606846975)", "1152921504606846975\t-1152921504606846975")
+    fails_with("local x = @", "character")
+
+def test_library_edges():
+    gives("print(tonumber(\'0x10\'), tonumber(\' 5 \'), tonumber(\'-7\'), tonumber(\'5x\'), tonumber(\'\'), tonumber(\'1.5\'))", "16\t5\t-7\tnil\tnil\tnil")
+    gives("print(tonumber(\'99999999999999999999\'))", "nil")
+    gives("print((\'abc\'):upper(), (\'x\'):rep(3), (\'hello\'):sub(2, 3), (\'abc\'):len())", "ABC\txxx\tel\t3")
+    gives("local s = \'hello\' print(s:find(\'l\'), s:find(\'l\', 4), s:find(\'l\', -2), s:find(\'l\', 10))", "3\t4\t4\tnil")
+    fails_with("local x = (\'abc\'):nothing()", "can\'t call")
+    fails_with("local x = (5):upper()", "can\'t call method")
+
+// Bad input never crashes: snippets cut, spliced and with bits put in (a seeded walk, the same each run) load or fail
+// with an error.
+def test_fuzz():
+    let seeds = [ "local function f(a, b) return a + b, a - b end print(f(5, 3))", "local t = {{ 10, 20, x = 1 }} for k, v in pairs(t) do print(k, v) end",
+        "local s = 0 for i = 1, 10 do s = s + i end print(s)", "local x = 5 if x < 3 then print(\'a\') elseif x < 6 then print(\'b\') else print(\'c\') end",
+        "local function fib(n) if n < 2 then return n end return fib(n - 1) + fib(n - 2) end print(fib(10))", "print(string.format(\'%d-%s\', 5, \'x\'), (\'ab\'):rep(2))",
+        "local t = {{}} table.insert(t, 1) table.sort(t, function(a, b) return a > b end) print(select(\'#\', 1, 2), #t)",
+        "local n = 0 repeat n = n + 1 until n >= 3 while n > 0 do n = n - 1 if n == 1 then break end end print(n)",
+        "print([[long]] .. \"x\\n\" .. 0x1f // 2 % 3 << 1 >> 1 & 7 | 8 ~ 1)" ]
+    let bits = [ "(", ")", "{{", "}}", "[", "]", "=", "==", "..", "-", "--", "\'", "\"", "[[", "]]", "\\", "end", "do", "function", "local", "return",
+        "1 << 62", "#", ":", ".", ",", ";", "nil", "and", "not", "0x", "9999999999999999999", "%", "//", "~", "t", "f(", "select(-9, 1)" ]
+    var seed = 12345
+    var tried = 0
+    for(20000):
+        seed = (seed * 1103515245 + 12345) % 2147483648
+        var src = seeds[seed % seeds.length]
+        for(1 + seed % 4):
+            seed = (seed * 1103515245 + 12345) % 2147483648
+            let at = seed % (src.length + 1)
+            seed = (seed * 1103515245 + 12345) % 2147483648
+            let what = seed % 3
+            if what == 0: src = substring(src, 0, at) + bits[(seed >> 4) % bits.length] + substring(src, at, src.length - at)
+            elif what == 1: src = substring(src, 0, at) + substring(src, min(src.length, at + (seed >> 4) % 7), -1)
+            else:
+                let other = seeds[(seed >> 4) % seeds.length]
+                let off = min(other.length, (seed >> 8) % 20)
+                src = substring(src, 0, at) + substring(other, off, min(15, other.length - off)) + substring(src, at, src.length - at)
+        let got = run(src)
+        tried++
+        check(got == concat_string(lprint, "|") or starts_with(got, "error: "), "fuzz: {src}")
+    check(tried == 20000, "fuzz: every one ran")
 
 test_values()
 test_statements()
@@ -142,5 +346,53 @@ test_tables()
 test_refusals()
 test_limits()
 test_check_source()
+test_crashes()
+test_view()
+test_budgets()
+test_dispatch()
+test_tables_edges()
+test_lexer()
+test_library_edges()
+load_budget = 20000
+test_fuzz()
+load_budget = L_BUDGET_LOAD
+// Integer expressions at random (seeded): what they make here, checked in real Lua by lua_diff.sh. Small enough that
+// 61 bits and Lua's 64 agree: operands under 30, shifts under 5, eight at most.
+def random_expr(seed:int, depth:int) -> string, int:
+    let r = (seed * 1103515245 + 12345) % 2147483648
+    if depth == 0 or r % 5 == 0:
+        let n = (r >> 4) % 61 - 30
+        return (if n < 0: "({n})" else: "{n}"), r
+    let ops = [ "+", "-", "*", "//", "%", "&", "|", "~", "<<", ">>" ]
+    let op = ops[(r >> 4) % ops.length]
+    let a, r1 = random_expr(r, depth - 1)
+    if op == "<<": return "({a} << {(r1 >> 4) % 5})", r1
+    if op == ">>": return "(({a} & 1023) >> {(r1 >> 4) % 5})", r1  // (only what isn\'t negative: see test_refusals)
+    let b, r2 = random_expr(r1, depth - 1)
+    let un = (r2 >> 8) % 6
+    let e = if op == "//" or op == "%": "({a} {op} ({b} | 1))" else: "({a} {op} {b})"  // (never by 0)
+    if un == 0: return "-{e}", r2
+    if un == 1: return "~{e}", r2
+    return e, r2
+
+def write_diff(dir:string):
+    var seed = 777
+    for(40):  // (a file of 50 a time: one that fails here fails as one)
+        var src = ""
+        for(50):
+            let e, r = random_expr(seed, 3)
+            let f, r2 = random_expr(r, 2)
+            seed = r2
+            let cmp = [ "==", "~=", "<", "<=", ">", ">=" ]
+            src += if r2 % 4 == 0: "print({e} {cmp[(r2 >> 4) % cmp.length]} {f})\n" else: "print({e}, {f})\n"
+        given.push(src)
+        given.push(run(src))
+    for(given.length / 2) j:
+        write_file("{dir}/{j}.lua", given[j * 2], 0, 1)
+        write_file("{dir}/{j}.want", given[j * 2 + 1], 0, 1)
+
+let diff_dir = find(command_line_arguments()) a: starts_with(a, "diff:")
+if diff_dir >= 0: write_diff(substring(command_line_arguments()[diff_dir], 5, -1))
+
 print "test_lua: {passes} passed, {fails} failed"
 if fails: set_exit_code(1)

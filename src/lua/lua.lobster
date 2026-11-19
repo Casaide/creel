@@ -12,6 +12,9 @@ var lsteps = 0
 var lbudget = 0
 var ldepth = 0
 let L_MAX_DEPTH = 200
+// And the trees of the functions running, all together (each call runs its tree that deep: it's Lobster's own stack).
+let L_MAX_NESTED = 4000
+var lnest = 0
 
 def lua_fail(msg:string):
     if not lfail:
@@ -56,7 +59,9 @@ def lua_set_raw(tv:int, key:int, v:int):
             if n == arr.length and v == LV_NIL:
                 while arr.length and top(arr) == LV_NIL: arr.pop()
             return
-        if n == arr.length + 1 and v != LV_NIL and lx_tab_find(t, key) < 0:
+        if n == arr.length + 1 and v != LV_NIL:
+            let stale = lx_tab_find(t, key)  // (a key that was in the rest before: it's the array's now)
+            if stale >= 0: lt_vals[t][stale] = LV_NIL
             arr.push(v)
             if lt_keys[t].length:  // (keys after it, set before, move into the array)
                 while true:
@@ -101,10 +106,25 @@ let RUN_BREAK = 1
 let RUN_RETURN = 2
 let RUN_ERR = 3
 
+// Strings: none over 1 MB, and no more than 16 MB made in one call (or the load): what one statement can make is
+// checked before it's made, the total at each step.
+let L_MAX_STR = 1 << 20
+let L_MAX_STR_BYTES = 1 << 24
+
 def lx_step_count() -> bool:
     lsteps++
     if lsteps > lbudget:
         lua_fail("over its step budget ({lbudget} steps)")
+        return false
+    if ls_bytes > L_MAX_STR_BYTES:
+        lua_fail("over 16 MB of strings made in one call")
+        return false
+    return true
+
+
+def lx_str_ok(n:int, what:string) -> bool:
+    if n > L_MAX_STR:
+        lua_fail("{what}: a string over 1 MB")
         return false
     return true
 
@@ -168,7 +188,10 @@ def lx_arith_slow(op:int, a:int, b:int) -> int:
         if (ta != LT_INT and ta != LT_STR) or (tb != LT_INT and tb != LT_STR):
             lua_fail("can\'t join a {lv_type_name(if ta != LT_INT and ta != LT_STR: a else: b)} into a string")
             return LV_NIL
-        return lv_str(lua_tostring(a) + lua_tostring(b))
+        let x = lua_tostring(a)
+        let y = lua_tostring(b)
+        if not lx_str_ok(x.length + y.length, ".."): return LV_NIL
+        return lv_str(x + y)
     if op >= OP_LT and op <= OP_GE and (a & 7) == LT_STR and (b & 7) == LT_STR:
         let x = lv_text(a)
         let y = lv_text(b)
@@ -193,8 +216,12 @@ def lx_arith_slow(op:int, a:int, b:int) -> int:
     if op == OP_BAND: return lv_int(x & y)
     if op == OP_BOR: return lv_int(x | y)
     if op == OP_BXOR: return lv_int(x ^ y)
-    if op == OP_SHL: return lv_int(if y >= 64 or y <= -64: 0 elif y >= 0: x << y else: x >> -y)
-    if op == OP_SHR: return lv_int(if y >= 64 or y <= -64: 0 elif y >= 0: x >> y else: x << -y)
+    if op == OP_SHL or op == OP_SHR:
+        let left = if op == OP_SHL: y else: -y  // (how far left: right is negative)
+        if left < 0 and x < 0:  // (Lua fills from the top with 0 bits, which takes its 64: here that's an error, never a quiet difference)
+            lua_fail("a negative number shifted right (use // for that here)")
+            return LV_NIL
+        return lv_int(if left >= 64 or left <= -64: 0 elif left >= 0: x << left else: x >> -left)
     return LV_NIL
 
 def lx_eval(e:LNode) -> int:
@@ -299,10 +326,13 @@ def lx_eval_call(e:LNode) -> bool:
     var args = []::int
     if e.k == N_METHOD:
         let o = lx_eval(e.a[0])
-        if (o & 7) != LT_TAB:
+        if (o & 7) == LT_STR:  // ("x"):upper() is string.upper("x")
+            let lib = lua_get(l_env, lv_str("string"))
+            if (lib & 7) == LT_TAB: f = lua_get(lib, e.n)
+        elif (o & 7) != LT_TAB:
             lua_fail("can\'t call method \'{lv_text(e.n)}\' on a {lv_type_name(o)}")
             return false
-        f = lua_get(o, e.n)
+        else: f = lua_get(o, e.n)
         args.push(o)
         for(lx_eval_list(e.a, 1)) v: args.push(v)
     else:
@@ -349,9 +379,19 @@ def lua_call(f:int, args:[int]) -> bool:
     lerr_file = proto.file
     for(proto.slots): lst.push(LV_NIL)
     for(proto.params) j: lx_init_local(j, if j < args.length: args[j] else: LV_NIL)
+    let cost = proto.body.d + 10
+    if lnest + cost > L_MAX_NESTED:
+        lua_fail("calls nested too deep (their code, all together, over {L_MAX_NESTED} deep)")
+        truncate(lst, lfb)
+        lfb = fb0
+        lclo = clo0
+        lboxed = boxed0
+        return false
+    lnest += cost
     ldepth++
     let r = lx_exec_block(proto.body)
     ldepth--
+    lnest -= cost
     if r != RUN_RETURN: truncate(rets, 0)
     truncate(lst, lfb)
     lfb = fb0
@@ -487,7 +527,7 @@ def lx_exec_genfor(s:LNode) -> int:
             if j < lt_arr[t].length:
                 key = lv_int(j + 1)
                 v = lt_arr[t][j]
-                if v == LV_NIL: break  // (ipairs stops at a hole; pairs skips it below)
+                if v == LV_NIL and not pairs: break  // (ipairs stops at a hole; pairs skips it below)
             elif pairs and j - lt_arr[t].length < lt_keys[t].length:
                 let at = j - lt_arr[t].length
                 key = lt_keys[t][at]
@@ -547,6 +587,27 @@ def lx_want_tab(a:[int], j:int, fname:string) -> int:
 def lx_ret(v:int): rets.push(v)
 
 // string.sub's and string.find's positions, Lua style (1-based, negative from the end), as a 0-based start and length.
+// tonumber's reading of a string: an integer in decimal or 0x hex, with spaces around and a sign; nil if it's not one.
+def lx_tonumber(text:string) -> int:
+    var s = text
+    while s.length and (s[0] == ' ' or s[0] == '\t' or s[0] == '\n' or s[0] == '\r'): s = substring(s, 1, -1)
+    while s.length and (s[s.length - 1] == ' ' or s[s.length - 1] == '\t' or s[s.length - 1] == '\n' or s[s.length - 1] == '\r'): s = substring(s, 0, s.length - 1)
+    var neg = false
+    if s.length and (s[0] == '-' or s[0] == '+'):
+        neg = s[0] == '-'
+        s = substring(s, 1, -1)
+    var base = 10
+    if s.length > 2 and s[0] == '0' and (s[1] == 'x' or s[1] == 'X'):
+        base = 16
+        s = substring(s, 2, -1)
+    if not s.length: return LV_NIL
+    var v = 0
+    for(s) c:
+        let d = if lx_is_digit(c): c - '0' elif base == 16 and lx_is_hex(c): lx_hex_val(c) else: -1
+        if d < 0 or v > (L_MAX_INT - d) / base: return LV_NIL
+        v = v * base + d
+    return lv_int(if neg: -v else: v)
+
 def lx_str_range(len:int, i:int, j:int) -> int, int:
     let s = if i < 0: max(len + i + 1, 1) elif i == 0: 1 else: i
     let e = if j < 0: len + j + 1 elif j > len: len else: j
@@ -567,9 +628,7 @@ def lua_builtin(id:int, a:[int]):
         case B_TONUMBER:
             let v = lx_arg_of(a, 0)
             if lv_is_int(v): lx_ret(v)
-            elif (v & 7) == LT_STR:
-                let n, ok = string_to_int(lv_text(v))
-                lx_ret(if ok: lv_int(n) else: LV_NIL)
+            elif (v & 7) == LT_STR: lx_ret(lx_tonumber(lv_text(v)))
             else: lx_ret(LV_NIL)
         case B_ERROR: lua_fail(lua_tostring(lx_arg_of(a, 0)))
         case B_ASSERT:
@@ -603,8 +662,9 @@ def lua_builtin(id:int, a:[int]):
                     if lv_is_int(key) and (key >> 3) >= 1 and (key >> 3) <= lt_arr[t].length: j = key >> 3
                     else:
                         let at = lx_tab_find(t, key)
-                        if at < 0: lua_fail("next: a key that isn\'t in the table")
-                        j = lt_arr[t].length + at + 1
+                        if at >= 0: j = lt_arr[t].length + at + 1
+                        elif lv_is_int(key) and (key >> 3) >= 1: j = key >> 3  // (an array key just cleared: the array shrank)
+                        else: lua_fail("next: a key that isn\'t in the table")
                 var done = false
                 while not done and not lfail:
                     if j < lt_arr[t].length:
@@ -626,10 +686,11 @@ def lua_builtin(id:int, a:[int]):
             let first = lx_arg_of(a, 0)
             if first == lv_str("#"): lx_ret(lv_int(a.length - 1))
             else:
-                let n = lx_want_int(a, 0, "select")
-                if n < 1: lua_fail("select: index out of range")
+                var n = lx_want_int(a, 0, "select")
+                if n < 0: n += a.length  // (from the end: -1 is the last)
+                if not lfail and n < 1: lua_fail("select: index out of range")
                 var j = n
-                while j < a.length:
+                while j < a.length and not lfail:
                     lx_ret(a[j])
                     j++
         case B_MATH_MIN, B_MATH_MAX:
@@ -658,7 +719,10 @@ def lua_builtin(id:int, a:[int]):
         case B_STR_FIND:  // (plain text only: no patterns)
             let s = lx_want_str(a, 0, "string.find")
             let pat = lx_want_str(a, 1, "string.find")
-            let at = find_string(s, pat)
+            var init = if a.length > 2 and lx_arg_of(a, 2) != LV_NIL: lx_want_int(a, 2, "string.find") else: 1
+            if init < 0: init = max(1, s.length + init + 1)
+            if init == 0: init = 1
+            let at = if init > s.length + 1 or lfail: -1 else: find_string(s, pat, init - 1)
             if at >= 0:
                 lx_ret(lv_int(at + 1))
                 lx_ret(lv_int(at + pat.length))
@@ -666,7 +730,7 @@ def lua_builtin(id:int, a:[int]):
         case B_STR_REP:
             let s = lx_want_str(a, 0, "string.rep")
             let n = lx_want_int(a, 1, "string.rep")
-            if s.length * n > 100000: lua_fail("string.rep: over 100000 characters")
+            if n > 0 and n > 100000 / max(1, s.length): lua_fail("string.rep: over 100000 characters")
             else: lx_ret(lv_str(repeat_string(s, max(n, 0))))
         case B_STR_FORMAT:
             let fmt = lx_want_str(a, 0, "string.format")
@@ -675,7 +739,8 @@ def lua_builtin(id:int, a:[int]):
             var arg = 1
             while j < fmt.length and not lfail:
                 let c = fmt[j]
-                if c == '%' and j + 1 < fmt.length:
+                if c == '%' and j + 1 >= fmt.length: lua_fail("string.format: a % with nothing after it")
+                elif c == '%':
                     let d = fmt[j + 1]
                     if d == '%': out += "%"
                     elif d == 'd' or d == 'i':
@@ -687,9 +752,11 @@ def lua_builtin(id:int, a:[int]):
                     else: lua_fail("string.format: only %d, %s and %% here")
                     j += 2
                 else:
-                    out += unicode_to_string([ c ])
+                    let k = j
                     j++
-            lx_ret(lv_str(out))
+                    while j < fmt.length and fmt[j] != '%': j++
+                    out += substring(fmt, k, j - k)
+            if lx_str_ok(out.length, "string.format"): lx_ret(lv_str(out))
         case B_TAB_INSERT:
             let t = lx_want_tab(a, 0, "table.insert")
             if not lfail:
@@ -724,7 +791,9 @@ def lua_builtin(id:int, a:[int]):
             let sep = if a.length > 1: lx_want_str(a, 1, "table.concat") else: ""
             if not lfail:
                 let parts = map(lt_arr[t >> 3]) v: lua_tostring(v)
-                lx_ret(lv_str(concat_string(parts, sep)))
+                var size = 0
+                for(parts) x: size += x.length + sep.length
+                if lx_str_ok(size, "table.concat"): lx_ret(lv_str(concat_string(parts, sep)))
         case B_TAB_SORT:  // (a stable merge sort: the same order everywhere)
             let t = lx_want_tab(a, 0, "table.sort")
             let cmp = lx_arg_of(a, 1)
@@ -732,8 +801,11 @@ def lua_builtin(id:int, a:[int]):
                 if l_loaded and (t >> 3) < l_frozen_tab: lua_fail("a table made at load is read-only (state that lasts goes in hook columns)")
                 else:
                     let arr = lt_arr[t >> 3]
+                    let n = arr.length
                     let sorted = lua_sort(copy(arr), cmp)
-                    for(sorted) v, j: arr[j] = v
+                    if not lfail:
+                        if lt_arr[t >> 3].length != n: lua_fail("table.sort: the table changed while it was sorted")
+                        else: for(sorted) v, j: arr[j] = v
         default: lua_fail("an unknown builtin")
 
 def lua_less(x:int, y:int, cmp:int) -> bool:
@@ -769,12 +841,18 @@ def lua_sort(v:[int], cmp:int) -> [int]:
 class LPack:
     id:string
     env:int
-    error = ""  // why it stopped ("" while it runs)
+    error = ""       // why it stopped ("" while it runs)
+    view_error = ""  // the last time it failed when only the view asked (that doesn't stop it)
+    at = -1          // the tick its steps are counted for
+    spent = 0        // and the steps it took in it
 
 var l_packs = []::LPack
 var l_api_names = []::string  // lua/api's functions, by id
 var l_consts = []::string     // lua/api's constants
 var l_const_vals = []::int
+var l_frozen_bytes = 0
+var l_view = false  // only the view is asking (lua/api's lua_hook_run): a failure doesn't stop the pack
+
 let L_BUDGET_LOAD = 10000000
 let L_BUDGET_CALL = 2000000
 
@@ -798,7 +876,11 @@ def lua_reset():
     lfail = false
     lprint = []
     lua_quiet = false
+    ls_bytes = 0
+    l_frozen_bytes = 0
+    l_view = false
     ldepth = 0
+    lnest = 0
     lb_names = append(L_BASE_NAMES, l_api_names)
 
 def lx_set_path(env:int, path:string, v:int):
@@ -821,7 +903,7 @@ def lua_new_env() -> int:
     return env
 
 // Runs a pack's files (name, source pairs, in order) in a new environment. "" or why it can't.
-def lua_load_pack(id:string, files:[string], sources:[string]) -> string:
+def lua_load_pack(id:string, files:[string], sources:[string], budget:int = L_BUDGET_LOAD) -> string:
     let pk = LPack { id, lua_new_env() }
     l_packs.push(pk)
     for(files) file, j:
@@ -832,7 +914,7 @@ def lua_load_pack(id:string, files:[string], sources:[string]) -> string:
         lc_proto.push(proto)
         lc_ups.push([])
         let chunk = ((lc_proto.length - 1) << 3) | LT_FUN
-        if not lua_run(pk, chunk, [], L_BUDGET_LOAD):
+        if not lua_run(pk, chunk, [], budget):
             return pk.error
     return ""
 
@@ -842,6 +924,7 @@ def lua_freeze():
     l_frozen_box = lbox.length
     l_frozen_clo = lc_proto.length
     l_frozen_str = ls_text.length
+    l_frozen_bytes = ls_bytes
     l_loaded = true
 
 // What a call made goes when it's done (it can't have kept any of it: what was made at load is read-only).
@@ -859,8 +942,10 @@ def lua_region_end():
         ls_ids.del(ls_text[j])
         j++
     truncate(ls_text, l_frozen_str)
+    ls_bytes = l_frozen_bytes
 
-// Calls f in pack pk with a budget: false if it failed (the pack is then off, and says why).
+// Calls f in pack pk with a budget: false if it failed (the pack is then off, and says why; unless l_view, when it's
+// only logged, once per reason). Its steps add to pk.spent.
 def lua_run(pk:LPack, f:int, args:[int], budget:int) -> bool:
     if pk.error != "": return false
     let env0 = l_env
@@ -874,12 +959,17 @@ def lua_run(pk:LPack, f:int, args:[int], budget:int) -> bool:
         lbudget = budget
     let ok = lua_call(f, args)
     if not ok:
-        pk.error = lerr
+        if l_view:
+            if pk.view_error != lerr: print "Lua: the pack \'{pk.id}\' failed for the view (it keeps running): {lerr}"
+            pk.view_error = lerr
+        else:
+            pk.error = lerr
+            print "Lua: the pack \'{pk.id}\' stopped: {pk.error}"
         lerr = ""
         lfail = false
-        print "Lua: the pack \'{pk.id}\' stopped: {pk.error}"
     l_env = env0
     if ldepth == 0:
+        if not l_view: pk.spent += lsteps
         lsteps = steps0
         lbudget = budget0
     lline = line0
@@ -894,15 +984,6 @@ def lua_hook_fn(pk:LPack, name:string) -> int:
     let f = lua_get(pk.env, (known << 3) | LT_STR)
     let t = f & 7
     return if t == LT_FUN or t == LT_BUILTIN: f else: LV_NIL
-
-// Calls each pack's `name` that it defines, in load order; then the region ends.
-// (The callback gets each call's results, before they go.)
-def lua_each(name:string, args:[int], got):
-    for(l_packs) pk:
-        let f = lua_hook_fn(pk, name)
-        if f != LV_NIL:
-            if lua_run(pk, f, args, L_BUDGET_CALL): got(rets)
-    lua_region_end()
 
 // Lua's own table, made from Lobster's: a list of values (Lua's 1..n).
 def lua_list(vs:[int]) -> int:

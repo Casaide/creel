@@ -526,7 +526,7 @@ def draw_marks(alpha:float):
         let here = place_cell()
         let s = bt_size[placing]
         for(if bt_line[placing] != 0 and wall_from.x >= 0: wall_cells(wall_from, here) else: [ here ]) g:
-            let ok = can_place(ME, placing, g.x, g.y)
+            let ok = view_can_place(ME, placing, g.x, g.y)
             let pts = map([ int2 { 0, 0 }, int2 { s, 0 }, int2 { s, s }, int2 { 0, s } ]) d: iso(float((g.x + d.x) * 1000), float((g.y + d.y) * 1000))
             gl.color(if ok: float4 { 0.3, 0.9, 0.3, 0.35 } else: float4 { 0.9, 0.2, 0.2, 0.35 }):
                 gl.polygon(pts)

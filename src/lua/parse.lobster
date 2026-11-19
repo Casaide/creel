@@ -38,11 +38,14 @@ def lv_is_int(v:int) -> bool: return (v & 7) == 0
 // Strings, interned: equal strings are the same value.
 var ls_text = []::string
 var ls_ids = dictionary<string, int>(1009)
+var ls_bytes = 0  // their lengths, in all (lua/lua.lobster limits what a call makes)
+let L_MAX_INT = (1 << 60) - 1  // values are 61-bit: integers from -2^60 to 2^60 - 1
 
 def lv_str(s:string) -> int:
     let known = ls_ids.get(s, -1)
     if known >= 0: return (known << 3) | LT_STR
     ls_text.push(s)
+    ls_bytes += s.length
     ls_ids.set(s, ls_text.length - 1)
     return ((ls_text.length - 1) << 3) | LT_STR
 
@@ -165,6 +168,7 @@ class LNode:
     a:[LNode]
     s:[int]
     c = -1  // a global's value, once the load is over (they're read-only then); -1 until it's looked up
+    d = 1   // how deep the tree under it is (running it recurses that deep)
 
 class LProto:
     name:string
@@ -264,13 +268,16 @@ def lx_lex(src:string):
                 i += 2
                 if i >= n or not lx_is_hex(src[i]): lex_err = "{line}: a malformed number"
                 while i < n and lx_is_hex(src[i]):
+                    if v > (L_MAX_INT - lx_hex_val(src[i])) / 16: lex_err = "{line}: a number too big (integers here are under 2^60)"
                     v = v * 16 + lx_hex_val(src[i])
                     i++
             else:
                 while i < n and lx_is_digit(src[i]):
+                    if v > (L_MAX_INT - (src[i] - '0')) / 10: lex_err = "{line}: a number too big (integers here are under 2^60)"
                     v = v * 10 + (src[i] - '0')
                     i++
-            if i < n and (src[i] == '.' or src[i] == 'e' or src[i] == 'E' or src[i] == 'p' or src[i] == 'P'):
+            if lex_err != "": pass()
+            elif i < n and (src[i] == '.' or src[i] == 'e' or src[i] == 'E' or src[i] == 'p' or src[i] == 'P'):
                 lex_err = "{line}: numbers are integers here (lockstep): no fractions or exponents"
             elif i < n and lx_is_name_start(src[i]):
                 lex_err = "{line}: a malformed number"
@@ -306,13 +313,14 @@ def lx_lex(src:string):
                                 k++
                             i--
                             if v > 255: lex_err = "{line}: an escape past 255"
-                            out += unicode_to_string([ v ])
+                            else: out += ensure_size("", 1, v)  // (a byte, as Lua's: not a character)
                         else:
                             lex_err = "{line}: an escape this Lua doesn\'t know"
                         i++
                 else:
-                    out += unicode_to_string([ ch ])
-                    i++
+                    let k = i  // (a run of plain bytes, copied as they are)
+                    while i < n and src[i] != c and src[i] != '\\' and src[i] != '\n': i++
+                    out += substring(src, k, i - k)
             if i >= n and lex_err == "": lex_err = "{line}: unfinished string"
             i++
             lx_lex_push(TK_STR, 0, out, line)
@@ -339,7 +347,7 @@ def lx_lex(src:string):
             else:
                 lx_lex_push(TK_OP, 0, op, line)
                 i += op.length
-    lx_lex_push(TK_EOF, 0, "<eof>", line)
+    for(16): lx_lex_push(TK_EOF, 0, "<eof>", line)  // (the parser looks ahead, and steps on past an error: never off the end)
 
 // ------------------------------------------------------------------ the parser
 class LScope:  // a function being parsed
@@ -354,7 +362,22 @@ var perr = ""        // the first parse error
 var pfile = ""
 var pscopes = []::LScope  // the functions being parsed, innermost last
 
-def lx_node(k:int, n:int, a:[LNode]) -> LNode: return LNode { k, n, tk_line[min(ltp, tk_line.length - 1)], a, [] }
+// Code nests no deeper than this, in the parser and in the tree it makes: deeper is an error, not a crash.
+let L_MAX_NEST = 200
+var pdepth = 0
+
+def lx_node(k:int, n:int, a:[LNode]) -> LNode:
+    let e = LNode { k, n, tk_line[min(ltp, tk_line.length - 1)], a, [] }
+    for(a) x: e.d = max(e.d, x.d + 1)
+    if e.d > L_MAX_NEST: lx_perror("code nested too deep (over {L_MAX_NEST})")
+    return e
+
+// Into a nested part of the code: false (and an error) if it's too deep.
+def lx_nest_in() -> bool:
+    pdepth++
+    if pdepth <= L_MAX_NEST: return true
+    lx_perror("code nested too deep (over {L_MAX_NEST})")
+    return false
 
 def lx_tk_is(op:string) -> bool: return tk_kind[ltp] == TK_OP and tk_text[ltp] == op
 
@@ -417,6 +440,14 @@ def lx_name_node(name:string) -> LNode:
     return lx_node(k, if k == N_GLOBAL: lv_str(name) else: at, [])
 
 def lx_parse_block() -> LNode:
+    if not lx_nest_in():
+        pdepth--
+        return lx_node(N_BLOCK, 0, [])
+    let b = lx_parse_block_in()
+    pdepth--
+    return b
+
+def lx_parse_block_in() -> LNode:
     let sc = lx_scope()
     let depth = sc.names.length
     let stmts = []::LNode
@@ -424,7 +455,9 @@ def lx_parse_block() -> LNode:
         if lx_tk_is("return"):
             let r = lx_node(N_RETURN, 0, [])
             ltp++
-            if not lx_block_ends() and not lx_tk_is(";"): r.a = lx_parse_exprs()
+            if not lx_block_ends() and not lx_tk_is(";"):
+                r.a = lx_parse_exprs()
+                for(r.a) x: r.d = max(r.d, x.d + 1)
             lx_accept(";")
             stmts.push(r)
             if not lx_block_ends(): lx_perror("\'return\' must end its block")
@@ -593,7 +626,7 @@ def lx_parse_primary() -> LNode:
         lx_expect(")")
         return lx_node(N_PAREN, 0, [ e ])
     lx_perror("an expression expected near \'{tk_text[ltp]}\'")
-    ltp++
+    if tk_kind[ltp] != TK_EOF: ltp++
     return lx_node(N_NIL, 0, [])
 
 def lx_parse_args() -> [LNode]:
@@ -626,6 +659,14 @@ def lx_parse_suffixed() -> LNode:
     return e
 
 def lx_parse_table() -> LNode:
+    if not lx_nest_in():
+        pdepth--
+        return lx_node(N_NIL, 0, [])
+    let t = lx_parse_table_in()
+    pdepth--
+    return t
+
+def lx_parse_table_in() -> LNode:
     lx_expect("{{")
     let items = []::LNode
     while not lx_tk_is("}}") and perr == "":
@@ -681,6 +722,14 @@ def lx_binop() -> int, int, int:
 let L_UNARY = 12
 
 def lx_parse_expr(limit:int) -> LNode:
+    if not lx_nest_in():
+        pdepth--
+        return lx_node(N_NIL, 0, [])
+    let e = lx_parse_expr_in(limit)
+    pdepth--
+    return e
+
+def lx_parse_expr_in(limit:int) -> LNode:
     var e = lx_node(N_NIL, 0, [])
     if lx_tk_is("not") or lx_tk_is("-") or lx_tk_is("#") or lx_tk_is("~"):
         let t = tk_text[ltp]
@@ -707,6 +756,7 @@ def lua_compile(file:string, src:string) -> int, string:
     if lex_err != "": return -1, "{file}:{lex_err}"
     ltp = 0
     perr = ""
+    pdepth = 0
     pfile = file
     let proto = LProto { "(main chunk)", file, 0, 0, [], [], lx_node(N_BLOCK, 0, []) }
     pscopes = [ LScope { nil, proto, [], [], [] } ]

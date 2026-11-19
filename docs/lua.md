@@ -13,8 +13,17 @@ town rules (homes, eating, doors on roads) are the worked example, in Age of Any
   `building_column(name)` and `player_column(name)`, declared while the files load. After the load, the files' globals,
   their file-level locals and the tables they made are read-only: writing to one is an error. A call's own locals and
   tables are fine; they're dropped when it returns.
-- An error, or a call over its step budget (2,000,000 steps; 10,000,000 for the load), turns that pack's hooks off for
-  the rest of the match, the same way on every machine, and the log says why.
+- An error, or going over a step budget, turns that pack's hooks off for the rest of the match, the same way on every
+  machine, and the log says why. The budgets: 2,000,000 steps a call, 4,000,000 a tick for all of a pack's calls
+  together, 10,000,000 for the load. A stopped pack is part of the match's state: it's saved and hashed, and stays
+  stopped when the save loads. `lua_errors()` lists the stopped packs, for the game to show.
+- The view asks two hooks too: `can_place` for the placement preview (through `view_can_place`) and `task_name` for
+  the panel. Those calls run on one machine only, so they may only read, have a budget of 100,000 steps, and a failure
+  there is logged and passed over (the hook answers as if the pack had none); it never stops the pack. `can_place` only
+  reads from the sim as well.
+- Limits that keep a bad pack from taking the game down with it: no string over 1 MB and no more than 16 MB of strings
+  made in one call; code nested no deeper than 200 (in the parser and in the tree it makes); calls no deeper than 200,
+  and their code no deeper than 4,000 all together. Each is an error in the pack, never a crash.
 - The files are part of the pack's signature, so a changed rule is a different pack in network play and saves. A file
   that doesn't read (a syntax error, a float, a refused word) refuses the mod when it loads, with the file and line.
 
@@ -23,13 +32,16 @@ town rules (homes, eating, doors on roads) are the worked example, in Age of Any
 Lua 5.4, cut to what lockstep needs:
 
 - **Integers only**, 61 bits signed. Float literals, `/` and `^` are refused: use `//` (floor division) and `%`.
-  Bitwise `& | ~ << >>` work.
+  Bitwise `& | ~ << >>` work, but a negative number shifted right is an error (Lua fills from the top with 0 bits,
+  which takes 64). Literals must be under 2^60.
 - Values: nil, booleans, integers, strings, tables, functions. Closures, multiple returns, method calls (`t:m()`),
   table constructors, `#`, `..`, all the loops, `break`.
 - Not here: varargs (`...`), `goto`, metatables, coroutines, `<const>`/`<close>`.
-- `pairs` goes in insertion order (array part first), the same everywhere.
+- `pairs` goes in insertion order (array part first), the same everywhere. `#` of a table with holes is a border, as
+  Lua's is, but not always the one Lua picks.
 - The library: `print`, `type`, `tostring`, `tonumber`, `error`, `assert`, `select`, `ipairs`, `pairs`, `next`,
   `math.min/max/abs`, `string.sub/len/byte/upper/lower/rep/find` (plain text, no patterns), `string.format` (`%d %s %%`),
+  string methods (`s:upper()`),
   `table.insert/remove/sort/concat` (`sort` is stable). Nothing else: no `io`, `os`, `require`, `load`, `debug`.
 
 ## Hooks a pack can define
@@ -86,4 +98,7 @@ packs imports `lua.parse` before `gen.mods`; one that runs the sim imports `lua.
 
 The interpreter walks the syntax tree: roughly 100 ns a simple statement and 300 ns an API call in a JIT build. Keep
 per-unit work in `on_tick` small, and look at things once a second (`tick() % 20 == 0`) where a rule allows.
-`examples/plain/src/test_lua.lobster` is the reference for what works and what is refused.
+`examples/plain/src/test_lua.lobster` is the reference for what works and what is refused: it also mutates its own
+snippets into 20,000 broken programs that must load or fail with an error. `./lua_diff.sh` runs its programs and 2,000
+random integer expressions in `lua5.4` too, and they must print the same but for the differences above (`check.sh`
+runs it when `lua5.4` is installed).

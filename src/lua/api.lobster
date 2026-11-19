@@ -84,8 +84,13 @@ def lua_of_json(v:JV) -> int:
         for(v.keys) k, j: lua_set_raw(t, lv_str(k), lua_of_json(v.a[j]))
     return t
 
-// The functions that change the sim: not while it's only being read (lua_task_name, for the panel).
-let LA_WRITES = [ 15, 16, 17, 18, 19, 49, 57, 58, 59, 62, 63, 64, 65, 71, 73, 75 ]
+// The functions that change the sim: not while it's only being read (the view's calls, and can_place).
+let LA_WRITE_NAMES = [ "set_u_task", "set_u_target", "set_u_work", "set_u_stuck", "set_u_moving", "set_pop", "want", "hold_take",
+    "trained", "start_gather", "start_build", "approach_building", "clear_task", "unit_set", "building_set", "player_set" ]
+let LA_WRITES = map(LA_WRITE_NAMES) n:
+    let id = find(LA_NAMES) x: x == n
+    assert id >= 0
+    id
 var lua_read_only = false
 
 def lua_api(id:int, a:[int]):
@@ -312,19 +317,21 @@ def lua_api(id:int, a:[int]):
         default: lua_fail("an unknown API function")
 
 // ------------------------------------------------------------------ the hook points
-// The Lua files of a pack: <its data>/hooks/*.lua, by name.
-def lua_pack_files(p:Pack) -> [string]:
-    let names, sizes = scan_folder(p.root + "/hooks", true)
-    if not names or not sizes: return []
-    let out = []::string
-    for(names) n, k:
-        if sizes[k] >= 0 and ends_with(n, ".lua"): out.push(n)
-    return sorted_strs(out)
-
+var hook_view = false  // the view is asking a hook (the placement preview, the panel): it may only read, and a failure
+                       // there mustn't change the sim (it runs on one machine). Not the match's state.
 var lua_on = false  // a pack has Lua: the hooks below have something to call
 var lua_rules = jobj()  // the rules the packs' Lua last loaded with: a new match or a loaded save loads it again
+let L_BUDGET_TICK = 4000000  // a pack's steps in one tick, all its calls together
+let L_BUDGET_VIEW = 100000   // a call the view makes (the placement preview, the panel)
 
-// As a match starts (the game's hook_declare): every pack's Lua runs, the game's first, and is then read-only.
+// The pack stopped in the sim: noted in the match's state (saved and hashed), so it stays stopped through a save.
+def lx_note_stop(pk:LPack):
+    if pk.error == "" or (find(hook_stopped) id: id == pk.id) >= 0: return
+    hook_stopped.push(pk.id)
+    hook_stopped_why.push(pk.error)
+
+// As a match starts (the game's hook_declare): every pack's Lua runs, the game's first, and is then read-only. A pack
+// the match's state says stopped stays stopped (a loaded save).
 def lua_declare():
     l_api_names = LA_NAMES
     lua_reset()
@@ -332,18 +339,22 @@ def lua_declare():
     lua_rules = su_rules
     lua_on = false
     for(lib_packs) p:
-        let files = lua_pack_files(p)
-        if files.length:
+        pack_lua(p)
+        if p.lua_files.length:
             lua_on = true
-            let sources = map(files) f:
-                let text = read_file(p.root + "/hooks/" + f)
-                if text: text else: ""
-            lua_load_pack(p.id, map(files) f: p.id + "/hooks/" + f, sources)
+            lua_load_pack(p.id, map(p.lua_files) f: p.id + "/hooks/" + f, p.lua_sources)
+            let pk = top(l_packs)
+            let was = find(hook_stopped) id: id == p.id
+            if was >= 0: pk.error = hook_stopped_why[was]
+            else: lx_note_stop(pk)
     lua_freeze()
 
-// The packs' Lua for this match: loaded again if the rules aren't the ones it loaded with (a save was loaded).
+// The packs' Lua for this match: loaded again if the rules aren't the ones it loaded with (a save was loaded). Never
+// from the view: it waits for the sim's next call.
 def lua_fresh() -> bool:
-    if lua_rules != su_rules: lua_declare()
+    if lua_rules != su_rules:
+        if hook_view: return false
+        lua_declare()
     return lua_on
 
 // The packs that stopped, and why (a load error, a run-time error or the step budget).
@@ -352,6 +363,34 @@ def lua_errors() -> [string]:
     for(l_packs) pk:
         if pk.error != "": out.push("{pk.id}: {pk.error}")
     return out
+
+// Calls f in pack pk for a hook. From the sim: within its call's and its tick's budget, and a failure stops the pack
+// (noted in the match's state). From the view (hook_view: the placement preview, the panel): read-only, a small budget,
+// and a failure is only logged: the view runs on one machine, and mustn't change what the sim does on it.
+def lua_hook_run(pk:LPack, f:int, args:[int]) -> bool:
+    if hook_view:
+        let ro = lua_read_only
+        lua_read_only = true
+        l_view = true
+        let ok = lua_run(pk, f, args, L_BUDGET_VIEW)
+        l_view = false
+        lua_read_only = ro
+        return ok
+    if ldepth == 0 and pk.at != tick:
+        pk.at = tick
+        pk.spent = 0
+    let ok = lua_run(pk, f, args, min(L_BUDGET_CALL, L_BUDGET_TICK - pk.spent))
+    if not ok: lx_note_stop(pk)
+    return ok
+
+// Calls each pack's `name` that it defines, in load order; then the region ends.
+// (The callback gets each call's results, before they go.)
+def lua_each(name:string, args:[int], got):
+    for(l_packs) pk:
+        let f = lua_hook_fn(pk, name)
+        if f != LV_NIL:
+            if lua_hook_run(pk, f, args): got(rets)
+    lua_region_end()
 
 def lua_tick():
     if not lua_fresh(): return
@@ -363,12 +402,16 @@ def lua_unit_tick(i:int):
     lua_each("on_unit_tick", [ lv_int(i) ]) r:
         pass()
 
+// Whether a pack refuses the spot. It only reads, from the sim (lay_foundation, the bots) or the view (the preview).
 def lua_can_place(p:int, k:int, cx:int, cy:int, sx:int, sy:int) -> bool:
     if not lua_fresh(): return true
     var ok = true
     let args = map([ p, k, cx, cy, sx, sy ]) v: lv_int(v)
+    let ro = lua_read_only
+    lua_read_only = true
     lua_each("can_place", args) r:
         if r.length and not lv_truthy(r[0]): ok = false
+    lua_read_only = ro
     return ok
 
 def lua_on_hit(by:int, target:int, damage:int) -> int:
@@ -376,7 +419,7 @@ def lua_on_hit(by:int, target:int, damage:int) -> int:
     var d = damage
     for(l_packs) pk:
         let f = lua_hook_fn(pk, "on_hit")
-        if f != LV_NIL and lua_run(pk, f, [ lv_int(by), lv_int(target), lv_int(d) ], L_BUDGET_CALL):
+        if f != LV_NIL and lua_hook_run(pk, f, [ lv_int(by), lv_int(target), lv_int(d) ]):
             if rets.length and lv_is_int(rets[0]): d = rets[0] >> 3
     lua_region_end()
     return d
@@ -397,7 +440,7 @@ def lua_on_order(code:int, p:int, ids:[int], x:int, y:int):
         let f = lua_hook_fn(pk, "on_order")
         if f != LV_NIL:
             let list = lua_list(map(ids) v: lv_int(v))
-            lua_run(pk, f, [ lv_int(code), lv_int(p), list, lv_int(x), lv_int(y) ], L_BUDGET_CALL)
+            lua_hook_run(pk, f, [ lv_int(code), lv_int(p), list, lv_int(x), lv_int(y) ])
     lua_region_end()
 
 def lua_ai_train_score(p:int, slot:string, k:int, score:int) -> int:
@@ -405,18 +448,27 @@ def lua_ai_train_score(p:int, slot:string, k:int, score:int) -> int:
     var s = score
     for(l_packs) pk:
         let f = lua_hook_fn(pk, "ai_train_score")
-        if f != LV_NIL and lua_run(pk, f, [ lv_int(p), lv_str(slot), lv_int(k), lv_int(s) ], L_BUDGET_CALL):
+        if f != LV_NIL and lua_hook_run(pk, f, [ lv_int(p), lv_str(slot), lv_int(k), lv_int(s) ]):
             if rets.length and lv_is_int(rets[0]): s = rets[0] >> 3
     lua_region_end()
     return s
 
-// What the panel says unit slot i is doing, when a pack made the task up ("" for the engine's own tasks). It only
-// reads: the panel isn't the sim.
+// What the panel says unit slot i is doing, when a pack made the task up ("" for the engine's own tasks). The view
+// asks: it only reads, and a failure doesn't stop the pack.
 def lua_task_name(i:int) -> string:
-    if not lua_fresh(): return ""
+    let view0 = hook_view
+    hook_view = true
     var name = ""
-    lua_read_only = true
-    lua_each("task_name", [ lv_int(i) ]) r:
-        if name == "" and r.length and (r[0] & 7) == LT_STR: name = lv_text(r[0])
-    lua_read_only = false
+    if lua_fresh():
+        lua_each("task_name", [ lv_int(i) ]) r:
+            if name == "" and r.length and (r[0] & 7) == LT_STR: name = lv_text(r[0])
+    hook_view = view0
     return name
+
+// can_place, asked by the view (the placement preview): a pack's rules may only read, and can't stop over it.
+def view_can_place(player:int, k:int, cx:int, cy:int, along:int = 0) -> bool:
+    let view0 = hook_view
+    hook_view = true
+    let ok = can_place(player, k, cx, cy, along)
+    hook_view = view0
+    return ok
