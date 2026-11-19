@@ -60,6 +60,8 @@ def setup_world(seed_value:int, map_id:string, sides:[JV], rules:JV, team_ids:[i
     r_stocked = if gstr(ec, "model", "pool") == "stocked": 1 else: 0
     r_carrier_load = gint(ec, "carrier_load", 1)
     r_carrier_slots = gstrs(ec, "carriers")
+    rd_names = map(glist(ec, "roads")): gstr(_, "name", "")
+    rd_pct = map(glist(ec, "roads")): gint(_, "speed_pct", 100)
     r_carry = as_int(at(ec, "carry"))
     r_queue_max = as_int(at(ec, "queue_max"))
     r_pop_max = as_int(at(ec, "pop_max"))

@@ -103,6 +103,8 @@ def state_hash() -> int:
     h = mix(h, next_id)
     h = mix(h, next_group)
     for(field_keys) k: h = mix(h, k)
+    for(road) v, c:  // (#51)
+        if v > 0: h = mix(h, c * 8 + v)
     for(hook_unit_cols) col:
         for(col) v: h = mix(h, v)
     for(hook_player_cols) col:

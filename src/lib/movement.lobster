@@ -21,7 +21,7 @@ def plan(i:int, x:int, y:int, stuck:int) -> int, int:
         if cost <= 2 * DIAGONAL:  // within two cells: make for a free spot before meeting the crowd
             if u_task[i] == T_RETURN and u_gspot[i] >= 0: return drop_spot(i, x, y)
             return spot(i, x, y)
-    elif cost == 0 or (cost <= DIRECT_COST and stuck < STUCK_LIMIT / 2 and clear_path(x, y, tx, ty, u_radius[i], lane(i))):
+    elif cost == 0 or (cost <= DIRECT_COST and (not road.length or isqrt(dist2(x, y, tx, ty)) * STRAIGHT / TILE <= cost + STRAIGHT) and stuck < STUCK_LIMIT / 2 and clear_path(x, y, tx, ty, u_radius[i], lane(i))):
         return tx, ty
     elif u_reach[i] == 2 and cost <= 4 * STRAIGHT:
         let cx, cy = round_corner(i, x, y, tx, ty)  // its place is round the far side of the building
