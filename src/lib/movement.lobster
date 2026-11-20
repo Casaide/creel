@@ -478,8 +478,9 @@ def separate():
             if b >= 0 and gap_b(i, b) <= t_reach[u_kind[i]] + HOLD: s_planted[i] = 1
             // A gun standing to fire: its own side goes round it (#262). A foe still shoves it, and so do bows, whose crush is what's balanced.
             if s_planted[i] == 0 and t_ranged[u_kind[i]] != 0 and t_shot_speed[u_kind[i]] >= GUN_SHOT_SPEED: s_planted[i] = 2
+    let hc = inside_col()
     for(n) u:
-        s_inside[u] = if r_inside_ticks > 0 and u_work[u] > 0 and (u_task[u] == T_CARRY or u_task[u] == T_RETURN): 1 else: 0
+        s_inside[u] = if is_inside(u, hc): 1 else: 0
     for(n) u:
         if u_perch[u] == 0 and s_inside[u] == 0:  // units on walls stand apart from the crowd below, and those inside a building (#120) aren't in it
             let cx = sp_cell[u] % w
