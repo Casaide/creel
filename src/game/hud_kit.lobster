@@ -11,11 +11,21 @@ let TB_TEXT = "data/fonts/Droid_Sans/DroidSans.ttf"  // (the plain font)
 
 let tb_icons = dictionary<string, resource<texture>>(64)
 
-// An icon by name (icons/<name>.png), the generic research scroll for one there isn't.
+// An icon's PNG by name: the last pack's that has one (<its data>/icons/<name>.png, a mod's goods, #117), else the
+// game's (icons/<name>.png), else "".
+def icon_file(name:string) -> string:
+    for(lib_packs.length) k:
+        let f = lib_packs[lib_packs.length - 1 - k].root + "/icons/" + name + ".png"
+        if read_file(f): return f
+    let own = "icons/" + name + ".png"
+    return if read_file(own): own else: ""
+
+// An icon by name (icon_file), the generic research scroll for one there isn't.
 def tb_icon_tex(name:string) -> resource<texture>?:
     let t = tb_icons.get(name)
     if t: return t
-    let made = gl.load_texture("icons/" + name + ".png", texture_format_clamp)
+    let f = icon_file(name)
+    let made = if f != "": gl.load_texture(f, texture_format_clamp) else: nil
     if made:
         tb_icons.set(name, made)
         return made
