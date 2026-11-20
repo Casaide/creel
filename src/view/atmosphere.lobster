@@ -56,6 +56,7 @@ var atmo_sun_dir = float2 { -0.6, 0.8 }  // towards the sun on the screen (y up)
 var atmo_shade:resource<texture>? = nil  // the ground's shadows this frame, the screen's size, sampled nearest (red: 1 in shade)
 var atmo_ground:resource<texture>? = nil  // the ground's own shade, kept for what stands in it (atmo_shade_standing)
 var atmo_shade_used = false              // the game drew shadows into it this frame
+var atmo_shade_off = false               // the last frame was shaded with a buffer not the screen's size: each unit's mask off it (#110)
 var atmo_low:resource<texture>? = nil    // the height of what's drawn at each pixel this frame, for the low fog (atmo_low_begin)
 var atmo_low_used = false                // the game drew the heights this frame
 var atmo_low_top = 0.0                   // levels: the low fog's top (atmo_low_fog_at; 0: no low fog)
@@ -581,7 +582,7 @@ def atmo_shading() -> bool: return atmo_on and atmo_opt_num("sun_shade") > 0.0
 // shade) with atmo_shade_clear, its colour's red how much of it shows. Before atmo_begin.
 def atmo_shade_begin():
     let ws = gl.window_size()
-    if not atmo_shade or ws != atmo_size:
+    if not atmo_shade or gl.texture_size(atmo_shade) != ws:  // (its own size, not atmo_size: atmo_begin may have moved that on already, #110)
         atmo_shade = atmo_target(ws, true)
     gl.switch_to_framebuffer(atmo_shade)
     gl.ortho()
@@ -764,6 +765,7 @@ def atmo_end(cam:float2, zoom:float, canvas:float):
     for(ATMO_NUMS) k, i: gl.set_uniform(k, atmo_nums[i])
     for(ATMO_COLS) k, i: gl.set_uniform(k, atmo_cols[i])
     let shaded = atmo_shade_used and atmo_shade != nil
+    atmo_shade_off = shaded and gl.texture_size(assert atmo_shade) != atmo_size
     for(ATMO_OPT) k, i: gl.set_uniform(k, if not shaded and (k == "sun_shade" or k == "shafts" or k == "mist" or k == "woods" or k == "unit_lift" or k == "unit_rim"): 0.0 else: atmo_opt[i])
     for(ATMO_OPT_COLS) k, i: gl.set_uniform(k, atmo_opt_cols[i])
     gl.set_uniform("sun_dir", normalize(atmo_sun_dir))

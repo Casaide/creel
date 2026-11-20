@@ -5,6 +5,7 @@ var window_shown = int2_0
 var window_toggles = []::float  // fsat:<seconds>,<seconds>: switch then, whatever the keys (tests and captures)
 var window_report = ""          // fsreport:<file>: write each size the window takes
 var window_sizes = ""
+var window_shade_off = false    // the report has said the atmosphere shaded with a buffer not the window's size
 
 def window_combo() -> bool:
     if gl.button("return") != 1: return false
@@ -32,3 +33,7 @@ def window_tick():
         if window_report != "":
             window_sizes += "window: {window_shown} fullscreen {window_fullscreen}\n"
             write_file(window_report, window_sizes, 0, 1)
+    if atmo_shade_off and window_report != "" and not window_shade_off:  // (#110: its shade buffer left at the old size)
+        window_shade_off = true
+        window_sizes += "atmosphere: shaded with a buffer not the window\'s size, after window {window_shown}\n"
+        write_file(window_report, window_sizes, 0, 1)
