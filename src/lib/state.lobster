@@ -342,6 +342,8 @@ var bt_hold = []::[int]   // per resource: how much of it a building of this typ
 var bt_store = []::int    // 1: what it holds counts as its owner's stock (a storehouse); stocked economies only
 var bt_after = []::[int]  // building types a player needs one finished of before it may lay this one (buildings.json "after", #105)
 var bt_road = []::int     // the road kind a road plan of this type lays when built (rules economy.roads), or -1 (#51)
+var bt_ground = []::int   // the terrain a plan of this type becomes when built (buildings.json "becomes": {"terrain"}), or -1 (#123)
+var bt_drag = []::int     // 1: laid by dragging, a plan a cell, as a road is (buildings.json "drag", #123)
 var bt_bridge = []::int   // a road plan that spans water: built, it stands as a bridge (lib/bridges) (#51)
 var bt_in = []::[int]     // per resource: what one round of its recipe takes (buildings.json makes.in; lib/recipes, #50)
 var bt_out = []::[int]    // per resource: what one round makes (makes.out)
@@ -616,6 +618,8 @@ def pad_saved_columns():
     while b_site.length < b_id.length: b_site.push([])
     while bt_road.length < bt_ladder.length: bt_road.push(-1)  // (a save from before road plans, #51)
     while bt_bridge.length < bt_ladder.length: bt_bridge.push(0)
+    while bt_ground.length < bt_ladder.length: bt_ground.push(-1)  // (a save from before, #123)
+    while bt_drag.length < bt_ladder.length: bt_drag.push(0)
     for(unit_columns()) col:
         while col.length < u_id.length: col.push(0)
     for(building_columns()) col:

@@ -568,6 +568,14 @@ def become_road(b:int):
     set_walk_over(cells, false)
     demolish(b)
 
+// A plan that becomes ground (bt_ground, #123): its cells take that terrain, with its resource, and it goes.
+def become_terrain(b:int):
+    let cells = footprint(b)
+    let t = bt_ground[b_kind[b]]
+    set_walk_over(cells, false)
+    demolish(b)
+    for(cells) c: set_terrain(c, t)
+
 def become_ground(b:int, i:int):
     let k = b_kind[b]
     let cells = footprint(b)
@@ -762,6 +770,7 @@ def build_job(i:int):
                 for(b_site[b]) c, r: b_hold[b][r] -= c
                 b_site[b] = []
             if bt_road[k] >= 0: become_road(b)
+            elif bt_ground[k] >= 0: become_terrain(b)
             elif bt_farm[k]: become_ground(b, i)
             elif bt_pen_animals[k] > 0: pen_opened(b)  // a pen: walked into
             else: gather_after_camp(b)

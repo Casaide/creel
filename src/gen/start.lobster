@@ -153,7 +153,7 @@ def setup_btypes():
         let at_ = gobj(b, "attack")
         let size = as_int(at(b, "size"))
         let becomes = gobj(b, "becomes")
-        let farm = becomes.keys.length > 0
+        let farm = has(becomes, "land") or has(becomes, "water")
         let arrows = gint(at_, "arrows", 1)
         let gate_ = gbool(b, "gate", false)
         let ladder = gbool(b, "ladder", false)
@@ -195,6 +195,10 @@ def setup_btypes():
         bt_road.push(if road_name == "": -1 else: find(rd_names): _ == road_name)
         assert road_name == "" or bt_road[bt_road.length - 1] >= 0
         bt_bridge.push(if gbool(b, "bridge", false): 1 else: 0)  // a road plan over water
+        let ground = gstr(becomes, "terrain", "")  // a plan that becomes this terrain when built, and goes (a field, #123)
+        bt_ground.push(if ground == "": -1 else: str_index(terrain_ids, ground))
+        assert ground == "" or bt_ground[bt_ground.length - 1] >= 0
+        bt_drag.push(if gbool(b, "drag", false) or road_name != "": 1 else: 0)
         assert not gbool(b, "bridge", false) or road_name != ""
         let mk = gobj(b, "makes")  // {"in": {"<resource>": n}, "out": {...}, "time": seconds}
         let ins = gobj(mk, "in")
