@@ -15,7 +15,7 @@ let LA_NAMES = [ "unit_count", "u_id", "u_x", "u_y", "u_kind", "u_owner", "u_tas
     "worker_type", "road", "occupied", "amount", "res_at", "stocked", "tick", "want", "hold_take", "trained",
     "resource_index", "nearest_resource", "start_gather", "start_build", "approach_building", "clear_task", "in_reach", "unit_column", "building_column", "player_column",
     "unit_get", "unit_set", "building_get", "building_set", "player_get", "player_set", "rules", "player_count", "resource_count", "cell_of",
-    "t_animal", "u_hp", "b_hp", "lay_foundation", "fits" ]
+    "t_animal", "u_hp", "b_hp", "lay_foundation", "fits", "plant", "terrain_at", "terrain_type", "approach_cell" ]
 
 // The constants: the engine's task codes and units, and the map's size (set as a match starts).
 def lua_api_consts():
@@ -85,7 +85,7 @@ def lua_of_json(v:JV) -> int:
     return t
 
 // The functions that change the sim: not while it's only being read (the view's calls, and can_place).
-let LA_WRITE_NAMES = [ "lay_foundation", "set_u_task", "set_u_target", "set_u_work", "set_u_stuck", "set_u_moving", "set_pop", "want", "hold_take",
+let LA_WRITE_NAMES = [ "lay_foundation", "plant", "approach_cell", "set_u_task", "set_u_target", "set_u_work", "set_u_stuck", "set_u_moving", "set_pop", "want", "hold_take",
     "trained", "start_gather", "start_build", "approach_building", "clear_task", "unit_set", "building_set", "player_set" ]
 let LA_WRITES = map(LA_WRITE_NAMES) n:
     let id = find(LA_NAMES) x: x == n
@@ -326,6 +326,20 @@ def lua_api(id:int, a:[int]):
             let cx = lx_want_int(a, 2, lx_la_name(id))
             let cy = lx_want_int(a, 3, lx_la_name(id))
             if not lfail and p >= 0 and k >= 0: lx_r_bool(ground_fits(p, k, cx, cy, 0))
+        case 85:  // plant(c, t): terrain type t (one that grows) on cell c, free walkable ground; whether it was (#109)
+            let c = lx_a_cell(a, 0, id)
+            let t = lx_want_int(a, 1, lx_la_name(id))
+            if not lfail and c >= 0: lx_r_bool(plant(c, t))
+        case 86:  // terrain_at(c): the cell's terrain type
+            let c = lx_a_cell(a, 0, id)
+            if not lfail and c >= 0: lx_r_int(terrain[c])
+        case 87:  // terrain_type(id): the terrain type of that id (terrain.json), or -1
+            let s = lx_want_str(a, 0, lx_la_name(id))
+            if not lfail: lx_r_int(str_index(tr_names, s))
+        case 88:  // approach_cell(i, c): unit i walks to stand by cell c (its task as it was)
+            let i = lx_a_unit(a, 0, id)
+            let c = lx_a_cell(a, 1, id)
+            if not lfail and i >= 0 and c >= 0: approach_cell(i, c)
         default: lua_fail("an unknown API function")
 
 // ------------------------------------------------------------------ the hook points

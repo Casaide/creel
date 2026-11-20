@@ -27,6 +27,10 @@ var tr_depleted = []::int  // what it turns into when used up, or -1
 var tr_reseed = []::int
 var tr_cleared = []::int
 var tr_opaque = []::int
+var tr_grows = []::int       // what it grows into in time (terrain.json "grows": a sapling into a tree, #109), or -1
+var tr_grow_ticks = []::int  // and after how long
+var grow_cells = []::int     // the cells growing, in cell order (plant), and the tick each is due
+var grow_due = []::int
 
 // Cells changed this tick, each with its walk value per lane before the tick's first change.
 var fresh = []::int

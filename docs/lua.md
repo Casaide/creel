@@ -77,9 +77,11 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
 - **Players and resources:** `player_count`, `pop`, `pop_cap`, `set_pop`, `worker_type(p)`, `resource_count`,
   `resource_index(name)`.
 - **The map:** `W`, `H`, `TILE`, `cell_of(x, y)`, `road(c)`, `occupied(c)`, `amount(c)`, `res_at(c)`,
-  `nearest_resource(x, y, kind, i, farms, roomy_only, seen)`.
+  `nearest_resource(x, y, kind, i, farms, roomy_only, seen)`, `terrain_at(c)`, `terrain_type(id)` (-1 if there's none),
+  `plant(c, t)` (terrain t, one that `grows` in terrain.json, on free walkable ground at c; it grows on by itself,
+  and through a save; whether it was planted; #109).
 - **The economy and orders:** `stocked()`, `tick()`, `want(b, r, n)`, `hold_take(b, r, n)`, `trained(b, k)` (a new
-  unit at its door: its slot), `start_gather(i, c, kind)`, `start_build(i, id)`, `approach_building(i, b)`,
+  unit at its door: its slot), `start_gather(i, c, kind)`, `start_build(i, id)`, `approach_building(i, b)`, `approach_cell(i, c)`,
   `clear_task(i)`, `in_reach(i, x0, y0, x1, y1)`, `fits(p, k, cx, cy)` (whether the ground lets p lay type k there, the packs' own rules aside),
   `lay_foundation(p, k, cx, cy)` (a site, paid or asking its goods, where `fits` and its type is open to p: its id, or
   0; #105).

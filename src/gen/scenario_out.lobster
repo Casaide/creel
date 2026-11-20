@@ -158,7 +158,7 @@ def scenario_tokens() -> [string]:
         soi(fog_seen[p].length)
         for(fog_seen[p]) s: sov(s)
     so("EXTRA")
-    soi(27)
+    soi(28)
     so_extra("repair", [ r_repair_speed, r_repair_cost ])
     so_extra("trade", [ r_trade_min, r_trade_sq_div, r_trade_lin_pct ])
     so_extra("market_price", market_price)
@@ -221,6 +221,10 @@ def scenario_tokens() -> [string]:
         for([ id, br_x0[k], br_y0[k], br_x1[k], br_y1[k], br_hp[k], br_up[k], br_work[k], br_payer[k], br_cells[k].length ]) v: brs.push(v)
         for(br_cells[k]) v: brs.push(v)
     so_extra("bridges", brs)
+    let gw = [ tr_grows.length ]
+    for(tr_grows) g, t: for([ g, tr_grow_ticks[t] ]) v: gw.push(v)
+    for(grow_cells) c, n: for([ c, grow_due[n] ]) v: gw.push(v)
+    so_extra("grows", gw)
     return so_out
 
 def so_extra(name:string, vs:[int]):

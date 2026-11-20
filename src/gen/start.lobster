@@ -71,6 +71,7 @@ def setup_world(seed_value:int, map_id:string, sides:[JV], rules:JV, team_ids:[i
     r_trade_sq_div = as_int(at(trc, "sq_div"))
     r_trade_lin_pct = as_int(at(trc, "lin_pct"))
     base_gather_ticks = map(resource_names) r: as_int(at(at(ec, "gather_ticks"), r))
+    r_carry_of = map(resource_names) r: gint(gobj(ec, "carry_of"), r, 0)
     let ts = gobj(rules_part("movement"), "terrain_speed")
     for(CLASS_NAMES) cn:
         let row = map(tr_names) t: gint(gobj(ts, cn), t, 100)
