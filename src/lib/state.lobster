@@ -185,6 +185,10 @@ def hook_declare_unit(name:string) -> int:
     hook_unit_cols.push([]::int)
     return hook_unit_names.length - 1
 
+// The hook column "inside", or -1: a pack's rule sets it 1 while a unit is inside a building (seated at an inn), and then
+// the view doesn't draw it and the crowd at the door leaves it out, as a carrier inside (#120).
+def inside_col() -> int: return find(hook_unit_names) n: n == "inside"
+
 def hook_unit_get(col:int, i:int) -> int:
     let id = u_id[i]
     return if id < hook_unit_cols[col].length: hook_unit_cols[col][id] else: 0
@@ -342,6 +346,8 @@ var bt_hold = []::[int]   // per resource: how much of it a building of this typ
 var bt_store = []::int    // 1: what it holds counts as its owner's stock (a storehouse); stocked economies only
 var bt_after = []::[int]  // building types a player needs one finished of before it may lay this one (buildings.json "after", #105)
 var bt_road = []::int     // the road kind a road plan of this type lays when built (rules economy.roads), or -1 (#51)
+var bt_ground = []::int   // the terrain a plan of this type becomes when built (buildings.json "becomes": {"terrain"}), or -1 (#123)
+var bt_drag = []::int     // 1: laid by dragging, a plan a cell, as a road is (buildings.json "drag", #123)
 var bt_bridge = []::int   // a road plan that spans water: built, it stands as a bridge (lib/bridges) (#51)
 var bt_in = []::[int]     // per resource: what one round of its recipe takes (buildings.json makes.in; lib/recipes, #50)
 var bt_out = []::[int]    // per resource: what one round makes (makes.out)
@@ -395,6 +401,7 @@ var pop_cap = []::int
 var stock = []::[int]  // [resource][player]; in a stocked economy the sum of what the owner's stores hold
 var r_stocked = 0      // rules economy.model "stocked": goods sit in buildings (b_hold), not in one pool (#48)
 var r_foundation_pct = 0  // rules economy.foundation_pct: the share of a stocked site built with no goods brought, its foundation (#105)
+var r_inside_ticks = 0  // how long a carrier is inside a building at each pick-up and drop (rules economy "inside_ticks", #120)
 var r_carrier_load = 1  // rules economy.carrier_load: what a carrier takes on one trip (#49)
 var r_carrier_slots = []::string  // rules economy.carriers: the roster slots whose units carry (#61)
 var rd_names = []::string  // rules economy.roads: each road kind's name (#51)
@@ -411,6 +418,11 @@ var r_queue_max = 0
 var r_pop_max = 0
 var r_fog_building = 0
 var r_high_sight_building = 0
+
+// Whether unit i is inside a building now: a carrier at a pick-up or drop, a gatherer at its drop-off, for
+// r_inside_ticks (counted in u_work), or one a pack's rule put inside (hc: inside_col()). The view doesn't draw it.
+def is_inside(i:int, hc:int) -> bool:
+    return (r_inside_ticks > 0 and (u_task[i] == T_CARRY or u_task[i] == T_RETURN) and u_work[i] > 0) or (hc >= 0 and hook_unit_get(hc, i) != 0)
 
 def remove_unit(i:int):
     unit_changes++
@@ -478,6 +490,7 @@ var f_side = []::int
 var s_pushx = []::int
 var s_pushy = []::int
 var s_planted = []::int
+let s_inside = []::int  // 1: inside a building at a pick-up or drop (#120), out of the crowd
 def remove_building(b:int):
     if r_stocked and bt_store[b_kind[b]]:  // what a store held goes with it
         for(b_hold[b]) n, r: stock[r][b_owner[b]] -= n
@@ -614,6 +627,8 @@ def pad_saved_columns():
     while b_site.length < b_id.length: b_site.push([])
     while bt_road.length < bt_ladder.length: bt_road.push(-1)  // (a save from before road plans, #51)
     while bt_bridge.length < bt_ladder.length: bt_bridge.push(0)
+    while bt_ground.length < bt_ladder.length: bt_ground.push(-1)  // (a save from before, #123)
+    while bt_drag.length < bt_ladder.length: bt_drag.push(0)
     for(unit_columns()) col:
         while col.length < u_id.length: col.push(0)
     for(building_columns()) col:

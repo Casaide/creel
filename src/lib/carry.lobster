@@ -5,7 +5,6 @@
 // again when a want, a store's goods or a carrier changes (carry_dirty), at most CARRY_MATCHES jobs a tick, buildings
 // and carriers in id order. A job whose carrier is gone or took other orders gives its reservations back.
 
-let T_CARRY = 8
 let CARRY_TO_SOURCE = 0
 let CARRY_TO_DEST = 1
 let CARRY_MATCHES = 8   // jobs made per player per tick, at most: keeps the worst tick flat
@@ -193,6 +192,14 @@ def store_with_room(i:int, r:int) -> int:
                 best = b
     return best
 
+// Unit i, in reach of a building: whether it's still inside (another tick of r_inside_ticks); false once it's out.
+def still_inside(i:int) -> bool:
+    if u_work[i] >= r_inside_ticks:
+        u_work[i] = 0
+        return false
+    u_work[i]++
+    return true
+
 def carry_done(i:int, j:int):
     end_job(j)
     clear_task(i)
@@ -222,9 +229,10 @@ def carry_step(i:int):
         b_coming[to][r] += jb_n[j]
         approach_building(i, to)
     let x0, y0, x1, y1 = building_rect(to)
-    if in_reach(i, x0, y0, x1, y1):
+    if u_work[i] > 0 or in_reach(i, x0, y0, x1, y1):  // (once inside, it stays till it comes out)
         u_moving[i] = 0
         u_stuck[i] = 0
+        if r_inside_ticks > 0 and still_inside(i): return
         if phase == CARRY_TO_SOURCE:
             b_resv[to][r] -= jb_n[j]
             let n = hold_take(to, r, jb_n[j])  // (a cost may have taken reserved goods: less comes out)

@@ -165,12 +165,13 @@ def add_parts(i:int, hull_f:int, x:float, y:float, sort_y:float, col:float4):
 
 def collect_units(alpha:float):
     perf_unseen = 0
+    let hc = inside_col()
     for(u_x.length) i:
         let px, py = prev_pos(i)
         let x = px + (u_x[i] - px) * alpha
         let y = py + (u_y[i] - py) * alpha
         let mine = teams[u_owner[i]] == teams[ME]
-        if (mine or visible_to_me(cell_of(u_x[i], u_y[i]))) and vx_drawn(u_kind[i]):
+        if (mine or visible_to_me(cell_of(u_x[i], u_y[i]))) and vx_drawn(u_kind[i]) and not is_inside(i, hc):  // (inside a building: not seen, #120)
             let moving, walking_d = unit_walk(i, unit_dir.get(u_id[i], 2), px, py)
             var d = walking_d
             if moving: pass()

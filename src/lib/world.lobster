@@ -31,7 +31,7 @@ def take_pending() -> [Cmd]:
 // The scratch arrays grow with the units (training adds them).
 def grow_scratch():
     let n = u_x.length
-    for([ sp_items, sp_cell, slot_x, slot_y, slot_block, slot_bx, slot_by, f_ahead, f_side, s_pushx, s_pushy, s_planted,
+    for([ sp_items, sp_cell, slot_x, slot_y, slot_block, slot_bx, slot_by, f_ahead, f_side, s_pushx, s_pushy, s_planted, s_inside,
           c_hurt, c_hurt_by, c_engaged, c_inbound ]) a:
         while a.length < n: a.push(0)
 
@@ -440,6 +440,8 @@ def load_extras():
         bt_stairs.push(bw[o2 + 1])
         bt_ladder.push(bw[o2 + 2])
         bt_road.push(-1)  // (a scenario has no road plans)
+        bt_ground.push(-1)
+        bt_drag.push(0)
         bt_bridge.push(0)
         bt_walkway.push(bw[o2 + 3])
         bt_blocks_flyers.push(bw[o2 + 4])

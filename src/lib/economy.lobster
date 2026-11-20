@@ -568,6 +568,16 @@ def become_road(b:int):
     set_walk_over(cells, false)
     demolish(b)
 
+// A plan that becomes ground (bt_ground, #123): its cells take that terrain, with its resource, and it goes.
+def become_terrain(b:int):
+    let cells = footprint(b)
+    let t = bt_ground[b_kind[b]]
+    set_walk_over(cells, false)
+    demolish(b)
+    for(cells) c:
+        set_terrain(c, t)
+        start_growing(c)
+
 def become_ground(b:int, i:int):
     let k = b_kind[b]
     let cells = footprint(b)
@@ -649,7 +659,10 @@ def return_home(i:int):
         to_drop_off(i)
         return
     let x0, y0, x1, y1 = building_rect(b)
-    if in_reach(i, x0, y0, x1, y1):
+    if (r_inside_ticks > 0 and u_work[i] > 0) or in_reach(i, x0, y0, x1, y1):  // (once inside, it stays till it comes out)
+        if r_inside_ticks > 0:
+            u_moving[i] = 0
+            if still_inside(i): return
         let p = u_owner[i]
         if u_carry_kind[i] > 0:
             let r = u_carry_kind[i] - 1
@@ -759,6 +772,7 @@ def build_job(i:int):
                 for(b_site[b]) c, r: b_hold[b][r] -= c
                 b_site[b] = []
             if bt_road[k] >= 0: become_road(b)
+            elif bt_ground[k] >= 0: become_terrain(b)
             elif bt_farm[k]: become_ground(b, i)
             elif bt_pen_animals[k] > 0: pen_opened(b)  // a pen: walked into
             else: gather_after_camp(b)
