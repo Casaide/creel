@@ -582,7 +582,7 @@ def atmo_shading() -> bool: return atmo_on and atmo_opt_num("sun_shade") > 0.0
 // shade) with atmo_shade_clear, its colour's red how much of it shows. Before atmo_begin.
 def atmo_shade_begin():
     let ws = gl.window_size()
-    if not atmo_shade or ws != atmo_size:
+    if not atmo_shade or gl.texture_size(atmo_shade) != ws:  // (its own size, not atmo_size: atmo_begin may have moved that on already, #110)
         atmo_shade = atmo_target(ws, true)
     gl.switch_to_framebuffer(atmo_shade)
     gl.ortho()
