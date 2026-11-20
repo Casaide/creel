@@ -192,10 +192,6 @@ def store_with_room(i:int, r:int) -> int:
                 best = b
     return best
 
-// Whether unit i is inside a building now: a carrier at a pick-up or drop, a gatherer at its drop-off, for
-// r_inside_ticks (counted in u_work). The view doesn't draw it.
-def is_inside(i:int) -> bool: return r_inside_ticks > 0 and (u_task[i] == T_CARRY or u_task[i] == T_RETURN) and u_work[i] > 0
-
 // Unit i, in reach of a building: whether it's still inside (another tick of r_inside_ticks); false once it's out.
 def still_inside(i:int) -> bool:
     if u_work[i] >= r_inside_ticks:
