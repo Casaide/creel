@@ -162,6 +162,13 @@ def hold_room(b:int, r:int) -> int:
     return bt_hold[b_kind[b]][r] - b_hold[b][r]
 
 // A site's share of its cost delivered, in per-mille (1000 once built or with nothing to bring).
+// How far site b can be built (in build ticks): its foundation (rules foundation_pct of it) with no goods, then no further
+// than the goods brought (#105). A building with no site goods builds all the way.
+def build_cap(b:int) -> int:
+    let full = bt_build_ticks[b_kind[b]]
+    if not b_site[b].length: return full
+    return full * (r_foundation_pct * 10 + (1000 - r_foundation_pct * 10) * site_permille(b) / 1000) / 1000
+
 def site_permille(b:int) -> int:
     var need = 0
     var got = 0
@@ -741,7 +748,7 @@ def build_job(i:int):
         if pct != 0:
             u_work[i]++
             st += u_work[i] * pct / 100 - (u_work[i] - 1) * pct / 100
-        let cap = if b_site[b].length: bt_build_ticks[k] * site_permille(b) / 1000 else: bt_build_ticks[k]  // no further than the goods brought
+        let cap = build_cap(b)
         b_progress[b] = max(b_progress[b], min(cap, b_progress[b] + st))
         b_hp[b] = max(1, max_hp * b_progress[b] / bt_build_ticks[k])
         if b_progress[b] >= bt_build_ticks[k]:
@@ -913,12 +920,22 @@ def cmd_gather(player:int, ids:[int], cell:int):
 def build_barred(player:int, k:int) -> bool:
     if bm_lacks[player][k]: return true
     if ages[player] < bt_age[k]: return true
+    if k < bt_after.length:  // (a save from before #105 has none)
+        for(bt_after[k]) ka:
+            if (find(b_id.length) b: b_owner[b] == player and b_kind[b] == ka and b_done[b] != 0) < 0: return true
     if bt_more_from_age[k] > 0 and ages[player] < bt_more_from_age[k]:
         for(b_id.length) b:
             if b_owner[b] == player and b_kind[b] == k: return true
     return false
 
 def can_place(player:int, k:int, cx:int, cy:int, along:int = 0) -> bool:
+    if not ground_fits(player, k, cx, cy, along): return false
+    let sx, sy = dims(k, along)
+    return hook_can_place(player, k, cx, cy, sx, sy)
+
+// Whether type k fits at (cx, cy) by the ground and what stands there, the packs' rules aside (a pack's Lua asks this:
+// its own rules are its to know, #105).
+def ground_fits(player:int, k:int, cx:int, cy:int, along:int = 0) -> bool:
     let mc = t_mclass[worker_type(player)]
     let sx, sy = dims(k, along)
     if cx < 0 or cy < 0 or cx + sx > W or cy + sy > H: return false
@@ -927,7 +944,7 @@ def can_place(player:int, k:int, cx:int, cy:int, along:int = 0) -> bool:
         if not can_build(c % W, c / W, 1, mc, bt_water[k] != 0, bt_line[k] != 0) and not replaceable(player, k, c): return false
         if bt_gate[k] and cliff[c] == 1: return false
     if bt_ladder[k] and not against_enemy_wall(player, cy * W + cx): return false  // a ladder only leans on an enemy walkway
-    return hook_can_place(player, k, cx, cy, sx, sy)
+    return true
 
 // Pay for and place a BUILD's foundation; its id, or 0 when it can't be built there.
 def lay_foundation(player:int, ids:[int], k:int, cx:int, cy:int, along0:int = 0) -> int:
@@ -935,6 +952,11 @@ def lay_foundation(player:int, ids:[int], k:int, cx:int, cy:int, along0:int = 0)
     if (not own_workers(player, ids).length and not town_builds()) or build_barred(player, k): return 0
     let along = along_for(k, along0)
     if not can_place(player, k, cx, cy, along): return 0
+    return place_site(player, k, cx, cy, along)
+
+// Lay a foundation of type k for player at (cx, cy) that fits there (lay_foundation; a pack's Lua through
+// lay_foundation in its API, which asks ground_fits): paid for, or asking its goods; its id.
+def place_site(player:int, k:int, cx:int, cy:int, along:int) -> int:
     let sx, sy = dims(k, along)
     let cells = cells_of(cx, cy, sx, sy, diag_of(along))
     let cost = repair_cost(player, k, cells)

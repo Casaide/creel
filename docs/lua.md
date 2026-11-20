@@ -80,7 +80,9 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
   `nearest_resource(x, y, kind, i, farms, roomy_only, seen)`.
 - **The economy and orders:** `stocked()`, `tick()`, `want(b, r, n)`, `hold_take(b, r, n)`, `trained(b, k)` (a new
   unit at its door: its slot), `start_gather(i, c, kind)`, `start_build(i, id)`, `approach_building(i, b)`,
-  `clear_task(i)`, `in_reach(i, x0, y0, x1, y1)`.
+  `clear_task(i)`, `in_reach(i, x0, y0, x1, y1)`, `fits(p, k, cx, cy)` (whether the ground lets p lay type k there, the packs' own rules aside),
+  `lay_foundation(p, k, cx, cy)` (a site, paid or asking its goods, where `fits` and its type is open to p: its id, or
+  0; #105).
 - **State:** `unit_column`, `building_column`, `player_column` (at load); `unit_get(col, i)`, `unit_set(col, i, v)`,
   `building_get`, `building_set`, `player_get`, `player_set`.
 - **Data:** `rules()` (the match's rules, as a table; a fraction is nil).

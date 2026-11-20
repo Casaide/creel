@@ -59,6 +59,7 @@ def setup_world(seed_value:int, map_id:string, sides:[JV], rules:JV, team_ids:[i
     let ec = rules_part("economy")
     r_stocked = if gstr(ec, "model", "pool") == "stocked": 1 else: 0
     r_carrier_load = gint(ec, "carrier_load", 1)
+    r_foundation_pct = gint(ec, "foundation_pct", 0)
     r_carrier_slots = gstrs(ec, "carriers")
     rd_names = map(glist(ec, "roads")): gstr(_, "name", "")
     rd_pct = map(glist(ec, "roads")): gint(_, "speed_pct", 100)
@@ -211,6 +212,9 @@ def setup_btypes():
         bt_walkway.push(walkway)
         bt_blocks_flyers.push(if bflyers: 1 else: 0)
         bt_replaces.push(filter(map(gstrs(b, "replaces")) id: btype_index(id)) k_: k_ >= 0)
+        let needs_first = map(gstrs(b, "after")) id: btype_index(id)  // (#105)
+        assert (find(needs_first) ka: ka < 0) < 0
+        bt_after.push(needs_first)
         let pour = gobj(b, "pour")
         bt_pour.push(if pour.keys.length: [ gint(pour, "reach", 0), gint(pour, "reload", 0), gint(pour, "damage", 0) ] else: []::int)
         let pen = gobj(b, "pen")
