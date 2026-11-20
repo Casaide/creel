@@ -104,9 +104,10 @@ def mod_read(rec:Pack) -> string:
         let base = if has_char(f, '/'): substring(f, 0, find_string(f, "/")) else: ""
         let model = starts_with(f, "voxel/models/") and ends_with(f, ".vox")
         let code = base == "hooks" and ends_with(f, ".lua") and find_string(substring(f, 6, f.length - 6), "/") < 0
-        if not (has_s(MOD_DATA_FILES, f) or (has_s(MOD_DATA_DIRS, base) and ends_with(f, ".json")) or model or code):
-            return "data/{f} can\'t be modded yet (moddable: {concat_string(MOD_DATA_FILES, ", ")}, rules/*.json, maps/*.json, voxel/**.json, voxel/models/*.vox, hooks/*.lua)"
-        if code: continue  // (read below)
+        let icon = base == "icons" and ends_with(f, ".png") and find_string(substring(f, 6, f.length - 6), "/") < 0
+        if not (has_s(MOD_DATA_FILES, f) or (has_s(MOD_DATA_DIRS, base) and ends_with(f, ".json")) or model or code or icon):
+            return "data/{f} can\'t be modded yet (moddable: {concat_string(MOD_DATA_FILES, ", ")}, rules/*.json, maps/*.json, voxel/**.json, voxel/models/*.vox, hooks/*.lua, icons/*.png)"
+        if code or icon: continue  // (Lua: read below; an icon is only drawn (icon_file, #117), so not in the signature)
         let text = read_file(root + "/" + f)
         if not text: return "data/{f} can\'t be read"
         if model: models += f + sha256_text(text)
