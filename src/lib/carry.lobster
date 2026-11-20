@@ -82,10 +82,47 @@ def start_job(i:int, src:int, dst:int, r:int, n:int, wanted:bool):
     u_target[i] = b_id[src]
     approach_building(i, src)
 
+// Is workshop b's out slot for r too full for another round of its recipe? Goods already reserved are as good as
+// gone. (A gatherer's hut has no recipe: it is never held up this way, its goods wait their turn.)
+def out_full(b:int, r:int) -> bool: return bt_out[b_kind[b]][r] > 0 and hold_room(b, r) + b_resv[b][r] < bt_out[b_kind[b]][r]
+
+// p's building nearest `from` that wants r, never `from` itself; -1 if none.
+def wanting(p:int, r:int, fb:int) -> int:
+    var best = -1
+    var best_d2 = 1 << 62
+    let x = b_cx[fb] * TILE + b_sx[fb] * TILE / 2
+    let y = b_cy[fb] * TILE + b_sy[fb] * TILE / 2
+    for(b_id.length) b:
+        if b != fb and b_owner[b] == p and b_want[b][r] > 0:
+            let d2 = mid_dist2(b, x, y)
+            if d2 < best_d2:
+                best_d2 = d2
+                best = b
+    return best
+
 // Pair p's wants with offers and free carriers, then send what workshops offer and nobody asked for to the nearest
-// store with room. Stays dirty only if it stopped at the cap.
+// store with room. A workshop standing idle with its out slot full goes first, ahead of every want (its goods to whoever
+// wants them, else to a store): else a town busy building leaves its bakery full and its people hungry (#102). Stays
+// dirty only if it stopped at the cap.
 def carry_match(p:int):
     var jobs = 0
+    let nb = b_id.length
+    for(nb) k:  // (from a building that turns with the clock, as below)
+        let b = (tick + k) % nb
+        if b_owner[b] == p and b_done[b] != 0 and bt_store[b_kind[b]] == 0:
+            for(num_resources) r:
+                while jobs < CARRY_MATCHES and bt_offer[b_kind[b]][r] != 0 and offered(b, r) > 0 and out_full(b, r):
+                    var dst = wanting(p, r, b)
+                    let wanted = dst >= 0
+                    if not wanted: dst = store_near(b, r)
+                    if dst < 0: break
+                    let i = free_carrier(p, b)
+                    if i < 0:
+                        carry_dirty[p] = 0
+                        return
+                    let room = if wanted: b_want[dst][r] else: hold_room(dst, r) - b_coming[dst][r]
+                    start_job(i, b, dst, r, min(offered(b, r), min(room, r_carrier_load)), wanted)
+                    jobs++
     for(b_id.length) b:
         if b_owner[b] == p:
             for(num_resources) r:

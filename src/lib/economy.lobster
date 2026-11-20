@@ -723,7 +723,7 @@ def build_job(i:int):
             if not bridge_work(i, br, in_reach(i, br_x0[br], br_y0[br], br_x1[br], br_y1[br])): clear_task(i)
             return
     if b < 0 or b_done[b] == 1:
-        let nb = if u_orders[i].length: -1 else: nearby_foundation(i)
+        let nb = if u_orders[i].length or town_builds(): -1 else: nearby_foundation(i)  // (town_builds: the town's rules send its builders, #102)
         if nb >= 0:
             u_target[i] = b_id[nb]
             approach_building(i, nb)
