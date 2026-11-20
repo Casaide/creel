@@ -22,6 +22,7 @@ class Look:
     ruins:[string] = []       // broken up (game/ruin.lobster): battered, breaking, collapsed, the ruin it leaves
     towers:[string] = []      // a gate's towers, each its own frame sorted at its own footprint, and the gate without them
     tower_dy:[float] = []     // each tower's place down the screen from the gate's middle (canvas art px)
+    turns:[string] = []       // a part that turns (a mill's sails): its frames, a step of the turn each, drawn in turn (#112)
 
 let sheet_tex = []::resource<texture>
 let sheet_dims = []::float2             // each sheet's size in px (the pack's are all sheet_size; a part baked in the game is its own)
