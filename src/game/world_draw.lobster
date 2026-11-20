@@ -170,7 +170,7 @@ def collect_units(alpha:float):
         let x = px + (u_x[i] - px) * alpha
         let y = py + (u_y[i] - py) * alpha
         let mine = teams[u_owner[i]] == teams[ME]
-        if (mine or visible_to_me(cell_of(u_x[i], u_y[i]))) and vx_drawn(u_kind[i]):
+        if (mine or visible_to_me(cell_of(u_x[i], u_y[i]))) and vx_drawn(u_kind[i]) and not is_inside(i):  // (inside a building: not seen, #120)
             let moving, walking_d = unit_walk(i, unit_dir.get(u_id[i], 2), px, py)
             var d = walking_d
             if moving: pass()

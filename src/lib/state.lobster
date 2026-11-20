@@ -394,7 +394,8 @@ var pop = []::int
 var pop_cap = []::int
 var stock = []::[int]  // [resource][player]; in a stocked economy the sum of what the owner's stores hold
 var r_stocked = 0      // rules economy.model "stocked": goods sit in buildings (b_hold), not in one pool (#48)
-var r_foundation_pct = 0  // rules economy.foundation_pct: the share of a stocked site built with no goods brought, its foundation (#105)
+var r_foundation_pct = 0
+var r_inside_ticks = 0  // how long a carrier is inside a building at each pick-up and drop (rules economy "inside_ticks", #120)  // rules economy.foundation_pct: the share of a stocked site built with no goods brought, its foundation (#105)
 var r_carrier_load = 1  // rules economy.carrier_load: what a carrier takes on one trip (#49)
 var r_carrier_slots = []::string  // rules economy.carriers: the roster slots whose units carry (#61)
 var rd_names = []::string  // rules economy.roads: each road kind's name (#51)
@@ -478,6 +479,7 @@ var f_side = []::int
 var s_pushx = []::int
 var s_pushy = []::int
 var s_planted = []::int
+let s_inside = []::int  // 1: inside a building at a pick-up or drop (#120), out of the crowd
 def remove_building(b:int):
     if r_stocked and bt_store[b_kind[b]]:  // what a store held goes with it
         for(b_hold[b]) n, r: stock[r][b_owner[b]] -= n

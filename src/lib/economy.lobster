@@ -649,7 +649,10 @@ def return_home(i:int):
         to_drop_off(i)
         return
     let x0, y0, x1, y1 = building_rect(b)
-    if in_reach(i, x0, y0, x1, y1):
+    if (r_inside_ticks > 0 and u_work[i] > 0) or in_reach(i, x0, y0, x1, y1):  // (once inside, it stays till it comes out)
+        if r_inside_ticks > 0:
+            u_moving[i] = 0
+            if still_inside(i): return
         let p = u_owner[i]
         if u_carry_kind[i] > 0:
             let r = u_carry_kind[i] - 1

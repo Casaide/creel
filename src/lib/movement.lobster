@@ -479,7 +479,9 @@ def separate():
             // A gun standing to fire: its own side goes round it (#262). A foe still shoves it, and so do bows, whose crush is what's balanced.
             if s_planted[i] == 0 and t_ranged[u_kind[i]] != 0 and t_shot_speed[u_kind[i]] >= GUN_SHOT_SPEED: s_planted[i] = 2
     for(n) u:
-        if u_perch[u] == 0:  // units on walls stand apart from the crowd below
+        s_inside[u] = if r_inside_ticks > 0 and u_work[u] > 0 and (u_task[u] == T_CARRY or u_task[u] == T_RETURN): 1 else: 0
+    for(n) u:
+        if u_perch[u] == 0 and s_inside[u] == 0:  // units on walls stand apart from the crowd below, and those inside a building (#120) aren't in it
             let cx = sp_cell[u] % w
             let cy = sp_cell[u] / w
             let xu = xs[u]
@@ -495,7 +497,7 @@ def separate():
                 while k < e:
                     let v = sp_items[k]
                     k++
-                    if (q == 0 and v <= u) or u_perch[v] != 0 or t_air[u_kind[u]] != t_air[u_kind[v]]: continue  // (aircraft pass over)
+                    if (q == 0 and v <= u) or u_perch[v] != 0 or s_inside[v] != 0 or t_air[u_kind[u]] != t_air[u_kind[v]]: continue  // (aircraft pass over)
                     let rr = ru + rs[v]
                     var dx = xs[v] - xu
                     var dy = ys[v] - yu
