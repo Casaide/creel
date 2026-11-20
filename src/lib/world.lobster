@@ -491,7 +491,7 @@ def load_extras():
             grow_cells.push(gw[base + n * 2])
             grow_due.push(gw[base + n * 2 + 1])
     else:
-        for(tr_walk) _:
+        for(tr_walk.length):
             tr_grows.push(-1)
             tr_grow_ticks.push(0)
     let ar = extra("ability_ready")
