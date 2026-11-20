@@ -462,6 +462,25 @@ def collect_doodads():
                     let fr = frames[f]
                     add_xf(f, [ d.scale * fr.k, 0.0, 0.0, d.scale * fr.k, at.x - d.scale * fr.k * float(fr.ox), ay - d.scale * fr.k * float(fr.oy) ], at.y, float4 { 1.0, 1.0, 1.0, shade })
 
+// A tree that grew where none stood when the map was made: the species of the nearest tree, broadleaf with none near,
+// kept for its cell (#119).
+def tree_species_near(c:int) -> string:
+    for(4) r:
+        for(2 * r + 1) dy:
+            for(2 * r + 1) dx:
+                let x, y = c % W + dx - r, c / W + dy - r
+                if x >= 0 and y >= 0 and x < W and y < H and species[y * W + x] != "-": return species[y * W + x]
+    return "tree_broadleaf"
+
+// How far a growing cell has grown, 0 to 1 (1: not growing).
+def grown_share(c:int, tt:int) -> float:
+    let found, at = binary_search(grow_cells, c)
+    if not found or tr_grow_ticks[tt] <= 0: return 1.0
+    return clamp(1.0 - float(grow_due[at] - tick) / float(tr_grow_ticks[tt]), 0.0, 1.0)
+
+let GROWN_FROM = 0.25  // a growing prop's size just planted, and just before it's grown
+let GROWN_TO = 0.8
+
 def collect_props():
     collect_doodads()
     for(W * H) c:
@@ -469,24 +488,38 @@ def collect_props():
         let now = fog[ME][c] == 2 or fog_ground.length <= ME
         let tt = if now: terrain[c] else: fog_ground[ME][c]
         // (the land is no secret, #334: trees, gold, stone and bushes show where never explored, as the map was made)
-        if fog_shows_land(fog[ME][c]) and (tr_res[tt] != 0 or species[c] != "-") and near_view(iso(float((c % W) * 1000 + 500), float((c / W) * 1000 + 500))):
+        if fog_shows_land(fog[ME][c]) and (tr_res[tt] != 0 or species[c] != "-" or tr_grows[tt] >= 0) and near_view(iso(float((c % W) * 1000 + 500), float((c / W) * 1000 + 500))):
             let tname = tr_names[tt]
             var kind = prop_of.get(tname, "")
-            if kind == "tree": kind = species[c]
+            var scale = 1.0
+            if kind == "" and tr_grows[tt] >= 0:  // growing (a sapling): what it grows into, small, then bigger (#119)
+                kind = prop_of.get(tr_names[tr_grows[tt]], "")
+                scale = GROWN_FROM + (GROWN_TO - GROWN_FROM) * (if now: grown_share(c, tt) else: 0.0)
+            if kind == "tree":
+                if species[c] == "-": species[c] = tree_species_near(c)
+                kind = species[c]
             elif tname == "stump" and species[c] != "-": kind = species[c]
             if kind != "" and kind != "-" and doodads.get(kind, 0) > 0:
                 let left = if now: amount[anchor(c)] else: fog_left[ME][c]
                 let full = max(left, tr_amount[tt])
                 let pick = c * 7 + c / W
-                let stage = if tname == "stump": 3 else: resource_stage(kind, left, full)
+                let stage = if tname == "stump": 3 elif scale != 1.0: 0 else: resource_stage(kind, left, full)
                 let name = staged(kind, pick % doodads.get(kind, 1), stage)
                 let at = iso(float((c % W) * 1000 + 500), float((c / W) * 1000 + 500))
                 let up = lift_at(float((c % W) * 1000 + 500), float((c / W) * 1000 + 500)) * 1.5
                 let shade = fog_prop_shade(fog[ME][c])
                 let flat = pool[c] >= 0
-                add(frame_index(name), at.x, at.y - up, if flat: -100000.0 + at.y else: at.y, float4 { 1.0, 1.0, 1.0, shade })
+                let col = float4 { 1.0, 1.0, 1.0, shade }
                 let sh = frame_index(name + "~shadow")
-                if sh >= 0: add(sh, at.x, at.y - up, -200000.0 + at.y, float4 { 1.0, 1.0, 1.0, shade })
+                if scale == 1.0:
+                    add(frame_index(name), at.x, at.y - up, if flat: -100000.0 + at.y else: at.y, col)
+                    if sh >= 0: add(sh, at.x, at.y - up, -200000.0 + at.y, col)
+                else:
+                    let f = frame_index(name)
+                    for([ f, sh ]) g, n:
+                        if g >= 0:
+                            let fr = frames[g]
+                            add_xf(g, [ scale * fr.k, 0.0, 0.0, scale * fr.k, at.x - scale * fr.k * float(fr.ox), at.y - up - scale * fr.k * float(fr.oy) ], if n == 1: -200000.0 + at.y else: at.y, col)
 
 let SHADE_FOOT_BACK = 3.0  // art px: a unit reads the ground's shade this far behind its feet, toward the sun (its own shadow falls the other way)
 
