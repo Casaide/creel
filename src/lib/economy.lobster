@@ -766,11 +766,17 @@ def build_job(i:int):
         if u_stuck[i] >= GIVE_UP: clear_task(i)
         else: approach_building(i, b)
 
+// How much gatherer i carries home at once: the rule, its type's bonus, and at most the resource's carry_of.
+def carry_cap(i:int) -> int:
+    let cap = r_carry + t_carry_add[u_kind[i]]
+    let r = u_carry_kind[i] - 1
+    return if r >= 0 and r < r_carry_of.length and r_carry_of[r] > 0: min(cap, r_carry_of[r]) else: cap
+
 // One tick of every worker's job (Economy.work). Runs before movement.
 def work():
     for(u_x.length) i:
         let task = u_task[i]
-        if task == GATHER: gather(i, r_carry + t_carry_add[u_kind[i]])
+        if task == GATHER: gather(i, carry_cap(i))
         elif task == T_RETURN: return_home(i)
         elif task == BUILD: build_job(i)
 

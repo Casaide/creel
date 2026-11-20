@@ -69,6 +69,7 @@ def step():
     match_tick()
     fog_tick()
     trails_tick()
+    grows_tick()
     abilities_tick()
     if unit_changes != alive: spatial_build()
     next_orders()
@@ -166,6 +167,9 @@ def state_hash() -> int:
     for(resource_cells) c:
         h = mix(h, amount[c])
         h = mix(h, terrain[c])
+    for(grow_cells) c, g:  // (what's planted, #109)
+        h = mix(h, c)
+        h = mix(h, grow_due[g])
     return h
 
 def dump_state() -> string:
@@ -477,6 +481,19 @@ def load_extras():
         ab_cooldown.push(ab[p * 6 + 5])
     t_ability = extra("t_ability")
     webs = extra("webs")
+    let gw = extras.get("grows") or []::int  // (#109: none in an older file)
+    if gw.length:
+        for(gw[0]) t:
+            tr_grows.push(gw[1 + t * 2])
+            tr_grow_ticks.push(gw[2 + t * 2])
+        let base = 1 + gw[0] * 2
+        for((gw.length - base) / 2) n:
+            grow_cells.push(gw[base + n * 2])
+            grow_due.push(gw[base + n * 2 + 1])
+    else:
+        for(tr_walk) _:
+            tr_grows.push(-1)
+            tr_grow_ticks.push(0)
     let ar = extra("ability_ready")
     for(ar.length / 2) k: ids_set(ready_ids, ready_at, ar[k * 2], ar[k * 2 + 1])
     let sl = extra("slowed")

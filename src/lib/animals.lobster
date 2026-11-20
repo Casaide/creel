@@ -28,6 +28,37 @@ def set_terrain(cell:int, k:int):
         if not found: resource_cells.insert(at, cell)
     refresh(cell)
 
+// Plant terrain k (one that grows, terrain.json "grows") on cell c: walkable ground with nothing on it, not a resource
+// nor a road, and not growing already. It grows tr_grow_ticks later (grows_tick). Whether it was planted (#109).
+def can_plant(c:int, k:int) -> bool:
+    if c < 0 or c >= W * H or k < 0 or k >= tr_grows.length or tr_grows[k] < 0: return false
+    if tr_walk[terrain[c]] == 0 or occupied[c] != 0 or amount[c] != 0 or pool[c] >= 0: return false
+    if road.length and road[c] != 0: return false
+    let found, _ = binary_search(grow_cells, c)
+    return not found
+
+def plant(c:int, k:int) -> bool:
+    if not can_plant(c, k): return false
+    set_terrain(c, k)
+    let _, at = binary_search(grow_cells, c)
+    grow_cells.insert(at, c)
+    grow_due.insert(at, tick + tr_grow_ticks[k])
+    return true
+
+let GROW_EVERY = 20  // ticks between looks at what's growing (a second)
+
+// Once a second: each cell due grows into its next terrain, if nothing changed it since it was planted.
+def grows_tick():
+    if not grow_cells.length or tick % GROW_EVERY != 0: return
+    var j = 0
+    while j < grow_cells.length:
+        let c = grow_cells[j]
+        if grow_due[j] <= tick or tr_grows[terrain[c]] < 0:
+            if tr_grows[terrain[c]] >= 0: set_terrain(c, tr_grows[terrain[c]])
+            grow_cells.remove(j)
+            grow_due.remove(j)
+        else: j++
+
 // ---- pens
 
 def is_pen(b:int) -> bool: return bt_pen_animals[b_kind[b]] > 0

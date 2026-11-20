@@ -406,6 +406,7 @@ var gathered = []::[int]
 var gather_ticks = []::[int]  // [player][resource]
 var next_id = 0
 var r_carry = 0
+var r_carry_of = []::int  // per resource, the most a gatherer carries home at once (rules economy "carry_of": a felled tree is one trunk, #109), or 0
 var r_queue_max = 0
 var r_pop_max = 0
 var r_fog_building = 0

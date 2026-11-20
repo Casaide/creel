@@ -95,6 +95,11 @@ def load_map(map_id:string):
         tr_depleted.push(str_index(tr_names, gstr(td, "depleted", "")))
         tr_reseed.push(str_index(tr_names, gstr(td, "reseed", "")))
         tr_cleared.push(str_index(tr_names, gstr(td, "cleared", "")))
+        let gw = gobj(td, "grows")
+        let into = str_index(tr_names, gstr(gw, "into", ""))
+        assert gstr(gw, "into", "") == "" or into >= 0
+        tr_grows.push(into)
+        tr_grow_ticks.push(gint(gw, "seconds", 0) * TICK_HZ)
     let legend = at(d, "legend")
     let index = map(256): -1
     for(legend.keys) ch, n: index[ch[0]] = str_index(tr_names, as_str(legend.a[n]))
