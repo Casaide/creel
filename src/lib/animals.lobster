@@ -40,9 +40,7 @@ def can_plant(c:int, k:int) -> bool:
 def plant(c:int, k:int) -> bool:
     if not can_plant(c, k): return false
     set_terrain(c, k)
-    let _, at = binary_search(grow_cells, c)
-    grow_cells.insert(at, c)
-    grow_due.insert(at, tick + tr_grow_ticks[k])
+    start_growing(c)
     return true
 
 let GROW_EVERY = 20  // ticks between looks at what's growing (a second)

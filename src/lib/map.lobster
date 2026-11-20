@@ -56,7 +56,16 @@ def pool_cells(a:int) -> [int]:
         if p == a: out.push(c)
     return out
 
-// Take one unit of resource. When the last one goes, the tile turns into its depleted terrain.
+// Cell c starts growing, from now, if its terrain grows (terrain.json "grows") and it isn't already: planted, laid as a
+// plan that becomes ground, or used up into a terrain that grows back (vines picked bare, creel #123).
+def start_growing(c:int):
+    if terrain[c] >= tr_grows.length or tr_grows[terrain[c]] < 0: return
+    let found, at = binary_search(grow_cells, c)
+    if found: return
+    grow_cells.insert(at, c)
+    grow_due.insert(at, tick + tr_grow_ticks[terrain[c]])
+
+// Take one unit of resource. When the last one goes, the tile turns into its depleted terrain (which may grow back).
 def take(cell:int):
     let a = anchor(cell)
     assert amount[a] > 0
@@ -65,7 +74,9 @@ def take(cell:int):
     let cells = if pool[cell] < 0: [ cell ] else: pool_cells(a)
     for(cells) c:
         let dep = tr_depleted[terrain[c]]
-        if dep >= 0: set_cell_terrain(c, dep)
+        if dep >= 0:
+            set_cell_terrain(c, dep)
+            start_growing(c)
         refresh(c)
 
 // Pool some cells into one resource (a farm), held on the first cell.

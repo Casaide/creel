@@ -574,7 +574,9 @@ def become_terrain(b:int):
     let t = bt_ground[b_kind[b]]
     set_walk_over(cells, false)
     demolish(b)
-    for(cells) c: set_terrain(c, t)
+    for(cells) c:
+        set_terrain(c, t)
+        start_growing(c)
 
 def become_ground(b:int, i:int):
     let k = b_kind[b]
