@@ -18,10 +18,9 @@ let VX_DIE = 4
 let VX_BUILD = 5  // a worker's jobs, each with its tool (Dominic, 2026-11-04: the right tool for the job): hammering,
 let VX_MINE = 6   // picking at stone and gold, picking fruit into a basket (VX_WORK: chopping, the axe),
 let VX_FORAGE = 7
-let VX_CARRY = 8  // and walking a load home, one mode a resource (its look from data: gear.json's loads)
-let VX_LOADS = [ "food", "wood", "stone", "gold" ]
-let VX_MODES = 12
-let VX_STEPS = [ 1, 8, 8, 8, 6, 8, 8, 8, 8, 8, 8, 8 ]                    // steps in each mode (a fall's last step is lying)
+let VX_CARRY = 8  // and walking a load, one mode a resource with a load in data (gear.json's loads: vx_load_names)
+let VX_MODES = 64  // the modes a frame key leaves room for (VX_CARRY + every load)
+let VX_STEPS = [ 1, 8, 8, 8, 6, 8, 8, 8 ]                                // steps in each mode below VX_CARRY (a fall's last step is lying)
 let VX_JOB_TOOL = [ "", "", "axe", "", "", "hammer", "pick", "basket" ]  // a work mode's tool
 var VX_DRAW_K = 1.1 / vx_RES                                             // world art px a voxel (a body unit is 1.1 world px: the composed units' size)
 
@@ -42,6 +41,8 @@ let vx_shadow_of = dictionary<int, int>(16384)  // a unit's frame -> its ground 
 var vx_type_lks = []::[int]                     // type -> its line steps' looks (-1: composed)
 var vx_cur = []::int                            // type -> the look it's drawn in now
 var vx_source = ""                              // the builder's source's and data's hash (the cache key's code part)
+
+def vx_steps(m:int) -> int: return if m >= VX_CARRY: 8 else: VX_STEPS[m]
 
 def vx_fkey(lk:int, v:int, m:int, f:int, st:int) -> int: return (((lk * 4 + v) * VX_MODES + m) * 8 + f) * 8 + st
 
@@ -162,7 +163,7 @@ def vx_new_job(lk:int, v:int, modes:[int]) -> vx_job:
     let poses = []::int2
     // (a body with a gait shifts its weight standing; the rest stand on one frame, and vx_frame falls back to it)
     let stirs = vx_body_of(l.u.body).gait != nil and l.u.mount == ""
-    for(modes) m: for(if m == VX_IDLE and stirs: 4 else: VX_STEPS[m]) st: poses.push(int2 { m, st })
+    for(modes) m: for(if m == VX_IDLE and stirs: 4 else: vx_steps(m)) st: poses.push(int2 { m, st })
     return vx_job { lk, v, modes, stem, poses, 0, 0, nil, nil, []::[float4], int2_0, 0, []::string, 0, nil }
 
 // A cell just drawn (its box in a cell cw wide, the ground at anchor), packed: its index among the job's cells.
@@ -245,7 +246,7 @@ def vx_job_step(j:vx_job, until:float) -> bool:
             vx_act = if m == VX_ATTACK or job: "attack" else: ""
             let carrying = m >= VX_CARRY
             vx_stand = m != VX_WALK and not carrying
-            vx_carried = if carrying: VX_LOADS[m - VX_CARRY] else: ""
+            vx_carried = if carrying: vx_load_names[m - VX_CARRY] else: ""
             var wu = u
             if job or carrying:  // (work: the job's tool alone, what it wears kept; carrying: the load, or hands free to push)
                 let tool = if carrying: vx_load_gear(u.body, vx_carried) else: vx_tool_for(vx_body_of(u.body), VX_JOB_TOOL[m])
@@ -256,11 +257,11 @@ def vx_job_step(j:vx_job, until:float) -> bool:
             if hull != "" and m != VX_DIE:  // (its parts are baked apart and stacked on it; it falls whole)
                 wu = copy(wu)
                 wu.body = hull
-            vx_fall_t = if m == VX_DIE: float(pose.y + 1) / float(VX_STEPS[VX_DIE]) else: 0.0
+            vx_fall_t = if m == VX_DIE: float(pose.y + 1) / float(vx_steps(VX_DIE)) else: 0.0
             var parts = vx_unit_prims(wu, if m == VX_DIE: 0.0 else: float(pose.y) * 45.0)
             vx_fall_t = 0.0
             if m == VX_DIE:
-                parts = vx_dying(u, parts, float(pose.y + 1) / float(VX_STEPS[VX_DIE]))
+                parts = vx_dying(u, parts, float(pose.y + 1) / float(vx_steps(VX_DIE)))
             vx_act = ""
             vx_stand = false
             vx_carried = ""
@@ -303,13 +304,13 @@ def vx_later_modes(lk:int) -> [[int]]:  // (a job a mode: small atlases, short s
     if vx_piece(lk): return []
     let ms = [ [ VX_ATTACK ], [ VX_DIE ] ]
     if vx_lks[lk].worker:  // (a job a mode: a mounted worker's jobs together overflow an atlas)
-        for([ VX_BUILD, VX_MINE, VX_FORAGE, VX_CARRY, VX_CARRY + 1, VX_CARRY + 2, VX_CARRY + 3 ]) m, at: ms.insert(at, [ m ])
+        for([ VX_BUILD, VX_MINE, VX_FORAGE ]) m, at: ms.insert(at, [ m ])  // (its loads: baked when first carried, vx_ask_carry)
     return ms
 def vx_all_modes(lk:int) -> [[int]]:
     if vx_piece(lk): return [ [ VX_IDLE ] ]
     let ms = [ [ VX_IDLE, VX_WALK ], [ VX_ATTACK ], [ VX_DIE ] ]
     if vx_lks[lk].worker:
-        for([ VX_WORK, VX_BUILD, VX_MINE, VX_FORAGE, VX_CARRY, VX_CARRY + 1, VX_CARRY + 2, VX_CARRY + 3 ]) m, at: ms.insert(at + 1, [ m ])
+        for([ VX_WORK, VX_BUILD, VX_MINE, VX_FORAGE ]) m, at: ms.insert(at + 1, [ m ])
     return ms
 
 // A job loaded from the cache, or else queued (at the front, or the back).
@@ -331,6 +332,16 @@ def vx_plan(lk:int, front:bool) -> void:
     vx_queue_job(vx_new_job(lk, 0, [ VX_IDLE ]), front)  // (in front of its walk)
     for(vx_later_modes(lk)) ms: vx_queue_job(vx_new_job(lk, 0, ms), false)
     for(vx_looks_of(vx_lks[lk].u) - 1) v: for(vx_all_modes(lk)) ms: vx_queue_job(vx_new_job(lk, v + 1, ms), false)
+
+// A load first carried by a look: its walk with that load baked, every look of it, at the back of the queue (a pack
+// can have many goods, most never carried by most units: none of them is in a look's first bakes). Walks till then.
+let vx_carry_asked = dictionary<int, bool>(256)  // lk * VX_MODES + mode
+def vx_ask_carry(lk:int, m:int):
+    assert m < VX_MODES  // (more goods with loads than a frame key has room for: raise VX_MODES)
+    let key = lk * VX_MODES + m
+    if vx_carry_asked.get(key, false): return
+    vx_carry_asked.set(key, true)
+    for(vx_looks_of(vx_lks[lk].u)) v: vx_queue_job(vx_new_job(lk, v, [ m ]), false)
 
 def vx_ready(lk:int) -> bool: return vx_frames.get(vx_fkey(lk, 0, VX_IDLE, 0, 0), -1) >= 0
 
@@ -535,9 +546,9 @@ def vx_frame(lk:int, v:int, m:int, f:int, st:int) -> int:
 def vx_mode_of(state:string) -> int:
     if state == "attack": return VX_ATTACK
     if state == "walk": return VX_WALK
-    if find_string(state, "carry_") == 0:  // (a resource with no load of its own: its hands empty, the first)
-        let res = state.substring(6, state.length - 6)
-        return VX_CARRY + max(0, find(VX_LOADS) l: l == res)
+    if find_string(state, "carry_") == 0:  // (a resource with no load in data: walking, its hands empty)
+        let l = find(vx_load_names) n: n == state.substring(6, state.length - 6)
+        return if l >= 0: VX_CARRY + l else: VX_WALK
     if state == "work_build": return VX_BUILD
     if state == "work_mine": return VX_MINE
     if state == "work_forage": return VX_FORAGE
@@ -550,7 +561,9 @@ def vx_frame_for(id:int, k:int, state:string, d:int, n:int) -> int:
     let f = (d + 2) % 8  // (facing 2 faces screen right)
     let m = vx_mode_of(state)
     let st = if m == VX_IDLE: n % 4 elif m == VX_ATTACK: min(n, 7) else: n % 8
-    let fr = vx_frame(lk, vx_look_v(id, lk), m, f, st)
+    let v = vx_look_v(id, lk)
+    if m >= VX_CARRY and vx_frames.get(vx_fkey(lk, v, m, f, st), -1) < 0: vx_ask_carry(lk, m)
+    let fr = vx_frame(lk, v, m, f, st)
     if fr >= 0: return fr
     vx_stand_now(lk)  // (drawn before it's baked: a unit of a later age put down)
     return vx_frame(lk, 0, VX_IDLE, f, 0)
@@ -567,7 +580,7 @@ def vx_piece_frame(plk:int, f:int) -> int:
 // A dead unit's frame, t seconds after it fell: its fall, then lying.
 def vx_dead_frame(id:int, k:int, d:int, t:float) -> int:
     let lk = vx_cur[k]
-    return vx_frame(lk, vx_look_v(id, lk), VX_DIE, (d + 2) % 8, min(int(t * 10.0), VX_STEPS[VX_DIE] - 1))
+    return vx_frame(lk, vx_look_v(id, lk), VX_DIE, (d + 2) % 8, min(int(t * 10.0), vx_steps(VX_DIE) - 1))
 
 // A voxel unit's frame's shadow on the ground (drawn under every unit), or -1.
 def vx_shadow_for(f:int) -> int: return vx_shadow_of.get(f, -1)

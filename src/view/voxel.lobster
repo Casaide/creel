@@ -650,6 +650,7 @@ let vx_bodies = dictionary<string, vx_body_spec>(64)
 let vx_gears = dictionary<string, vx_gear_spec>(128)
 let vx_holds = dictionary<string, vx_hold_spec>(32)
 let vx_loads = dictionary<string, vx_load_spec>(32)  // "<body or *> <resource>"
+var vx_load_names = []::string                       // every resource some body has a load for, in the order data names them (never reordered: a carry mode is its index)
 var vx_rules = []::vx_rule
 var vx_loaded = false
 var vx_data_dirs = []::string
@@ -1015,6 +1016,7 @@ def vx_load(dirs:[string]):
                     let l = rs.a[k]
                     let heap = gstr(l, "heap", "")
                     vx_loads.set("{who} {res}", vx_load_spec { gstr(l, "gear", ""), gstr(l, "push", ""), if heap != "": vx_mat(heap) else: 0 })
+                    if (find(vx_load_names) n: n == res) < 0: vx_load_names.push(res)
         if has(go, "gear"):
             let gs = at(go, "gear")
             for(gs.keys) name, k:

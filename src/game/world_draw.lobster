@@ -47,7 +47,7 @@ def unit_state(i:int, moving:bool) -> string, int:
     let res = if u_carry_kind[i] > 0: resource_names[u_carry_kind[i] - 1] else: ""
     let phase = int(clock_s * 8.0) + u_id[i]
     if moving:
-        if t_worker[k] and u_task[i] == T_RETURN and u_carry[i] > 0: return "carry_" + res, phase % 16
+        if u_carry[i] > 0 and (u_task[i] == T_CARRY or (t_worker[k] and u_task[i] == T_RETURN)): return "carry_" + res, phase % 16  // (a carrier with goods, a gatherer taking them home)
         return "walk", phase % 16
     if u_task[i] == GATHER and t_worker[k]:
         let job = if res == "wood": "chop" elif res == "stone" or res == "gold": "mine" else: "forage"
