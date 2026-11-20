@@ -413,6 +413,8 @@ def collect_buildings():
                         if open: add(frame_index(name + ":open:mid:front"), at.x, at.y - up, at.y + half + 2.0, col)
                     else:
                         add(frame_index(if open: name + ":open" else: name), at.x, at.y - up, if flat: -100000.0 + at.y else: at.y, col)
+                        if look.turns.length and name == look.body:  // its turning part, a step for the clock (#112)
+                            add(frame_index(look.turns[int(clock_s * 4.0) % look.turns.length]), at.x, at.y - up, at.y + 1.0, col)
                         if look.front != "-": add(frame_index(look.front), at.x, at.y - up, at.y + 2.0, col)
     bld_seen = seen
     fx_ruins = filter(fx_ruins) r: clock_s - r.t0 < RUIN_STAYS + RUIN_FADE  // (they burn out, lie there, fade)
