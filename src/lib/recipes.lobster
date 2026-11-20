@@ -35,7 +35,7 @@ def recipes_tick():
                             hold_put(b, r, n)
                             produced[r][b_owner[b]] += n
                     mark_carry(b_owner[b])
-            if b_make[b] == 0 and can_start(b):
+            if b_make[b] == 0 and can_start(b) and hook_can_make(b):  // (a pack may hold it back: its worker away, #98)
                 for(bt_in[k]) need, r:
                     if need > 0: b_hold[b][r] -= need
                 b_make[b] = bt_make_ticks[k]

@@ -26,6 +26,9 @@ def hook_tick(): lua_tick()
 // Whether player p may put a building of type k at cx, cy (its size sx, sy), once the engine's own checks pass.
 def hook_can_place(p:int, k:int, cx:int, cy:int, sx:int, sy:int) -> bool: return lua_can_place(p, k, cx, cy, sx, sy)
 
+// Whether building slot b may start a round of its recipe now (its inputs are in, its outputs have room).
+def hook_can_make(b:int) -> bool: return lua_can_make(b)
+
 // An order with a code from HOOK_ORDER_BASE up. ids: the unit ids it was given to; x, y: its two arguments.
 def hook_on_order(code:int, p:int, ids:[int], x:int, y:int): lua_on_order(code, p, ids, x, y)
 

@@ -51,6 +51,7 @@ Lua 5.4, cut to what lockstep needs:
 | `on_tick()` | once a tick, after the economy's steps | |
 | `on_unit_tick(i)` | each tick, for each unit whose type has `"tick": true` | |
 | `can_place(p, k, cx, cy, sx, sy)` | player `p` places building type `k` at `cx, cy` (size `sx, sy`) | false refuses |
+| `can_make(b)` | building slot `b` is about to start a round of its recipe (its inputs are in) | false holds it back this tick |
 | `on_hit(by, target, damage)` | a blow is about to land on unit slot `target` from unit id `by` | the damage |
 | `on_hurt(target, by)` | after the tick's blows, for each unit hurt | |
 | `on_death(i, killer)` | unit slot `i` is dying | |
