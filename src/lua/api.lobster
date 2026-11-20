@@ -15,7 +15,7 @@ let LA_NAMES = [ "unit_count", "u_id", "u_x", "u_y", "u_kind", "u_owner", "u_tas
     "worker_type", "road", "occupied", "amount", "res_at", "stocked", "tick", "want", "hold_take", "trained",
     "resource_index", "nearest_resource", "start_gather", "start_build", "approach_building", "clear_task", "in_reach", "unit_column", "building_column", "player_column",
     "unit_get", "unit_set", "building_get", "building_set", "player_get", "player_set", "rules", "player_count", "resource_count", "cell_of",
-    "t_animal", "u_hp", "b_hp" ]
+    "t_animal", "u_hp", "b_hp", "lay_foundation", "fits" ]
 
 // The constants: the engine's task codes and units, and the map's size (set as a match starts).
 def lua_api_consts():
@@ -85,7 +85,7 @@ def lua_of_json(v:JV) -> int:
     return t
 
 // The functions that change the sim: not while it's only being read (the view's calls, and can_place).
-let LA_WRITE_NAMES = [ "set_u_task", "set_u_target", "set_u_work", "set_u_stuck", "set_u_moving", "set_pop", "want", "hold_take",
+let LA_WRITE_NAMES = [ "lay_foundation", "set_u_task", "set_u_target", "set_u_work", "set_u_stuck", "set_u_moving", "set_pop", "want", "hold_take",
     "trained", "start_gather", "start_build", "approach_building", "clear_task", "unit_set", "building_set", "player_set" ]
 let LA_WRITES = map(LA_WRITE_NAMES) n:
     let id = find(LA_NAMES) x: x == n
@@ -314,6 +314,18 @@ def lua_api(id:int, a:[int]):
         case 82:
             let b = lx_a_building(a, 0, id)
             if b >= 0: lx_r_int(b_hp[b])
+        case 83:  // lay_foundation(p, k, cx, cy): a site where the ground lets it go, the packs' rules aside (#105); its id, or 0
+            let p = lx_a_player(a, 0, id)
+            let k = lx_a_btype(a, 1, id)
+            let cx = lx_want_int(a, 2, lx_la_name(id))
+            let cy = lx_want_int(a, 3, lx_la_name(id))
+            if not lfail and p >= 0 and k >= 0: lx_r_int(if ground_fits(p, k, cx, cy) and not build_barred(p, k): place_site(p, k, cx, cy, 0) else: 0)
+        case 84:  // fits(p, k, cx, cy): whether the ground lets player p lay type k there, the packs' rules aside (#105)
+            let p = lx_a_player(a, 0, id)
+            let k = lx_a_btype(a, 1, id)
+            let cx = lx_want_int(a, 2, lx_la_name(id))
+            let cy = lx_want_int(a, 3, lx_la_name(id))
+            if not lfail and p >= 0 and k >= 0: lx_r_bool(ground_fits(p, k, cx, cy, 0))
         default: lua_fail("an unknown API function")
 
 // ------------------------------------------------------------------ the hook points
