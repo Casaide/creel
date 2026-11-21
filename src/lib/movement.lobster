@@ -58,7 +58,7 @@ def spot(i:int, x:int, y:int) -> int, int:
             while k < sp_end[c]:
                 let j = sp_items[k]
                 k++
-                if j != i and j < u_x.length and u_moving[j] == 0: near.push(j)
+                if j != i and j < u_x.length and u_moving[j] == 0 and not (j < s_inside.length and s_inside[j] != 0): near.push(j)  // (one inside the building takes no room by it, #133)
             cx++
         cy++
     let space = 2 * r + SPOT_GAP / 2
@@ -511,7 +511,7 @@ def separate():
                     if dx >= rr or dx <= -rr or dy >= rr or dy <= -rr: continue
                     let d2 = dx * dx + dy * dy
                     if d2 >= rr * rr: continue
-                    if mv[u] == 1 and mv[v] == 1 and owners[u] == owners[v] and on_middle(sp_cell[u]) and on_middle(sp_cell[v]): continue  // (two of a side walking down a road's middle pass each other as the genre's do, trading places, not shoving off it: #129)
+                    if (mv[u] == 1 or mv[v] == 1) and owners[u] == owners[v] and on_middle(sp_cell[u]) and on_middle(sp_cell[v]): continue  // (one of a side walking down a road's middle passes another there, walking or standing, as the genre's do, trading places, not shoving off it: #129)
                     var i = u
                     var j = v
                     if v < u:

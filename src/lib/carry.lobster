@@ -228,7 +228,7 @@ def carry_step(i:int):
         jb_want[j] = 0
         b_coming[to][r] += jb_n[j]
         approach_building(i, to)
-    let x0, y0, x1, y1 = building_rect(to)
+    let x0, y0, x1, y1 = entry_rect(to)
     if u_work[i] > 0 or in_reach(i, x0, y0, x1, y1):  // (once inside, it stays till it comes out)
         u_moving[i] = 0
         u_stuck[i] = 0
