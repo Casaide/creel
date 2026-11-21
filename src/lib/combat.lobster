@@ -530,13 +530,23 @@ def apply_hits(n:int):
             let kk = index_of(c_hurt_by[jj])
             if kk >= 0 and t_kill_gold[u_kind[kk]] != 0 and is_foe(u_owner[kk], u_owner[jj]): stock_add(gold, u_owner[kk], t_kill_gold[u_kind[kk]])
     var j = n - 1
+    let spilled = []::int  // riders of the fallen (owner, x, y, then the record), out once the dead are gone
     while j >= 0:
         if u_hp[j] <= 0:
             if events_on: events.push(Event { EV_DIE, u_id[j], 0, 0, u_x[j], u_y[j] })
             hook_on_death(j, c_hurt_by[j])
             if t_animal[u_kind[j]] == 0: lost[u_owner[j]]++
+            var o = 0
+            while o < u_inside[j].length:
+                for([ u_owner[j], u_x[j], u_y[j] ]) v: spilled.push(v)
+                for(slice(u_inside[j], o, REC_SIZE)) v: spilled.push(v)
+                o += REC_SIZE
             remove_unit(j)
         j--
+    var so = 0
+    while so < spilled.length:
+        rider_out(spilled[so], slice(spilled, so + 3, REC_SIZE), spilled[so + 1], spilled[so + 2])
+        so += 3 + REC_SIZE
     var b = b_id.length - 1
     while b >= 0:
         if c_bhurt[b] != 0:

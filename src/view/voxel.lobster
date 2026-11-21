@@ -572,6 +572,7 @@ class vx_body_spec:
     crew:[float3] = []         // an engine: where its crew stand (on their own legs, walking as it moves)
     seats:[float3] = []        // a war beast: where its crew sit (a howdah), at their seat height
     style_names:[string] = []  // an engine in each culture's style (siege.<kind>.<style>): its skin, pale, mark
+    packed:string = ""         // an engine that packs (lib/siege's packed): the body it's drawn as while packed (a frame on its wagon)
     parts:[vx_part_spec] = []  // pieces that turn on their own (a turret): this body is the whole figure (a portrait, a fall)
     hull:string = ""           // with parts: the body without them
     piece:bool = false         // a hull or a part: on the ground as the whole body is, not under its own lowest point
@@ -718,6 +719,7 @@ def vx_parse_body(id:string, o:JV) -> vx_body_spec:
                            gfloat(g, "twist", 0.0), gfloat(g, "front", 0.0), gfloat(g, "back", 0.0), gfloat(g, "dip", 0.0), gfloat(g, "turn", 0.0) }
     b.crew = map(glist(o, "crew")) v: vx_v3(v)
     b.seats = map(glist(o, "seats")) v: vx_v3(v)
+    b.packed = gstr(o, "packed", "")
     let so = gobj(o, "styles")
     for(so.keys) name, k:
         b.style_names.push(name)

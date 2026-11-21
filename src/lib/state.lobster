@@ -158,6 +158,7 @@ var u_hull = []::int     // a turret: the way its hull last moved (tenths of a d
 var u_lx = []::int       // a turret: where the hull was when that was worked out
 var u_ly = []::int
 var u_mount = []::[int]   // per unit: its mounts' aim, target and cooldown, in threes (combat.lobster)
+var u_inside = []::[int]  // per unit: units riding inside it (a siege tower, lib/board): REC_SIZE ints each, by id
 var u_orders = []::[Cmd]  // per unit: shift-queued orders, oldest first (units.orders)
 
 // The columns in unit_fields order (the hash, the scenario file), then the rest.
@@ -311,6 +312,8 @@ var bt_wall = []::int        // a wall piece (`line`)
 var bt_over_trees = []::int  // sees over trees (fog)
 var r_fog_tower = 0
 var r_garrison_heal_every = 0
+let DOCK_HOLDS = 8
+var r_dock_holds:int = DOCK_HOLDS  // how many a docking engine (a siege tower) carries (buildings.json garrison.dock_holds; lib/walls' riders)
 var r_call_range = 0
 var garrison_not = []::int  // tags (classes) that don't fit in a building (workers always do)
 
@@ -433,6 +436,7 @@ def remove_unit(i:int):
     for(unit_columns()) col: col.remove(i)
     u_orders.remove(i)
     u_mount.remove(i)
+    u_inside.remove(i)
 
 var tick = 0
 var next_group = 1
@@ -522,6 +526,7 @@ def insert_unit(uid:int, owner:int, k:int, x:int, y:int, speed:int, radius:int, 
     for(unit_columns()) col, n: col.insert(at, v[n])
     u_orders.insert(at, [])
     u_mount.insert(at, [])
+    u_inside.insert(at, [])
     return at
 
 var t_hero = []::int         // per unit type: 1 for a hero
@@ -623,6 +628,8 @@ var tr_speed_pct = 0
 def pad_saved_columns():
     while t_form_r.length < t_gap.length: t_form_r.push(0)
     while u_mount.length < u_id.length: u_mount.push([])
+    while u_inside.length < u_id.length: u_inside.push([])
+    if r_dock_holds == 0: r_dock_holds = DOCK_HOLDS  // (a save from before #157)
     while b_hold.length < b_id.length: b_hold.push([])  // (a save from before #48: a pool economy's empty holds)
     while b_want.length < b_id.length: b_want.push([])
     while b_resv.length < b_id.length: b_resv.push([])

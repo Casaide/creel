@@ -19,6 +19,12 @@ def sheltering(p:int, uid:int) -> bool:
             while o < b_inside[b].length:
                 if b_inside[b][o + REC_ID] == uid: return true
                 o += REC_SIZE
+    for(u_x.length) j:  // (or riding in one of its units)
+        if u_owner[j] == p:
+            var o = 0
+            while o < u_inside[j].length:
+                if u_inside[j][o + REC_ID] == uid: return true
+                o += REC_SIZE
     return false
 
 // Why the player can't train (or revive) hero type k now: false if it can (Heroes.why_not).
