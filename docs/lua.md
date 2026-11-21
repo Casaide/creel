@@ -80,7 +80,7 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
   `nearest_resource(x, y, kind, i, farms, roomy_only, seen)`, `terrain_at(c)`, `terrain_type(id)` (-1 if there's none),
   `plant(c, t)` (terrain t, one that `grows` in terrain.json, on free walkable ground at c; it grows on by itself,
   and through a save; whether it was planted; #109).
-- **The economy and orders:** `stocked()`, `tick()`, `b_making(b)` (ticks left in a recipe's round, 0 if none), `want(b, r, n)`, `hold_take(b, r, n)`, `trained(b, k)` (a new
+- **The economy and orders:** `stocked()`, `tick()`, `b_making(b)` (ticks left in a recipe's round, 0 if none), `want(b, r, n)`, `hold_take(b, r, n)`, `hold_put(b, r, n)` (into b, as much as it has room for; how many went in, #142), `trained(b, k)` (a new
   unit at its door: its slot), `start_gather(i, c, kind)`, `start_build(i, id)`, `approach_building(i, b)`, `approach_cell(i, c)`,
   `clear_task(i)`, `in_reach(i, x0, y0, x1, y1)`, `fits(p, k, cx, cy)` (whether the ground lets p lay type k there, the packs' own rules aside),
   `lay_foundation(p, k, cx, cy)` (a site, paid or asking its goods, where `fits` and its type is open to p: its id, or
