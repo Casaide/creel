@@ -661,6 +661,8 @@ def draw_world(alpha:float):
                     draw_town()
                     draw_shots(alpha)
                     fx_draw() id: unit_anchor(id)
+                b_sheet = -1
+                draw_shot_bodies()
                 if not rec_clean: draw_marks(alpha)
                 perf_lap(5)
     if shading: draw_shade(cam_px, ws)

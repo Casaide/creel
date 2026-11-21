@@ -31,6 +31,7 @@ class ImpactLook:
     scorch:float
     debris:int
     shake:float
+    dust = 0  // puffs of dust thrown up round it
 
 class ShotStyle:
     arc:float
@@ -52,6 +53,8 @@ class ShotStyle:
     jag = 1
     fade = 0.0
     trail = 0.0  // a fading tail behind a bolt, canvas px
+    bodies = []::string  // a voxel shot (shots.json "bodies"): these voxel bodies, drawn in turn as it tumbles
+    spin = 0.0           // its tumble: turns a second (each body in 8 facings is a turn)
     muzzle = MuzzleLook { 0.0, float4 { 1.0, 0.86, 0.56, 1.0 }, 0, 0.0, 0, 0.0 }
     impact = ImpactLook { 0.0, float4 { 1.0, 0.68, 0.34, 1.0 }, 0, 0.0, 0, 0.0 }
     hit = HitLook { 0, 0.0, 0.0, 0.0, float4_0, "" }  // its own impact (shots.json "hit"); no sparks: the game's
@@ -87,6 +90,8 @@ def shot_style_of(m:JV) -> ShotStyle:
     s.jag = max(1, gint(m, "jag", 1))
     s.fade = num("fade", 0.0)
     s.trail = num("trail", 0.0)
+    s.bodies = gstrs(m, "bodies")
+    s.spin = num("spin", 1.0)
     let mz = get(m, "muzzle")
     if mz:
         def mnum(k:string, f:float) -> float: return if has(mz, k): as_float(at(mz, k)) else: f
@@ -95,6 +100,7 @@ def shot_style_of(m:JV) -> ShotStyle:
     if im:
         def inum(k:string, f:float) -> float: return if has(im, k): as_float(at(im, k)) else: f
         s.impact = ImpactLook { inum("blast", 0.0), if has(im, "col"): hex_col(substring(rstr(im, "col"), 1, 6)) else: s.impact.col, gint(im, "smoke", 0), inum("scorch", 0.0), gint(im, "debris", 0), inum("shake", 0.0) }
+        s.impact.dust = gint(im, "dust", 0)
     let h = get(m, "hit")
     if h:
         def hnum(k:string, f:float) -> float: return if has(h, k): as_float(at(h, k)) else: f
@@ -108,6 +114,17 @@ def shot_style(kind:string) -> ShotStyle:
     let made = if m: shot_style_of(m) else: shot_style("arrow")
     SHOT_STYLES.set(kind, made)
     return made
+
+// A voxel shot in flight this frame, where draw_bolt put it (canvas px), for the sprites drawn over the shots.
+class ShotBody:
+    bodies:[string]
+    at:float2
+    spin:float
+    seed:float  // (so two in the air don't tumble in step)
+    w:float     // its orb, drawn until its bodies are baked
+    col:float4
+
+var shot_bodies = []::ShotBody
 
 // A flying shot at u (0..1) of its way from a to b, with a speck of shadow under it.
 def draw_bolt(st:ShotStyle, a:float2, b:float2, u:float, alpha:float):
@@ -132,8 +149,9 @@ def draw_bolt(st:ShotStyle, a:float2, b:float2, u:float, alpha:float):
         for(arrow_lines(p + dir * st.len * 0.5, p - dir * st.len * 0.5, st.w, st.shaft, st.head, st.fletch, true)) l:
             ui_line(l.a, l.b, l.w, float4 { l.col.x, l.col.y, l.col.z, alpha })
     elif st.len > 0.0: ui_line(p - dir * st.len * 0.5, p + dir * st.len * 0.5, st.w, col)
+    elif st.bodies.length: shot_bodies.push(ShotBody { st.bodies, p, st.spin, a.x * 0.37 + a.y, st.w, col })  // (drawn after: game/controls' draw_shot_bodies)
     else: fx_circle(p, st.w, col)
-    fx_circle(p + float2 { 0.0, lift + 1.0 }, 0.8, float4 { 0.0, 0.0, 0.0, 0.25 * alpha })
+    fx_circle(p + float2 { 0.0, lift + 1.0 }, if st.bodies.length: st.w * 0.45 else: 0.8, float4 { 0.0, 0.0, 0.0, 0.25 * alpha })
 
 // What the view draws for one sim shot beyond a plain flying one: its pulses and pellets, on their own timers.
 class Tracer:
@@ -387,6 +405,10 @@ def fx_impact(st:ShotStyle, at:float2, on_ground:bool):
     if m.scorch > 0.0 and on_ground: fx_scorches.push(Scorch { at, 0.0, m.scorch })
     if m.debris > 0:
         fx_hit(at, HitLook { m.debris, 3.0, m.blast * 2.0 + 8.0, 0.4, float4 { 0.3, 0.26, 0.2, 1.0 }, "" })
+    for(m.dust) n:  // (a ring of it, thrown out round where it came down)
+        let ang = float(n) * 360.0 / float(m.dust) + rnd_range(-20.0, 20.0)
+        let r = rnd_range(2.0, 7.0)
+        fx_dusts.push(Dust { at + float2 { cos(ang) * r * 1.4, sin(ang) * r * 0.7 }, 0.0, rnd_range(3.5, 6.5) })
     fx_shake = max(fx_shake, m.shake)
 
 // The screen's offset for its shake just now.
