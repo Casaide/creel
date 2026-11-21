@@ -257,8 +257,12 @@ def in_reach(i:int, x0:int, y0:int, x1:int, y1:int) -> bool:
     return dx * dx + dy * dy <= reach * reach
 
 def approach_building(i:int, b:int):
-    let x0, y0, x1, y1 = entry_rect(b)
-    order_reach(i, x0, y0, x1, y1, if by_door(b): cell_field(door_cell(b), true, lane(i)) else: building_field(b_id[b], true, lane(i)))
+    if by_door(b):  // (onto its door tile, to go in there: #133)
+        let dx, dy = centre(door_cell(b))
+        order_move(i, dx, dy, SLOT_ARRIVE, 0, -1, -1, 0, true)
+        return
+    let x0, y0, x1, y1 = building_rect(b)
+    order_reach(i, x0, y0, x1, y1, building_field(b_id[b], true, lane(i)))
 
 // ---- gather spots
 
