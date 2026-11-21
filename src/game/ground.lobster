@@ -6,7 +6,7 @@
 // pixel, and water with sand, a wet edge, depth, the sky and ripples. The fog is drawn over it, per tile. Each culture's paths come from game/paths.lobster.
 
 let MASK_K = 4   // mask samples per tile
-let MASK_CH = 6  // build_masks' channels: the masks' four and the props' two
+let MASK_CH = 7  // build_masks' channels: the masks' four, the props' two and the fords'
 var relief_occlude = 2  // tiles: how far behind a hill's top lower ground makes it a near edge, drawn again over what stands behind it (2 hides behind a drop of a level or so; a higher drop hides more)
 let OCCLUDE_SORT = 6.0
 var relief_faces = []::resource<mesh>?  // per level group 1..MAX_LEVEL
@@ -161,7 +161,7 @@ SHADER terrain
         // on a Retina Mac, and never less than one when zoomed out), so the ground stays fine at every zoom.
         vec2 ap = floor(world * 1.5 * dev_px / max(1.0, floor(art_px + 0.5)));
         vec4 m = texture(tex0, t / map_size);
-        vec4 pm = texture(tex5, t / map_size);  // (the ground under props: R woods, G stone and gold)
+        vec4 pm = texture(tex5, t / map_size);  // (the ground under props: R woods, G stone and gold; B fords)
         float n = vnoise(t * 2.3) * 0.6 + vnoise(t * 6.1) * 0.4;
         float edge_n = zn(t * 1.1 + 3.0) - 0.5 + (vnoise(t * 3.7 + 11.0) - 0.5) * 0.4 + (vnoise(t * 9.0 + 5.0) - 0.5) * 0.25 + (vnoise(t * 21.0 + 2.0) - 0.5) * 0.12;  // (ragged edges, at a few scales)
         // the grass in zones over many tiles: lush by water, darker by woods and reeds, dry and yellow on open and
@@ -327,6 +327,36 @@ SHADER terrain
             if (rip > rip_at && gate > gate_at) col = mix(col, mix(vec3(0.66, 0.80, 0.80), vec3(0.90, 0.95, 0.97), water_ripples), 0.4 + 0.35 * water_ripples);
             else if (above > rip_at && gate > gate_at) col *= 0.9;
             float foam = water_edge + 0.015 + 0.01 * sin(time * 1.1 + n * 9.0);
+            // a ford: shallow water over a bed of sand and pebbles, broken white where it runs over them, and a
+            // few flat stones standing dry along it, so the way across reads from bank to bank
+            float fd = smoothstep(0.22, 0.75, pm.b + (n - 0.5) * 0.4 + edge_n * 0.35 + (vnoise(t * 0.9 + 40.0) - 0.5) * 0.6) * smoothstep(0.04, 0.2, pm.b);
+            if (fd > 0.0) {
+                vec2 bid;
+                vec2 boff;
+                vec3 bv = stones(t * 6.0, 0.8, bid, boff);
+                vec3 bed = mix(vec3(0.58, 0.51, 0.37), vec3(0.67, 0.60, 0.45), hs(floor(ap / 3.0), 41u));
+                if (bv.x > 0.1 && hash(bid + 2.0) > 0.45) bed = mix(bed, mix(vec3(0.42, 0.40, 0.35), vec3(0.62, 0.58, 0.50), bv.y), 0.75);
+                bed = mix(bed, water_shallow, 0.38) * (0.93 + 0.13 * lit);
+                col = mix(col, bed, fd * 0.75);
+                vec2 fp = ap * vec2(0.08, 0.45) + vec2(time * 0.9, time * 0.1);
+                float fr = vnoise(fp) * 0.7 + vnoise(fp * 2.3 + 4.0) * 0.3;
+                float fe = 1.0 - abs(fd - 0.3) / 0.14;  // (its edges, where the river runs off the bar: broken white all along)
+                if (((fd > 0.5 && fr > 0.74) || (fe > 0.0 && fr > 0.62 - 0.12 * fe)) && hs(ap, 43u) > 0.35) col = mix(col, vec3(0.88, 0.93, 0.94), 0.6);
+                vec2 sid;
+                vec2 soff;
+                stones(t * 1.7, 0.7, sid, soff);
+                float sr = 0.17 + 0.08 * hash(sid + 5.0);
+                float sd = length(soff);
+                if (fd > 0.8 && hash(sid + 17.0) > 0.62 && sd < sr + 0.05) {
+                    if (sd < sr && soff.y < sr * 0.6) {
+                        float lt = dot(soff / sr, vec2(-0.7, -0.7));
+                        vec3 rock = mix(vec3(0.52, 0.50, 0.45), vec3(0.66, 0.64, 0.58), hash(sid + 7.0));
+                        col = rock * (lt > 0.35 ? 1.14 : lt < -0.45 ? 0.72 : 1.0) * (0.95 + 0.1 * hs(ap, 47u));
+                    } else if (soff.y > 0.0) {
+                        col = mix(col, vec3(0.86, 0.91, 0.92), hs(ap, 49u) > 0.4 ? 0.6 : 0.0);  // (the water breaking white on its far side)
+                    }
+                }
+            }
             if (water < foam && hs(ap, 91u) > 0.3) col = mix(col, vec3(0.78, 0.84, 0.80), 0.55);
             else if (water < foam + 0.025) col *= 0.88;
             // a bank (bank_px art px high; 0: none): the water lies that far below the ground, so under the far
@@ -461,11 +491,12 @@ def mask_channel(name:string) -> int:
         default: -1
 
 // The ground under the props (D-242), blurred as the masks are into prop_tex: R woods (a forest floor), G stone, gold and
-// rubble (scree). Channels 4 and 5 of build_masks' samples.
+// rubble (scree), B fords (a stony bed under shallow water). Channels 4, 5 and 6 of build_masks' samples.
 def prop_channel(name:string) -> int:
     return switch name:
         case "tree", "stump": 4
         case "stone", "gold", "rubble": 5
+        case "ford": 6
         default: -1
 
 def prop_weight(name:string) -> float:
@@ -513,7 +544,7 @@ def build_masks():
     mask_bytes = map(w * h * 4) i: clamp(int(a[(i / 4) * MASK_CH + i % 4] * 255.0 + 0.5), 0, 255)
     def texel(k:int, c:int) -> float4: return float4 { byte_of(a[k * MASK_CH + c]), byte_of(a[k * MASK_CH + c + 1]), byte_of(a[k * MASK_CH + c + 2]), byte_of(a[k * MASK_CH + c + 3]) }
     mask_tex = gl.create_texture(map(h) y: map(w) x: texel(y * w + x, 0), texture_format_clamp | texture_format_nomipmap)
-    prop_tex = gl.create_texture(map(h) y: map(w) x: float4 { byte_of(a[(y * w + x) * MASK_CH + 4]), byte_of(a[(y * w + x) * MASK_CH + 5]), 0.0, 0.0 }, texture_format_clamp | texture_format_nomipmap)
+    prop_tex = gl.create_texture(map(h) y: map(w) x: float4 { byte_of(a[(y * w + x) * MASK_CH + 4]), byte_of(a[(y * w + x) * MASK_CH + 5]), byte_of(a[(y * w + x) * MASK_CH + 6]), 0.0 }, texture_format_clamp | texture_format_nomipmap)
     ground_stale = true
     if not paths_tex:  // (until the paths are painted: game/paths.lobster)
         let zero = map(4): map(4): float4_0
