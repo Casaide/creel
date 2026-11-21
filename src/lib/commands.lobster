@@ -117,6 +117,12 @@ def cmd_cancel(p:int, bid:int, n:int):
     q.remove(n)
     if n == 0: b_train[b] = 0
 
+// Take down one of your own buildings or sites, as the genre's Delete key does (#149): it falls as one lost in a fight.
+def cmd_demolish(p:int, bid:int):
+    let b = b_index_of(bid)
+    if b < 0 or b_owner[b] != p: return
+    fall(b)
+
 // Workers take what they carry to that building, then go back to gathering (Economy.cmd_drop_off).
 def cmd_drop_off(p:int, ids:[int], bid:int):
     let b = b_index_of(bid)
@@ -244,6 +250,7 @@ def run(c0:Cmd):
         case CMD_UNGARRISON:
             if index_of(c.a) >= 0: cmd_unload(p, c.a)
             else: cmd_ungarrison(p, c.a)
+        case CMD_DEMOLISH: cmd_demolish(p, c.a)
         default:
             assert c.code >= HOOK_ORDER_BASE
             hook_on_order(c.code, p, ids, c.a, c.b)

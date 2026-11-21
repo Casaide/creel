@@ -154,13 +154,7 @@ def raze_mine():
     var b = b_id.length - 1
     while b >= 0:
         if b_owner[b] == ME and b_done[b] == 1 and bt_name[b_kind[b]] != "town_center" and not wall_like(b):
-            events.push(Event { EV_DIE, b_id[b], 1, b_sx[b], b_cx[b] * TILE + b_sx[b] * TILE / 2, b_cy[b] * TILE + b_sy[b] * TILE / 2 })
-            clear_farm(b)
-            pen_gone(b)
-            spill(b)
-            breach(b)
-            occupy(footprint(b), 0)
-            remove_building(b)
+            fall(b)
         b--
 
 def after_step():

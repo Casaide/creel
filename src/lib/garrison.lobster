@@ -127,7 +127,7 @@ def garrison_tick():
                 clear_task(i)
                 u_moving[i] = 0
             else:
-                let x0, y0, x1, y1 = building_rect(b)
+                let x0, y0, x1, y1 = entry_rect(b)
                 if in_reach(i, x0, y0, x1, y1):
                     enter(i, b)
                 elif u_moving[i] == 0:

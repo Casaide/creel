@@ -137,6 +137,7 @@ def avoid(i:int, x:int, y:int, s:int, ex:int, ey:int, still:bool) -> int, int:
                 let j = sp_items[k]
                 k++
                 if j == i or u_perch[j] != 0 or t_air[u_kind[j]] != air: continue
+                if j < s_inside.length and s_inside[j] != 0: continue  // (one inside a building isn't steered round, #135)
                 if still and (u_owner[j] != me or u_moving[j] != 0): continue  // (after a foe: only round its own that stand, #391)
                 let rr = ri + u_radius[j]
                 let look = rr * AVOID_LOOK / 2

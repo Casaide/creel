@@ -36,7 +36,9 @@ class Lockstep:
     desync = ""
     first_seq = 0    // our first command this link carries
     more = []::Link  // a host's other players' links (more than two people: a star round the host)
-    relay = false    // the host: every turn that comes in goes on to the others
+    relay = false    // the host: every turn that comes in goes on to the others (and it starts the match: ls_begin)
+    started = false  // every player has loaded and the first tick may run (ls_begin_tick)
+    ready = []::int  // the host: the links whose player has loaded
 
 def net_host(port:int) -> Link:
     let l, err = tcp.listen("0.0.0.0", port)
@@ -164,8 +166,30 @@ def ls_receive(ls:Lockstep) -> [[string]]:
     check_hashes(ls)
     return rest
 
+// The start (#151): each joiner says once it has loaded ('R'); the host, once every joiner has, tells them all to go ('G')
+// and goes. A machine that loads first so waits at the start instead of running its slack and freezing mid-move, and no
+// one begins a turn behind. Call ls_begin once loaded, then ls_begin_tick each frame until it's true. Other frames
+// (none should come before the start) go back on their link.
+def ls_begin(ls:Lockstep):
+    if not ls.relay: net_send(ls.link, 'R', "")
+
+def ls_begin_tick(ls:Lockstep) -> bool:
+    if ls.started: return true
+    for(ls_links(ls)) l, k:
+        let rest = []::[string]
+        for(net_poll(l)) f:
+            if f[0] == "R" and ls.relay:
+                if (find(ls.ready) r: r == k) < 0: ls.ready.push(k)
+            elif f[0] == "G" and not ls.relay: ls.started = true
+            else: rest.push(f)
+        net_unread(l, rest)
+    if ls.relay and ls.ready.length >= ls_links(ls).length:
+        for(ls_links(ls)) l: net_send(l, 'G', "")
+        ls.started = true
+    return ls.started
+
 def may_run(ls:Lockstep, turn:int) -> bool:
-    if ls.desync != "" or (filter(ls_links(ls)) l: l.closed).length: return false
+    if not ls.started or ls.desync != "" or (filter(ls_links(ls)) l: l.closed).length: return false
     for(ls.players) p:
         if ls.done[p] < turn - 2: return false
     return true

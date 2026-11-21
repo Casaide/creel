@@ -52,7 +52,10 @@ def unit_state(i:int, moving:bool) -> string, int:
     if u_task[i] == GATHER and t_worker[k]:
         let job = if res == "wood": "chop" elif res == "stone" or res == "gold": "mine" else: "forage"
         return "work_" + job, phase % 8
-    if u_task[i] == BUILD and t_worker[k]: return "work_build", phase % 8
+    if u_task[i] == BUILD and t_worker[k]:
+        let b = b_index_of(u_target[i])
+        if b >= 0 and b_done[b] == 0 and b_progress[b] >= build_cap(b): return "idle", phase / 6  // (built as far as its goods go: it waits for more, #131)
+        return "work_build", phase % 8
     return "idle", phase / 6  // (a slow shift of weight, each unit in its own time)
 
 def visible_to_me(c:int) -> bool: return reveal or fog[ME][c] == 2
@@ -487,12 +490,13 @@ let GROWN_TO = 0.8
 
 def collect_props():
     collect_doodads()
+    let own = map(tr_names) n: prop_of.get(n, "") != ""  // (a terrain that names a prop of its own draws it, holding nothing and growing nothing: dug earth, #128)
     for(W * H) c:
         // (under the fog, the ground as you last saw it: a farm sown in the dark stays grass until you look, Fog's memory)
         let now = fog[ME][c] == 2 or fog_ground.length <= ME
         let tt = if now: terrain[c] else: fog_ground[ME][c]
         // (the land is no secret, #334: trees, gold, stone and bushes show where never explored, as the map was made)
-        if fog_shows_land(fog[ME][c]) and (tr_res[tt] != 0 or species[c] != "-" or tr_grows[tt] >= 0) and near_view(iso(float((c % W) * 1000 + 500), float((c / W) * 1000 + 500))):
+        if fog_shows_land(fog[ME][c]) and (tr_res[tt] != 0 or species[c] != "-" or tr_grows[tt] >= 0 or own[tt]) and near_view(iso(float((c % W) * 1000 + 500), float((c / W) * 1000 + 500))):
             let tname = tr_names[tt]
             var kind = prop_of.get(tname, "")
             var scale = 1.0
@@ -533,28 +537,32 @@ def shade_of(d:Drawable, cam_px:float2, ws:float2, back:float2) -> float4:
     if d.f < 0 or d.y <= -50000.0: return SHADE_NONE
     let role = frame_role_of(d.f)
     if role == ROLE_UNIT: return atmo_stand_colour((float2 { d.x, d.ay } - cam_px) * zoom + ws / 2.0 + back)
-    return if role == ROLE_CAST: SHADE_NONE else: SHADE_CLEAR
+    return if frame_casts(d.f): SHADE_NONE else: SHADE_CLEAR
 
 // The shade buffer (view/atmosphere.lobster), when the mood shades: the ground's shadows go into it, joining into one
 // shade instead of piling up black on the world; then the world's own sprite batches again (kept as they were drawn,
 // so back to front), what stands up out of the shade cleared of it (props, buildings: lit by their own bake) and each
-// unit given the shade of the ground at its feet. What lies flat on the ground is shaded as the ground is. After the
-// world.
+// unit given the shade of the ground at its feet. What lies flat on the ground is shaded as the ground is. The units'
+// own shadows go in after the ground's shade is kept for them (atmo_shade_standing): they shade the ground, not a unit,
+// or a big beast standing in its own shadow went dark and light by its walk step. After the world.
 def draw_shade(cam_px:float2, ws:float2):
     flush_sprites()
     let was = gl.blend(blend_none)
     atmo_shade_begin()
-    sprite_shader = "atmo_shade_cast"
-    gl.translate(ws / 2.0):
-        gl.scale(zoom):
-            gl.translate(-cam_px):
-                b_sheet = -1
-                for(draws) d:
-                    if d.f >= 0 and frame_role_of(d.f) == ROLE_CAST: sprite(d.f, d.x, d.ay, float4_1)
-                flush_sprites()
-    sprite_shader = "sprite"
-    b_sheet = -1
+    def casts(role:int):
+        sprite_shader = "atmo_shade_cast"
+        gl.translate(ws / 2.0):
+            gl.scale(zoom):
+                gl.translate(-cam_px):
+                    b_sheet = -1
+                    for(draws) d:
+                        if d.f >= 0 and frame_role_of(d.f) == role: sprite(d.f, d.x, d.ay, float4_1)
+                    flush_sprites()
+        sprite_shader = "sprite"
+        b_sheet = -1
+    casts(ROLE_CAST)
     atmo_shade_standing()
+    casts(ROLE_UNIT_CAST)
     gl.set_shader("atmo_shade_stand_or_clear")
     gl.translate(ws / 2.0):
         gl.scale(zoom):
@@ -642,7 +650,7 @@ def draw_world(alpha:float):
                         flush_sprites()
                         gl.scale(1.5): draw_cracks_of(int(d.x))
                         b_sheet = -1
-                    elif shading and d.f >= 0 and frame_role_of(d.f) == ROLE_CAST: pass()  // (into the shade buffer instead: draw_shade)
+                    elif shading and d.f >= 0 and frame_casts(d.f): pass()  // (into the shade buffer instead: draw_shade)
                     elif d.f == -5: sprite_faded(int(d.xf[1]), d.x, d.ay, d.col, d.xf[0])  // a ruin fading out
                     elif d.xf.length: sprite_xf(d.f, d.xf, d.col)
                     else: sprite(d.f, d.x, d.ay, d.col)
