@@ -341,6 +341,7 @@ def keys():
         for(RESEARCH_KEYS) key, n:
             if gl.button(key) == 1 and n < offer.length: issue_cmd(ME, CMD_RESEARCH, []::int, sel_building, offer[n], 0, 0)
         if gl.button("x") == 1 and b_queue[b].length: issue_cmd(ME, CMD_CANCEL, []::int, sel_building, b_queue[b].length - 1, 0, 0)
+        if gl.button("delete") == 1 or gl.button("backspace") == 1: issue_cmd(ME, CMD_DEMOLISH, []::int, sel_building, 0, 0, 0)  // (#149)
     if gl.button("x") == 1 and b < 0 and selected.length: issue_cmd(ME, CMD_STOP, selected_units(), 0, 0, 0, 0)
     if b < 0 and selected_soldiers().length:
         if gl.button("r") == 1: arming_attack = true  // R then click: attack-move there
