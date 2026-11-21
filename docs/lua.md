@@ -70,7 +70,7 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
   `set_u_target`, `set_u_work`, `set_u_stuck`, `set_u_moving`.
 - **Buildings:** `building_count`, `b_id`, `b_kind`, `b_owner`, `b_done`, `b_progress`, `b_hp`, `b_hold(b, r)`,
   `b_want(b, r)`, `b_coming(b, r)`, `offered(b, r)`, `b_is_site`, `site_permille`, `building_index(id)`,
-  `building_rect(b)` (four values), `mid_dist2(b, x, y)`.
+  `building_rect(b)` (four values), `entry_rect(b)` (where a unit stands to reach it: its door tile with economy `doors`, else the same as building_rect; #133), `mid_dist2(b, x, y)`.
 - **Types:** `building_type_count`, `building_type(k)` (its buildings.json entry, as a table), `bt_road`, `bt_drag` (laid a cell at a time: a road or a field; #126), `bt_line`,
   `bt_ladder`, `bt_store`, `bt_hold(k, r)`, `bt_build_ticks`; `unit_type_count`, `t_pop`, `t_slot`, `t_worker`,
   `t_animal`.
@@ -80,7 +80,7 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
   `nearest_resource(x, y, kind, i, farms, roomy_only, seen)`, `terrain_at(c)`, `terrain_type(id)` (-1 if there's none),
   `plant(c, t)` (terrain t, one that `grows` in terrain.json, on free walkable ground at c; it grows on by itself,
   and through a save; whether it was planted; #109).
-- **The economy and orders:** `stocked()`, `tick()`, `b_making(b)` (ticks left in a recipe's round, 0 if none), `want(b, r, n)`, `hold_take(b, r, n)`, `trained(b, k)` (a new
+- **The economy and orders:** `stocked()`, `tick()`, `b_making(b)` (ticks left in a recipe's round, 0 if none), `want(b, r, n)`, `hold_take(b, r, n)`, `hold_put(b, r, n)` (into b, as much as it has room for; how many went in, #142), `trained(b, k)` (a new
   unit at its door: its slot), `start_gather(i, c, kind)`, `start_build(i, id)`, `approach_building(i, b)`, `approach_cell(i, c)`,
   `clear_task(i)`, `in_reach(i, x0, y0, x1, y1)`, `fits(p, k, cx, cy)` (whether the ground lets p lay type k there, the packs' own rules aside),
   `lay_foundation(p, k, cx, cy)` (a site, paid or asking its goods, where `fits` and its type is open to p: its id, or

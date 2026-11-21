@@ -551,15 +551,19 @@ def apply_hits(n:int):
     while b >= 0:
         if c_bhurt[b] != 0:
             b_hp[b] -= c_bhurt[b]
-            if b_hp[b] <= 0:
-                if events_on: events.push(Event { EV_DIE, b_id[b], 1, b_sx[b], b_cx[b] * TILE + b_sx[b] * TILE / 2, b_cy[b] * TILE + b_sy[b] * TILE / 2 })
-                clear_farm(b)
-                pen_gone(b)
-                spill(b)
-                breach(b)  // a wall piece leaves rubble
-                occupy(footprint(b), 0)
-                remove_building(b)
+            if b_hp[b] <= 0: fall(b)
         b--
+
+// A building falls (lost in a fight, or taken down by its owner): it dies on screen, a farm's ground is cleared, a
+// pen's animals go free, those inside come out, a wall piece leaves rubble, and its cells are free again.
+def fall(b:int):
+    if events_on: events.push(Event { EV_DIE, b_id[b], 1, b_sx[b], b_cx[b] * TILE + b_sx[b] * TILE / 2, b_cy[b] * TILE + b_sy[b] * TILE / 2 })
+    clear_farm(b)
+    pen_gone(b)
+    spill(b)
+    breach(b)
+    occupy(footprint(b), 0)
+    remove_building(b)
 
 // One tick of fighting (Combat.tick). The spatial buckets must be built from the current positions.
 // ---- Weapon mounts: guns that turn on their own, each with its own arc, aim, target and reload, firing on the move.

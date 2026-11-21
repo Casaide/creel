@@ -92,7 +92,7 @@ def wanting(p:int, r:int, fb:int) -> int:
     let x = b_cx[fb] * TILE + b_sx[fb] * TILE / 2
     let y = b_cy[fb] * TILE + b_sy[fb] * TILE / 2
     for(b_id.length) b:
-        if b != fb and b_owner[b] == p and b_want[b][r] > 0:
+        if b != fb and b_owner[b] == p and b_want[b][r] > 0 and not levelling(b):
             let d2 = mid_dist2(b, x, y)
             if d2 < best_d2:
                 best_d2 = d2
@@ -123,7 +123,7 @@ def carry_match(p:int):
                     start_job(i, b, dst, r, min(offered(b, r), min(room, r_carrier_load)), wanted)
                     jobs++
     for(b_id.length) b:
-        if b_owner[b] == p:
+        if b_owner[b] == p and not levelling(b):  // (a site being levelled asks nothing yet, #138)
             for(num_resources) r:
                 while jobs < CARRY_MATCHES and b_want[b][r] > 0:
                     let src = carry_source(p, r, b)
@@ -139,7 +139,8 @@ def carry_match(p:int):
         let b = (tick + k) % n
         if b_owner[b] == p and b_done[b] != 0 and bt_store[b_kind[b]] == 0:
             for(num_resources) r:
-                while jobs < CARRY_MATCHES and bt_offer[b_kind[b]][r] != 0 and offered(b, r) > 0:
+                // (not a good it's still asking for: it would be sent away as it comes, #144)
+                while jobs < CARRY_MATCHES and bt_offer[b_kind[b]][r] != 0 and offered(b, r) > 0 and b_want[b][r] == 0 and b_coming[b][r] == 0:
                     let dst = store_near(b, r)
                     if dst < 0: break
                     let i = free_carrier(p, b)
@@ -228,7 +229,7 @@ def carry_step(i:int):
         jb_want[j] = 0
         b_coming[to][r] += jb_n[j]
         approach_building(i, to)
-    let x0, y0, x1, y1 = building_rect(to)
+    let x0, y0, x1, y1 = entry_rect(to)
     if u_work[i] > 0 or in_reach(i, x0, y0, x1, y1):  // (once inside, it stays till it comes out)
         u_moving[i] = 0
         u_stuck[i] = 0
