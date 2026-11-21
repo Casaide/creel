@@ -489,9 +489,11 @@ def build_masks():
     let w = W * MASK_K
     let h = H * MASK_K
     let a = map(w * h * MASK_CH): 0.0
+    let tj = gobj(lib_data("terrain.json"), "terrain")
+    let drawn_as = map(tr_names) n: gstr(gobj(tj, n), "ground", n)  // (a pack's terrain drawn as another's ground, terrain.json "ground", #140)
     for(h) y:
         for(w) x:
-            let name = tr_names[terrain[(y / MASK_K) * W + x / MASK_K]]
+            let name = drawn_as[terrain[(y / MASK_K) * W + x / MASK_K]]
             let ch = mask_channel(name)
             if ch >= 0: a[(y * w + x) * MASK_CH + ch] = mask_weight(name)
             let pc = prop_channel(name)
