@@ -118,6 +118,7 @@ def add_unit(owner:int, k:int, x:int, y:int) -> int:
     for(unit_columns()) col, n: col.push(v[n])
     u_orders.push([])
     u_mount.push([])
+    u_inside.push([])
     next_id++
     return u_id.length - 1
 
@@ -807,6 +808,11 @@ def update_pop():
         while o < b_inside[b].length:
             pop[b_owner[b]] += t_pop[b_inside[b][o + REC_KIND]]
             o += REC_SIZE
+    for(u_x.length) j:  // and those riding inside a unit (lib/walls' riders)
+        var o = 0
+        while o < u_inside[j].length:
+            pop[u_owner[j]] += t_pop[u_inside[j][o + REC_KIND]]
+            o += REC_SIZE
     for(b_id.length) b:
         if b_done[b] == 1:
             let p = b_owner[b]
@@ -814,6 +820,19 @@ def update_pop():
             if add > 0: add += bm_pop[p][b_kind[b]]
             pop_cap[p] += add
     for(num_players) p: pop_cap[p] = min(pop_cap[p], r_pop_max)
+
+// A rider's record (u_inside's, a garrison's layout) back in the arrays for side p, at a clear point by (x, y). Its slot.
+def rider_out(p:int, rec:[int], x:int, y:int) -> int:
+    let kind = rec[REC_KIND]
+    let px, py = clear_point(p, kind, x, y)
+    let i = insert_unit(rec[REC_ID], p, kind, px, py, t_speed[kind], t_radius[kind], rec[REC_HP])
+    u_mclass[i] = t_mclass[kind]
+    u_posture[i] = rec[REC_POSTURE]
+    u_carry_kind[i] = rec[REC_CARRY_KIND]
+    u_carry[i] = rec[REC_CARRY]
+    u_home[i] = rec[REC_HOME]
+    grow_scratch()
+    return i
 
 def spawn_cell(b:int, k:int) -> int:
     let c = spawn_cell_loose(b, k)

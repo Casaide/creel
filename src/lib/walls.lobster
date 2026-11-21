@@ -609,3 +609,80 @@ def walls_hash(h0:int) -> int:
         h = mix(h, c)
         for(rubble.get(c) or []::int) v: h = mix(h, v)
     return h
+
+// ---- riders (#157): foot soldiers ride inside a docking engine (a siege tower), off the field and out of reach, and come
+// out onto the wall it docks against, one every RIDE_OUT ticks, up through it. Records as a garrison's, on u_inside.
+
+let RIDE_OUT = 6
+
+def holds(j:int) -> int: return if t_docks[u_kind[j]] != 0: r_dock_holds else: 0
+
+def riders(j:int) -> int: return u_inside[j].length / REC_SIZE
+
+// May unit i ride in unit j (its side's, with room, and a soldier that could climb its way up)?
+def can_ride(j:int, i:int) -> bool: return i != j and holds(j) > 0 and u_owner[j] == u_owner[i] and u_perch[i] == 0 and can_climb(i)
+
+def ride_room(j:int) -> int:
+    let jid = u_id[j]
+    var coming = 0
+    for(u_x.length) i:
+        if u_task[i] == T_GARRISON and u_target[i] == jid: coming++
+    return holds(j) - riders(j) - coming
+
+// Commands.GARRISON {ids, a unit}: the player's units walk to its docking engine and board it, while it has room.
+def cmd_board(p:int, ids:[int], jid:int):
+    let j = index_of(jid)
+    if j < 0 or u_owner[j] != p or holds(j) == 0: return
+    for(ids) uid:
+        let i = index_of(uid)
+        if i >= 0 and can_ride(j, i) and ride_room(j) > 0:
+            u_foe[i] = 0
+            u_stance[i] = 0
+            u_task[i] = T_GARRISON
+            u_target[i] = jid
+            order_direct(i, u_x[j], u_y[j])
+
+// Commands.UNGARRISON {a unit}: everyone riding in it steps out beside it, in id order.
+def cmd_unload(p:int, jid:int):
+    let j = index_of(jid)
+    if j < 0 or u_owner[j] != p: return
+    while u_inside[index_of(jid)].length: ride_out(index_of(jid))
+
+// Unit i boards unit j: out of the arrays, onto its records (by id).
+def ride(i:int, j:int):
+    let rec = [ u_id[i], u_kind[i], u_hp[i], u_posture[i], u_carry_kind[i], u_carry[i], u_home[i] ]
+    let recs = u_inside[j]
+    var at = 0
+    while at < recs.length and recs[at + REC_ID] < rec[REC_ID]: at += REC_SIZE
+    for(rec) v, n: recs.insert(at + n, v)
+    remove_unit(i)
+
+// Unit j's first rider steps out beside it. Its id.
+def ride_out(j:int) -> int:
+    let rec = slice(u_inside[j], 0, REC_SIZE)
+    u_inside[j].remove_range(0, REC_SIZE)
+    return u_id[rider_out(u_owner[j], rec, u_x[j], u_y[j])]
+
+// One tick: boarders board once beside theirs (or give up); a docked engine's riders come out onto the wall.
+def board_tick():
+    var i = u_x.length - 1
+    while i >= 0:
+        if u_task[i] == T_GARRISON:
+            let j = index_of(u_target[i])
+            if j >= 0:
+                if not can_ride(j, i) or riders(j) >= holds(j):
+                    clear_task(i)
+                    u_moving[i] = 0
+                elif gap(i, j) <= REACH + TILE / 2:
+                    ride(i, j)
+                elif u_moving[i] == 0 or ((tick + u_id[i]) % REPLAN_EVERY == 0 and dist2(u_tx[i], u_ty[i], u_x[j], u_y[j]) > TILE * TILE):
+                    order_direct(i, u_x[j], u_y[j])  // (after it, as it rolls)
+        i--
+    if tick % RIDE_OUT != 0: return
+    let full = filter(u_x.length) j: u_inside[j].length > 0
+    for(map(full) j: u_id[j]) jid:
+        let j = index_of(jid)
+        let top = docked_at(j)
+        if top >= 0:
+            let uid = ride_out(j)
+            order_onto(u_owner[index_of(uid)], [ uid ], top)

@@ -2,7 +2,7 @@
 // man: with walkway walls of its own, the bot keeps up to man_pct of its shooters at home up on the
 // wall nearest the nearest enemy it sees. storm: attacking, a docked siege tower of its own takes the
 // foot soldiers near it up onto the enemy's wall, then on at the target (a queued attack-move); an
-// undocked tower is pushed to the enemy walkway cell nearest it. besiege: a side with no town (the
+// undocked tower is pushed to the enemy walkway cell nearest it, the foot soldiers by it riding inside. besiege: a side with no town (the
 // Siege mode's attackers) keeps its whole army on the attack.
 
 // Finished walkway cells of the player's (mine) or of its enemies' it can see, ascending.
@@ -82,7 +82,14 @@ def storm_walls(bot:Bot, army:[int], tx:int, ty:int):
                         if d < best_d:
                             best_d = d
                             best = cell
-                    if best >= 0: issue_cmd(bot.player, CMD_MOVE, [ u_id[j] ], (best % W) * 1000 + 500, (best / W) * 1000 + 500, 0, 0)
+                    if best >= 0:
+                        let riders_near = []::int  // (foot soldiers by it board first and ride to the wall, #157)
+                        for(army) i:
+                            if not t_ranged[u_kind[i]] and can_ride(j, i) and u_task[i] != T_CLIMB and u_task[i] != T_GARRISON and
+                                    dist2(u_x[i], u_y[i], u_x[j], u_y[j]) <= near * near and riders_near.length < ride_room(j):
+                                riders_near.push(u_id[i])
+                        if riders_near.length: issue_cmd(bot.player, CMD_GARRISON, riders_near, u_id[j], 0, 0, 0)
+                        issue_cmd(bot.player, CMD_MOVE, [ u_id[j] ], (best % W) * 1000 + 500, (best / W) * 1000 + 500, 0, 0)
             else:
                 let ids = []::int
                 for(army) i:

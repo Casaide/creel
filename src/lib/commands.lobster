@@ -238,8 +238,12 @@ def run(c0:Cmd):
         case CMD_PEN: cmd_pen(p, ids, c.a)
         case CMD_ABILITY: cmd_ability(p, ids, c.a, c.b)
         case CMD_RELEASE: cmd_release(p, c.a)
-        case CMD_GARRISON: cmd_garrison(p, own_units_cleared(p, ids), c.a)
-        case CMD_UNGARRISON: cmd_ungarrison(p, c.a)
+        case CMD_GARRISON:
+            if index_of(c.a) >= 0: cmd_board(p, own_units_cleared(p, ids), c.a)  // (into one of its units: lib/walls' riders)
+            else: cmd_garrison(p, own_units_cleared(p, ids), c.a)
+        case CMD_UNGARRISON:
+            if index_of(c.a) >= 0: cmd_unload(p, c.a)
+            else: cmd_ungarrison(p, c.a)
         default:
             assert c.code >= HOOK_ORDER_BASE
             hook_on_order(c.code, p, ids, c.a, c.b)

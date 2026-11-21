@@ -159,7 +159,7 @@ def takes_in(b:int, i:int) -> bool: return u_carry[i] > 0 and u_carry_kind[i] > 
 
 // The right click (sim_debug.smart_order): what's under the mouse decides the order. Our animals go into our
 // pen or walk; the rest attack-move (A held, or armed), attack a foe or hunt, slaughter our sheep (workers),
-// attack a foe's building, gather, rebuild a broken bridge, mend, wall up our breach, climb our wall, help
+// attack a foe's building, gather, rebuild a broken bridge, mend, board our siege tower, wall up our breach, climb our wall, help
 // build, trade at a market, drop off, reseed a fallow farm, go inside our building, or move.
 def order(m:float2, attack_move:bool = false):
     let mm = order_milli(m)
@@ -205,6 +205,8 @@ def order(m:float2, attack_move:bool = false):
         issue_cmd(ME, CMD_HELP_BUILD, ids, br_id[bridge], 0, 0, 0, q)  // rebuild a broken bridge
     elif mine >= 0 and workers.length and can_mend(ME, u_id[mine]):
         issue_cmd(ME, CMD_REPAIR, ids, u_id[mine], 0, 0, 0, q)  // mend our siege engine
+    elif mine >= 0 and u_owner[mine] == ME and ride_room(mine) > 0 and (filter(ids) id: can_ride(mine, index_of(id))).length:
+        issue_cmd(ME, CMD_GARRISON, ids, u_id[mine], 0, 0, 0, q)  // aboard our siege tower
     elif b < 0 and workers.length and rubble.get(c) and rubble.get(c, []::int)[1] == ME and not build_barred(ME, rubble.get(c, []::int)[2]):
         let r = rubble.get(c, []::int)  // wall up our breach again
         issue_cmd(ME, CMD_BUILD, ids, r[2], r[3], r[4], r[5], q)

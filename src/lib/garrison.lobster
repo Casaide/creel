@@ -121,7 +121,7 @@ def enter(i:int, b:int):
 def garrison_tick():
     var i = u_x.length - 1
     while i >= 0:
-        if u_task[i] == T_GARRISON:
+        if u_task[i] == T_GARRISON and index_of(u_target[i]) < 0:  // (boarding a unit: lib/walls' board_tick)
             let b = b_index_of(u_target[i])
             if b < 0 or not can_hold(b, i) or b_inside[b].length / REC_SIZE >= capacity(b):
                 clear_task(i)

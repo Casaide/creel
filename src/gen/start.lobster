@@ -316,6 +316,7 @@ def setup_rest():
     let bd = lib_data("buildings.json")
     let g = gobj(bd, "garrison")
     r_garrison_heal_every = gint(g, "heal_every", 20)
+    r_dock_holds = gint(g, "dock_holds", DOCK_HOLDS)
     r_call_range = gint(g, "call_range", 16)
     garrison_not = map(gstrs(g, "not")) t: tag_or_none(t)
     heal_not = map(gstrs(rules_part("combat"), "heal_not")) t: tag_or_none(t)

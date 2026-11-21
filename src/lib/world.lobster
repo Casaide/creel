@@ -56,6 +56,7 @@ def step():
     repair_tick()
     garrison_tick()
     walls_tick()
+    board_tick()
     animals_tick()
     grow_scratch()  // (a lamb born in a pen)
     spatial_build()
@@ -124,6 +125,7 @@ def state_hash() -> int:
         for(UNIT_HASHED) k: h = mix(h, cols[k][i])
         h = mix(h, u_orders[i].length)
         for(u_mount[i]) v: h = mix(h, v)
+        for(u_inside[i]) v: h = mix(h, v)
         for(u_orders[i]) o:
             for(order_ints(o)) v: h = mix(h, v)
     let bcols = building_columns()
@@ -349,6 +351,7 @@ def load(path:string):
         for(cols) col, k: col.push(if k < f.length: f[k] else: 0)
         u_orders.push([]::Cmd)  // (no queued orders at the start: asserted)
         u_mount.push([]::int)
+        u_inside.push([]::int)  // (nobody riding at the start)
     expect("BUILDINGS")
     let bcols = building_columns()
     for(next_int()):
