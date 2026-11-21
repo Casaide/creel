@@ -238,6 +238,17 @@ def building_rect(b:int) -> int, int, int, int:
     let y = b_cy[b] * TILE
     return x, y, x + b_sx[b] * TILE - 1, y + b_sy[b] * TILE - 1
 
+// The tile in front of building b's door: the middle of its bottom edge, a row below it (the doors-on-roads hooks' too).
+def door_cell(b:int) -> int: return min(b_cy[b] + b_sy[b], H - 1) * W + b_cx[b] + b_sx[b] / 2
+
+// Whether units reach building b by its door tile (rules economy "doors", #133): a finished building, square, not a road.
+def by_door(b:int) -> bool: return r_doors != 0 and b_done[b] != 0 and b_diag[b] == 0 and bt_road[b_kind[b]] < 0
+
+// Where a unit stands to reach building b, to go in or drop at it: its door tile (by_door), else anywhere round it.
+def entry_rect(b:int) -> int, int, int, int:
+    if by_door(b): return cell_rect(door_cell(b))
+    return building_rect(b)
+
 // Is unit i's body within REACH of the rect?
 def in_reach(i:int, x0:int, y0:int, x1:int, y1:int) -> bool:
     let dx = max(max(x0 - u_x[i], 0), u_x[i] - x1)
@@ -246,8 +257,8 @@ def in_reach(i:int, x0:int, y0:int, x1:int, y1:int) -> bool:
     return dx * dx + dy * dy <= reach * reach
 
 def approach_building(i:int, b:int):
-    let x0, y0, x1, y1 = building_rect(b)
-    order_reach(i, x0, y0, x1, y1, building_field(b_id[b], true, lane(i)))
+    let x0, y0, x1, y1 = entry_rect(b)
+    order_reach(i, x0, y0, x1, y1, if by_door(b): cell_field(door_cell(b), true, lane(i)) else: building_field(b_id[b], true, lane(i)))
 
 // ---- gather spots
 
@@ -658,7 +669,7 @@ def return_home(i:int):
     if b < 0 or b_done[b] == 0:
         to_drop_off(i)
         return
-    let x0, y0, x1, y1 = building_rect(b)
+    let x0, y0, x1, y1 = entry_rect(b)
     if (r_inside_ticks > 0 and u_work[i] > 0) or in_reach(i, x0, y0, x1, y1):  // (once inside, it stays till it comes out)
         if r_inside_ticks > 0:
             u_moving[i] = 0

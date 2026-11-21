@@ -109,7 +109,7 @@ def trade_step(i:int):
         return
     if far < 0 or not is_market(far) or is_enemy(b_owner[far], u_owner[i]): u_work[i] = TRADE_HOME
     let to = if u_work[i] == TRADE_OUT: far else: home
-    let x0, y0, x1, y1 = building_rect(to)
+    let x0, y0, x1, y1 = entry_rect(to)
     if in_reach(i, x0, y0, x1, y1):
         u_moving[i] = 0
         u_stuck[i] = 0
@@ -156,7 +156,7 @@ def mend_approach(i:int, id:int):
 def mend_reach(i:int, id:int) -> bool:
     let b = b_index_of(id)
     if b >= 0:
-        let x0, y0, x1, y1 = building_rect(b)
+        let x0, y0, x1, y1 = entry_rect(b)
         return in_reach(i, x0, y0, x1, y1)
     let j = index_of(id)
     let r = u_radius[i] + u_radius[j] + REACH

@@ -402,6 +402,7 @@ var stock = []::[int]  // [resource][player]; in a stocked economy the sum of wh
 var r_stocked = 0      // rules economy.model "stocked": goods sit in buildings (b_hold), not in one pool (#48)
 var r_foundation_pct = 0  // rules economy.foundation_pct: the share of a stocked site built with no goods brought, its foundation (#105)
 var r_inside_ticks = 0  // how long a carrier is inside a building at each pick-up and drop (rules economy "inside_ticks", #120)
+var r_doors = 0  // rules economy "doors": units go in and out of a finished building by the tile in front of its door (#133)
 var r_carrier_load = 1  // rules economy.carrier_load: what a carrier takes on one trip (#49)
 var r_carrier_slots = []::string  // rules economy.carriers: the roster slots whose units carry (#61)
 var rd_names = []::string  // rules economy.roads: each road kind's name (#51)

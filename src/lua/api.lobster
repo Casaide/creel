@@ -15,7 +15,7 @@ let LA_NAMES = [ "unit_count", "u_id", "u_x", "u_y", "u_kind", "u_owner", "u_tas
     "worker_type", "road", "occupied", "amount", "res_at", "stocked", "tick", "want", "hold_take", "trained",
     "resource_index", "nearest_resource", "start_gather", "start_build", "approach_building", "clear_task", "in_reach", "unit_column", "building_column", "player_column",
     "unit_get", "unit_set", "building_get", "building_set", "player_get", "player_set", "rules", "player_count", "resource_count", "cell_of",
-    "t_animal", "u_hp", "b_hp", "lay_foundation", "fits", "plant", "terrain_at", "terrain_type", "approach_cell", "b_making", "bt_drag" ]
+    "t_animal", "u_hp", "b_hp", "lay_foundation", "fits", "plant", "terrain_at", "terrain_type", "approach_cell", "b_making", "bt_drag", "entry_rect" ]
 
 // The constants: the engine's task codes and units, and the map's size (set as a match starts).
 def lua_api_consts():
@@ -346,6 +346,14 @@ def lua_api(id:int, a:[int]):
         case 90:  // bt_drag(k): whether type k is laid by dragging, a plan a cell (a road or a field, #126)
             let k = lx_a_btype(a, 0, id)
             if k >= 0: lx_r_bool(bt_drag[k] != 0)
+        case 91:  // entry_rect(b): where a unit stands to reach building b: its door tile with economy "doors", else round it (#133)
+            let b = lx_a_building(a, 0, id)
+            if b >= 0:
+                let x0, y0, x1, y1 = entry_rect(b)
+                lx_r_int(x0)
+                lx_r_int(y0)
+                lx_r_int(x1)
+                lx_r_int(y1)
         default: lua_fail("an unknown API function")
 
 // ------------------------------------------------------------------ the hook points
