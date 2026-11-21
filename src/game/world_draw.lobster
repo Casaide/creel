@@ -209,7 +209,7 @@ def collect_units(alpha:float):
             let state, n0 = unit_state(i, moving)
             // (voxel units step by the ground they cover, so the planted foot doesn't slide)
             let n = if state == "walk" or find_string(state, "carry") == 0: vx_walk_step(u_id[i], u_kind[i], x, y) else: n0
-            let f = vx_frame_for(u_id[i], u_kind[i], state, d, n)
+            let f = vx_frame_for(u_id[i], u_kind[i], state, d, n, packed(i))
             if f < 0: perf_unseen++
             let p = iso(x, y)
             let tc = team_col(u_owner[i])

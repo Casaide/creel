@@ -33,6 +33,7 @@ class vx_lk:
     planned:bool             // its bakes are queued (or loaded)
     pieces:[int]             // its parts' looks, in the body's order (the composer draws them on its hull)
     waited_for:bool = false  // a unit was drawn with it before it was baked: its first bakes go on through a fight
+    packed:int = -1          // its body's packed shape's look (in its colours and crew), drawn while a unit is packed
 
 let vx_lks = []::vx_lk
 let vx_lk_ids = dictionary<string, int>(256)
@@ -129,7 +130,21 @@ def vx_look_of(u:vx_unit_def, worker:bool) -> int:
         let pu = copy(u)
         pu.body = p.body
         vx_lks[lk].pieces.push(vx_look_of(pu, false))
+    let pb = vx_body_of(u.body).packed
+    if pb != "":
+        let pu = copy(u)
+        pu.body = pb
+        let plk = vx_look_of(pu, worker)
+        vx_lks[lk].packed = plk
     return lk
+
+// The looks drawn with look lk: its parts' and its packed shape's (baked when it is).
+def vx_also(lk:int) -> [int]:
+    let l = vx_lks[lk]
+    if l.packed < 0: return l.pieces
+    let also = copy(l.pieces)
+    also.push(l.packed)
+    return also
 
 // ---- the bakes: a job is one look's poses in some modes, into an atlas of its own (its cells cropped to what's
 // drawn, packed in rows VX_ATLAS wide), baked a pose at a time: filled (in slices), then drawn in 8 facings
@@ -324,7 +339,7 @@ def vx_queue_job(j:vx_job, front:bool):
 def vx_plan(lk:int, front:bool) -> void:
     if vx_lks[lk].planned: return
     vx_lks[lk].planned = true
-    for(vx_lks[lk].pieces) plk: vx_plan(plk, front)
+    for(vx_also(lk)) plk: vx_plan(plk, front)
     if vx_piece(lk):
         vx_queue_job(vx_new_job(lk, 0, [ VX_IDLE ]), front)
         return
@@ -399,7 +414,7 @@ def vx_init():
 // now.
 def vx_first_job(j:vx_job) -> bool: return j.v == 0 and (j.modes[0] == VX_IDLE or j.modes[0] == VX_WALK)
 def vx_take_first(lk:int, out:[vx_job]) -> void:
-    for(vx_lks[lk].pieces) plk: vx_take_first(plk, out)
+    for(vx_also(lk)) plk: vx_take_first(plk, out)
     let d = vx_doing
     if d and d.lk == lk and vx_first_job(d):
         vx_doing = nil
@@ -441,7 +456,7 @@ def vx_start():
             let ahead = if vx_all_fielded and s == type_step(k): 0 else: max(0, age - (if t_player[k] >= 0 and t_player[k] < ages.length: ages[t_player[k]] else: 1))  // (all fielded: each type as it is now)
             while by_age.length <= ahead: by_age.push([])
             if (find(by_age[ahead]) x: x == lk) < 0: by_age[ahead].push(lk)
-            for(vx_lks[lk].pieces) plk:
+            for(vx_also(lk)) plk:
                 if (find(by_age[ahead]) x: x == plk) < 0: by_age[ahead].push(plk)
         vx_type_lks.push(lks)
         vx_cur.push(lks[0])
@@ -555,9 +570,10 @@ def vx_mode_of(state:string) -> int:
     if find_string(state, "work") == 0: return VX_WORK
     return VX_IDLE
 
-// The frame for unit id of type k in state (unit_state's names), moving or facing screen direction d (dir_of's).
-def vx_frame_for(id:int, k:int, state:string, d:int, n:int) -> int:
-    let lk = vx_cur[k]
+// The frame for unit id of type k in state (unit_state's names), moving or facing screen direction d (dir_of's); packed
+// (lib/siege's packed): in its body's packed shape, if it has one.
+def vx_frame_for(id:int, k:int, state:string, d:int, n:int, packed = false) -> int:
+    let lk = if packed and vx_lks[vx_cur[k]].packed >= 0: vx_lks[vx_cur[k]].packed else: vx_cur[k]
     let f = (d + 2) % 8  // (facing 2 faces screen right)
     let m = vx_mode_of(state)
     let st = if m == VX_IDLE: n % 4 elif m == VX_ATTACK: min(n, 7) else: n % 8

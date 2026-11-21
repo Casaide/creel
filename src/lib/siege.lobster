@@ -194,6 +194,10 @@ def pass_through(o:int, recs:[int], aimed:int):
             xx++
         yy++
 
+// Is unit i packed (its type packs, and it isn't set up: rolling, packing up or still unpacking)? The view draws it
+// so (a body's `packed` shape).
+def packed(i:int) -> bool: return t_unpack[u_kind[i]] != 0 and u_ready[i] < t_unpack[u_kind[i]]
+
 // Engines that pack and unpack (World._pack): standing still it unpacks (ready counts up to its
 // unpack); told to move once set up, it packs first (ready -pack counting back to 0, held still).
 def pack_tick():
