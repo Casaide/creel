@@ -487,12 +487,13 @@ let GROWN_TO = 0.8
 
 def collect_props():
     collect_doodads()
+    let own_prop = map(tr_names) n: prop_of.get(n, "") != ""  // (a terrain with a prop of its own is drawn though it holds and grows nothing: tilled earth, #128)
     for(W * H) c:
         // (under the fog, the ground as you last saw it: a farm sown in the dark stays grass until you look, Fog's memory)
         let now = fog[ME][c] == 2 or fog_ground.length <= ME
         let tt = if now: terrain[c] else: fog_ground[ME][c]
         // (the land is no secret, #334: trees, gold, stone and bushes show where never explored, as the map was made)
-        if fog_shows_land(fog[ME][c]) and (tr_res[tt] != 0 or species[c] != "-" or tr_grows[tt] >= 0) and near_view(iso(float((c % W) * 1000 + 500), float((c / W) * 1000 + 500))):
+        if fog_shows_land(fog[ME][c]) and (tr_res[tt] != 0 or species[c] != "-" or tr_grows[tt] >= 0 or own_prop[tt]) and near_view(iso(float((c % W) * 1000 + 500), float((c / W) * 1000 + 500))):
             let tname = tr_names[tt]
             var kind = prop_of.get(tname, "")
             var scale = 1.0
