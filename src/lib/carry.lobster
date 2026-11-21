@@ -139,7 +139,8 @@ def carry_match(p:int):
         let b = (tick + k) % n
         if b_owner[b] == p and b_done[b] != 0 and bt_store[b_kind[b]] == 0:
             for(num_resources) r:
-                while jobs < CARRY_MATCHES and bt_offer[b_kind[b]][r] != 0 and offered(b, r) > 0:
+                // (not a good it's still asking for: it would be sent away as it comes, #144)
+                while jobs < CARRY_MATCHES and bt_offer[b_kind[b]][r] != 0 and offered(b, r) > 0 and b_want[b][r] == 0 and b_coming[b][r] == 0:
                     let dst = store_near(b, r)
                     if dst < 0: break
                     let i = free_carrier(p, b)
