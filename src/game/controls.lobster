@@ -483,6 +483,37 @@ def draw_shots(alpha:float):
     draw_tracers()
     if tick % 200 == 0: forget_landed_shots()
 
+// The voxel shots draw_bolt put in the air this frame, over the world (after its gl.scale(1.5): world px), each turning
+// through its bodies (shots.json "bodies") and their 8 facings as it tumbles. Every type's shot bodies are asked for
+// at the start, so the first throw has them; one not baked yet flies as its orb.
+let shot_lks = dictionary<string, int>(4)
+var shot_warm = -1  // (how many unit types' shots have been asked for)
+
+def shot_lk(body:string) -> int:
+    var lk = shot_lks.get(body, -1)
+    if lk < 0:
+        lk = vx_look_of(vx_unit_def { "shot", body, float3_0, float3_0, float3_0, []::string, "", false, float3_0, float3_0, float3_0, nil }, false)
+        shot_lks.set(body, lk)
+    return lk
+
+def draw_shot_bodies():
+    if shot_warm != t_mounts.length:
+        shot_warm = t_mounts.length
+        for(t_mounts) ms, k:
+            for(shot_style(unit_shotk.get(k, "arrow")).bodies) b: vx_want(shot_lk(b))
+            for(ms) m: if m.shot != "": for(shot_style(m.shot).bodies) b: vx_want(shot_lk(b))
+    for(shot_bodies) sb:
+        let n = int((clock_s + sb.seed * 0.01) * sb.spin * float(sb.bodies.length) * 8.0)
+        let f = vx_piece_frame(shot_lk(sb.bodies[n % sb.bodies.length]), (n / sb.bodies.length) % 8)
+        if f >= 0: sprite(f, sb.at.x * 1.5, sb.at.y * 1.5, float4_1)
+        else:
+            flush_sprites()
+            gl.set_shader("color")
+            gl.scale(1.5): fx_circle(sb.at, sb.w, sb.col)
+            b_sheet = -1
+    shot_bodies = []
+    flush_sprites()
+
 // Health bars over hurt units you can see, and over the selected.
 def draw_bars(alpha:float):
     for(u_x.length) i:

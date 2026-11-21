@@ -139,18 +139,21 @@ def mod_check_shot_look(k:string, name:string, o:JV, known:[string]) -> string:
     return ""
 
 def mod_check_shot(k:string, m:JV) -> string:
-    let known = [ "_doc", "extends", "tag", "speed", "sound", "sticks", "arc", "form", "len", "w", "shaft", "head", "fletch", "hold", "pulses", "scatter", "wobble", "jag", "col", "glow", "fade", "hit", "trail", "muzzle", "impact" ]
+    let known = [ "_doc", "extends", "tag", "speed", "sound", "sticks", "arc", "form", "len", "w", "shaft", "head", "fletch", "hold", "pulses", "scatter", "wobble", "jag", "col", "glow", "fade", "hit", "trail", "muzzle", "impact", "bodies", "spin" ]
     for(m.keys) key:
         if not has_s(known, key): return "shots.json {k}: no knob \'{key}\' (knobs: {concat_string(known, ", ")})"
-    for([ "arc", "len", "w", "hold", "wobble", "jag", "fade", "trail" ]) key:
+    for([ "arc", "len", "w", "hold", "wobble", "jag", "fade", "trail", "spin" ]) key:
         if has(m, key) and (at(m, key).kind != J_INT and at(m, key).kind != J_FLOAT or as_float(at(m, key)) < 0.0): return "shots.json {k}: \'{key}\' must be a number, 0 or more"
     if has(m, "fade") and as_float(at(m, "fade")) > 1.0: return "shots.json {k}: \'fade\' is a share of its life, 0 to 1"
     if has(m, "muzzle"):
         let e = mod_check_shot_look(k, "muzzle", at(m, "muzzle"), [ "flash", "col", "smoke", "ring", "dust", "recoil" ])
         if e != "": return e
     if has(m, "impact"):
-        let e = mod_check_shot_look(k, "impact", at(m, "impact"), [ "blast", "col", "smoke", "scorch", "debris", "shake" ])
+        let e = mod_check_shot_look(k, "impact", at(m, "impact"), [ "blast", "col", "smoke", "scorch", "debris", "dust", "shake" ])
         if e != "": return e
+    if has(m, "bodies"):
+        let b = at(m, "bodies")
+        if b.kind != J_ARR or not b.a.length or (exists(b.a) v: v.kind != J_STR or v.s == ""): return "shots.json {k}: \'bodies\' must be a list of voxel bodies"
     let form = gstr(m, "form", "bolt")
     if form != "bolt" and form != "beam": return "shots.json {k}: form \'{form}\' isn\'t bolt or beam"
     if form != "beam":
