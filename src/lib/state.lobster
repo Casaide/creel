@@ -401,6 +401,7 @@ var pop_cap = []::int
 var stock = []::[int]  // [resource][player]; in a stocked economy the sum of what the owner's stores hold
 var r_stocked = 0      // rules economy.model "stocked": goods sit in buildings (b_hold), not in one pool (#48)
 var r_foundation_pct = 0  // rules economy.foundation_pct: the share of a stocked site built with no goods brought, its foundation (#105)
+var r_goods_after_foundation = 0  // rules economy.goods_after_foundation: a site's goods are fetched only once its foundation is built (#138)
 var r_inside_ticks = 0  // how long a carrier is inside a building at each pick-up and drop (rules economy "inside_ticks", #120)
 var r_doors = 0  // rules economy "doors": units go in and out of a finished building by the tile in front of its door (#133)
 var r_carrier_load = 1  // rules economy.carrier_load: what a carrier takes on one trip (#49)
