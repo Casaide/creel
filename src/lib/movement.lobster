@@ -13,17 +13,22 @@ def plan(i:int, x:int, y:int, stuck:int) -> int, int:
     if not f: return tx, ty
     let cell = cell_of(x, y)
     let cost = f.dist[cell]
+    // (how near it is, in a field's cost: a road's tiles cost less to cross than they are long, so near by cost isn't near, #129)
+    let gx = if u_reach[i] == 1: clamp(x, u_rx0[i], u_rx1[i]) else: tx
+    let gy = if u_reach[i] == 1: clamp(y, u_ry0[i], u_ry1[i]) else: ty
+    let near = if road.length and cost < INF: max(cost, isqrt(dist2(x, y, gx, gy)) * STRAIGHT / TILE) else: cost
     if cost >= INF:
         let kind = (u_fkey[i] / LANES) % 4
         if kind == FIELD_CELL_NEAR or kind == FIELD_BUILDING_NEAR: return -2, -2
         return -1, -1
     if u_reach[i] == 1:
-        if cost <= 2 * DIAGONAL:  // within two cells: make for a free spot before meeting the crowd
-            if u_task[i] == T_RETURN and u_gspot[i] >= 0: return drop_spot(i, x, y)
-            return spot(i, x, y)
-    elif cost == 0 or (cost <= DIRECT_COST and (not road.length or isqrt(dist2(x, y, tx, ty)) * STRAIGHT / TILE <= cost + STRAIGHT) and stuck < STUCK_LIMIT / 2 and clear_path(x, y, tx, ty, u_radius[i], lane(i))):
+        if near <= 2 * DIAGONAL:  // within two cells: make for a free spot before meeting the crowd
+            let sx, sy = if u_task[i] == T_RETURN and u_gspot[i] >= 0: drop_spot(i, x, y) else: spot(i, x, y)
+            // (with roads, the spot only once the way to it is clear: a road round a field to a door, not across it, #129)
+            if not road.length or sx < 0 or clear_path(x, y, sx, sy, u_radius[i], lane(i)): return sx, sy
+    elif cost == 0 or (near <= DIRECT_COST and not on_middle(cell) and (not road.length or isqrt(dist2(x, y, tx, ty)) * STRAIGHT / TILE <= cost + STRAIGHT) and stuck < STUCK_LIMIT / 2 and clear_path(x, y, tx, ty, u_radius[i], lane(i))):
         return tx, ty
-    elif u_reach[i] == 2 and cost <= 4 * STRAIGHT:
+    elif u_reach[i] == 2 and near <= 4 * STRAIGHT:
         let cx, cy = round_corner(i, x, y, tx, ty)  // its place is round the far side of the building
         if cx >= 0: return cx, cy
     var best = ahead(f, cell, x, y, if stuck >= STUCK_LIMIT / 2: 1 else: LOOKAHEAD, u_radius[i], lane(i))
@@ -189,9 +194,10 @@ def progress(i:int, x:int, y:int) -> int, int:
     if u_fkey[i] >= 0:
         let n = field_index(u_fkey[i])
         if n >= 0:
-            let d = field_vals[n].dist[cell_of(x, y)]
+            let cell = cell_of(x, y)
+            let d = field_vals[n].dist[cell]
             if d < INF and d > DIAGONAL and not (d <= DIRECT_COST and u_arrive[i] == SLOT_ARRIVE and u_reach[i] != 1):
-                return d, STRAIGHT_PER_CHECK
+                return d, if road.length: max(STRAIGHT_PER_CHECK * step_s[cell] / STRAIGHT, 1) else: STRAIGHT_PER_CHECK  // (a road's tiles cost less: less to gain on one, #129)
     return isqrt(dist2(x, y, u_tx[i], u_ty[i])), u_speed[i] * PROGRESS_EVERY / 4
 
 def queued(i:int, x:int, y:int) -> bool:
@@ -505,6 +511,7 @@ def separate():
                     if dx >= rr or dx <= -rr or dy >= rr or dy <= -rr: continue
                     let d2 = dx * dx + dy * dy
                     if d2 >= rr * rr: continue
+                    if mv[u] == 1 and mv[v] == 1 and owners[u] == owners[v] and on_middle(sp_cell[u]) and on_middle(sp_cell[v]): continue  // (two of a side walking down a road's middle pass each other as the genre's do, trading places, not shoving off it: #129)
                     var i = u
                     var j = v
                     if v < u:

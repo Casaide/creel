@@ -64,6 +64,8 @@ def setup_world(seed_value:int, map_id:string, sides:[JV], rules:JV, team_ids:[i
     r_carrier_slots = gstrs(ec, "carriers")
     rd_names = map(glist(ec, "roads")): gstr(_, "name", "")
     rd_pct = map(glist(ec, "roads")): gint(_, "speed_pct", 100)
+    rd_cost = map(glist(ec, "roads")): gint(_, "cost_pct", 10000 / max(1, gint(_, "speed_pct", 100)))  // (as quick to cross as it is to walk, unless it says)
+    rd_middle = map(glist(ec, "roads")): if gbool(_, "middle", false): 1 else: 0
     r_carry = as_int(at(ec, "carry"))
     r_queue_max = as_int(at(ec, "queue_max"))
     r_pop_max = as_int(at(ec, "pop_max"))

@@ -253,7 +253,8 @@ def sync_map():
 
 // ------------------------------------------------------------------ roads (#51)
 // A road kind on a cell makes a walker faster there (rules economy.roads: speed_pct), and flow fields count it cheaper
-// to cross, so paths take a road when it's quicker. Nothing is allocated until the first road is laid: a map with no road
+// to cross (cost_pct, by default what its speed saves), so paths keep to roads: a town builder's road can be no quicker
+// and still be the way everyone walks (#129). Nothing is allocated until the first road is laid: a map with no road
 // solves and patches its fields as before.
 
 // Movement class c's speed on the cell, per cent: its terrain's, times the road's (flyers ignore roads).
@@ -269,9 +270,9 @@ def set_road(cell:int, k:int):
         step_s = map(W * H): STRAIGHT
         step_d = map(W * H): DIAGONAL
     road[cell] = k + 1
-    let pct = if k >= 0: rd_pct[k] else: 100
-    step_s[cell] = max(STRAIGHT * 100 / pct, 1)
-    step_d[cell] = max(DIAGONAL * 100 / pct, 1)
+    let cost = if k >= 0: rd_cost[k] else: 100
+    step_s[cell] = max(STRAIGHT * cost / 100, 1)
+    step_d[cell] = max(DIAGONAL * cost / 100, 1)
     for(speed_pct.length) c: set_cell_speed(cell, c)
     field_keys = []
     field_vals = []

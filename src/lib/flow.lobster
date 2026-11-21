@@ -274,6 +274,9 @@ def clear_path(ax:int, ay:int, bx:int, by:int, r:int, k:int) -> bool:
 
 // The furthest of the next n cells down field f from `cell` a body of radius r at (x, y) walks to
 // in a straight line; -2 - the last clear cell if the walk reached a source.
+// Whether a walker on the cell keeps to the road's middle there (a road kind with `middle`, #129).
+def on_middle(cell:int) -> bool: return road.length > 0 and road[cell] > 0 and rd_middle[road[cell] - 1] == 1
+
 def ahead(f:Flow, cell:int, x:int, y:int, n:int, r:int, k:int) -> int:
     let room = roomy[k]
     let walk = walks[k]
@@ -305,6 +308,7 @@ def ahead(f:Flow, cell:int, x:int, y:int, n:int, r:int, k:int) -> int:
         if not clear and not clear_walk(walk, room, w, h, x, y, gx * TILE + TILE / 2, gy * TILE + TILE / 2, r):
             break
         best = c
+        if on_middle(cell): break  // (down a road's middle: the next tile's centre, then the one after: #129)
         if road.length and road[c] != road[cell]: break  // (on a road it looks ahead only along it, so it keeps to it; off one, only as far as where it joins: #51)
         c = nxt[c]
     return best
