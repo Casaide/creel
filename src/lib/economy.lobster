@@ -169,6 +169,12 @@ def build_cap(b:int) -> int:
     if not b_site[b].length: return full
     return full * (r_foundation_pct * 10 + (1000 - r_foundation_pct * 10) * site_permille(b) / 1000) / 1000
 
+// Whether site b is still being levelled: under its foundation (build_cap with no goods), with rules
+// goods_after_foundation on, so its goods aren't fetched yet (#138).
+def levelling(b:int) -> bool:
+    if r_goods_after_foundation == 0 or b_done[b] != 0 or not b_site[b].length: return false
+    return b_progress[b] < bt_build_ticks[b_kind[b]] * (r_foundation_pct * 10) / 1000
+
 def site_permille(b:int) -> int:
     var need = 0
     var got = 0

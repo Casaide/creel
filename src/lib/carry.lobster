@@ -92,7 +92,7 @@ def wanting(p:int, r:int, fb:int) -> int:
     let x = b_cx[fb] * TILE + b_sx[fb] * TILE / 2
     let y = b_cy[fb] * TILE + b_sy[fb] * TILE / 2
     for(b_id.length) b:
-        if b != fb and b_owner[b] == p and b_want[b][r] > 0:
+        if b != fb and b_owner[b] == p and b_want[b][r] > 0 and not levelling(b):
             let d2 = mid_dist2(b, x, y)
             if d2 < best_d2:
                 best_d2 = d2
@@ -123,7 +123,7 @@ def carry_match(p:int):
                     start_job(i, b, dst, r, min(offered(b, r), min(room, r_carrier_load)), wanted)
                     jobs++
     for(b_id.length) b:
-        if b_owner[b] == p:
+        if b_owner[b] == p and not levelling(b):  // (a site being levelled asks nothing yet, #138)
             for(num_resources) r:
                 while jobs < CARRY_MATCHES and b_want[b][r] > 0:
                     let src = carry_source(p, r, b)
