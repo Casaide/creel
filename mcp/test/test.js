@@ -35,6 +35,10 @@ function check (ok, what) {
 const body = r => { try { return JSON.parse(r.content[0].text) } catch (e) { return r.content[0].text } }
 
 async function main () {
+  const { fill } = require('../creel-mcp.js')
+  const f = fill(['{lobster}', 'mods:{start.mods}', 'map:{start.map}', 'shot:{png}'], { lobster: 'L', png: 'p.png' }, { mods: ['a', 'b'] })
+  check(JSON.stringify(f) === JSON.stringify(['L', 'mods:a,b', 'shot:p.png']), 'capture commands: start args filled, a missing one left out (' + JSON.stringify(f) + ')')
+
   const init = await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '0' } })
   check(init.result && init.result.capabilities.tools, 'initialize offers tools')
   proc.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n')

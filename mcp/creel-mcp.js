@@ -34,9 +34,24 @@ function loadConfig (file) {
   return cfg
 }
 
-// {lobster}, {save}, {png}, {scratch} in a configured command.
-function fill (args, vars) {
-  return args.map(a => a.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m)))
+// {lobster}, {save}, {png}, {scratch} in a configured command, and {start.<key>}: that arg of the last creel_start (a list
+// joined by commas). An argument whose {start.<key>} is missing or empty is left out ("mods:{start.mods}" with no mods).
+function fill (args, vars, start) {
+  const out = []
+  for (const a of args) {
+    let empty = false
+    const v = a.replace(/\{([\w.]+)\}/g, (m, k) => {
+      if (k.startsWith('start.')) {
+        const x = (start || {})[k.slice(6)]
+        const s = x === undefined || x === null ? '' : Array.isArray(x) ? x.join(',') : String(x)
+        if (!s) empty = true
+        return s
+      }
+      return k in vars ? vars[k] : m
+    })
+    if (!empty) out.push(v)
+  }
+  return out
 }
 
 // ---------------------------------------------------------------- the sim side: one Lobster process
@@ -49,6 +64,7 @@ class Sim {
     this.waiting = new Map()
     this.nextId = 1
     this.ready = null
+    this.startArgs = {}  // the last creel_start's args, for {start.<key>} in the capture command
   }
 
   start () {
@@ -162,7 +178,11 @@ async function call (cfg, sim, name, a) {
     return path.join(cfg.scratch, n + '.save')
   }
   switch (name) {
-    case 'creel_start': return simCall('start', { args: a.args || {} })
+    case 'creel_start': {
+      const r = await simCall('start', { args: a.args || {} })
+      if (!r.isError) sim.startArgs = a.args || {}
+      return r
+    }
     case 'creel_state': return simCall('state', {})
     case 'creel_step': return simCall('step', { ticks: a.ticks })
     case 'creel_names': return simCall('names', {})
@@ -182,7 +202,7 @@ async function call (cfg, sim, name, a) {
       const r = await sim.request('save', { path: save })
       if (!r.ok) return text(r.error, true)
       const extra = Object.entries(a.args || {}).map(([k, v]) => String(k) + ':' + String(v)).filter(s => /^[\w.,:-]+$/.test(s))
-      const res = await run(fill(cfg.capture, { lobster: cfg.lobster, save, png, scratch: cfg.scratch }).concat(extra), cfg.cwd, cfg.timeout_s)
+      const res = await run(fill(cfg.capture, { lobster: cfg.lobster, save, png, scratch: cfg.scratch }, sim.startArgs).concat(extra), cfg.cwd, cfg.timeout_s)
       if (!fs.existsSync(png)) return text('no picture (exit ' + res.code + '): ' + res.out.slice(-2000), true)
       return { content: [{ type: 'image', data: fs.readFileSync(png).toString('base64'), mimeType: 'image/png' }] }
     }
