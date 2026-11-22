@@ -3,7 +3,7 @@
 // (an ally or an enemy) and says the words its army is made from, and everyone sees the lobby change as it does. At
 // Start the host tells each joiner its side, every person's side and the AIs' levels (room_start), then sends the
 // world as a match always went. Messages ride the link's framing (lockstep.lobster):
-//   host -> joiner: L the lobby (JSON: map, mode, sides), A the side you hold, X refused (and the link closes),
+//   host -> joiner: L the lobby (JSON: map, mode, fixed, sides), A the side you hold, X refused (and the link closes),
 //                   W at Start: "<your side>|<people's sides>|<every side's AI level>"
 //   joiner -> host: T take a side, P my army: "<reroll>|<words>"
 
@@ -26,6 +26,7 @@ class Room:
     mode = ""
     sent = ""        // the lobby as last sent
     changed = false  // a joiner took a side or typed: the host's lobby reads it
+    fixed = false    // the host's sides are set (a match resumed): joiners take a side as it is, their words don't change it
 
 def room_open(port:int, name:string, map_id:string) -> Room:
     let r = Room { door_open(port, name, map_id) }
@@ -41,7 +42,7 @@ def room_sides(r:Room, side_teams:[int], side_words:[string], side_rerolls:[int]
     for(r.sides) s, i:
         s.team = side_teams[i]
         if i == 0: s.who = ROOM_HOST
-        if s.who != ROOM_PLAYER:
+        if s.who != ROOM_PLAYER or r.fixed:
             s.prompt = side_words[i]
             s.reroll = side_rerolls[i]
 
@@ -53,8 +54,9 @@ def room_free(r:Room, side:int):
     let s = r.sides[side]
     s.who = ROOM_AI
     s.guest = -1
-    s.prompt = ""
-    s.reroll = 0
+    if not r.fixed:
+        s.prompt = ""
+        s.reroll = 0
     r.changed = true
 
 def room_drop(r:Room, g:int, why:string):
@@ -73,8 +75,9 @@ def room_take(r:Room, g:int, side:int) -> bool:
     let s = r.sides[side]
     s.who = ROOM_PLAYER
     s.guest = g
-    s.prompt = prompt
-    s.reroll = reroll
+    if not r.fixed:  // (a fixed side keeps its army; otherwise the joiner's goes with it)
+        s.prompt = prompt
+        s.reroll = reroll
     r.changed = true
     net_send(r.guests[g], 'A', string(side))
     return true
@@ -92,6 +95,7 @@ def room_json(r:Room) -> string:
     let o = jobj()
     set(o, "map", jstr(r.map_id))
     set(o, "mode", jstr(r.mode))
+    set(o, "fixed", jbool(r.fixed))
     let list = []::JV
     for(r.sides) s:
         let so = jobj()
@@ -120,7 +124,7 @@ def room_tick(r:Room):
                 elif f[0] == "P":
                     let side = room_side_of(r, g)
                     let bar = find_string(f[1], "|")
-                    if side >= 0 and bar > 0:
+                    if side >= 0 and bar > 0 and not r.fixed:
                         let s = r.sides[side]
                         let words = substring(f[1], bar + 1, f[1].length - bar - 1)
                         let reroll = string_to_int(substring(f[1], 0, bar))
