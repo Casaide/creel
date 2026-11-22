@@ -746,10 +746,11 @@ def solid_tick():
             if bx == ox and by == oy: push_aside(i, pj, vx, vy, hc)  // (no way round: an idle one in the way is pushed aside)
             u_x[i] = bx
             u_y[i] = by
-    // A walker held up (no headway at its last look) by someone idle in its way: they're pushed aside. Whether it stands
-    // still for them (its steering holds it short) or only edges from side to side (against a wall beside them, #205).
+    // A walker held up (no headway at its last look, and none this tick) by someone idle in its way: they're pushed aside.
+    // Whether it stands still for them (its steering holds it short) or only edges from side to side (against a wall
+    // beside them, #205).
     for(u_x.length) i:
-        if u_moving[i] != 0 and u_stuck[i] > 0 and solid_body(i, hc):
+        if u_moving[i] != 0 and u_stuck[i] > 0 and dist2(u_x[i], u_y[i], u_wx[i], u_wy[i]) >= dist2(solid_px[i], solid_py[i], u_wx[i], u_wy[i]) and solid_body(i, hc):
             let gx = u_wx[i] - u_x[i]
             let gy = u_wy[i] - u_y[i]
             for(u_x.length) j:
