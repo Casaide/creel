@@ -82,6 +82,7 @@ let doodads = dictionary<string, int>(64)
 var pack_rules = "default"                    // the host rules the pack's races were made with
 var pack_mods = []::string                    // the mods they were made with
 let prop_of = dictionary<string, string>(64)  // terrain id -> prop kind
+let prop_flat = dictionary<string, bool>(16)   // prop kinds that lie flat on the ground, under units (#169)
 let ground_a = []::float4                     // per terrain: its two colours
 let ground_b = []::float4
 var species = []::string   // per cell: a tree's species, or "-"

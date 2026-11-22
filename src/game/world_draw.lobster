@@ -528,7 +528,7 @@ def collect_props():
                 let at = iso(float((c % W) * 1000 + 500), float((c / W) * 1000 + 500))
                 let up = lift_at(float((c % W) * 1000 + 500), float((c / W) * 1000 + 500)) * 1.5
                 let shade = fog_prop_shade(fog[ME][c])
-                let flat = pool[c] >= 0
+                let flat = pool[c] >= 0 or prop_flat.get(kind, false)  // (a lily pad, or a kind the pack lays flat: under units, #169)
                 let col = float4 { 1.0, 1.0, 1.0, shade }
                 let sh = frame_index(name + "~shadow")
                 if scale == 1.0:
