@@ -77,9 +77,13 @@ def step():
     trace("start")
     sync_map()
     solve_queued()
+    solid_before()
     move()
     trace("move")
     spatial_build()
+    if r_solid != 0:
+        solid_tick()
+        spatial_build()
     separate()
     trace("separate")
     tick++

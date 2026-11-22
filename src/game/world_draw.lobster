@@ -166,16 +166,28 @@ def add_parts(i:int, hull_f:int, x:float, y:float, sort_y:float, col:float4):
             let sf = vx_shadow_for(pf)
             if sf >= 0: add(sf, px, py, sort_y - 0.5, float4 { 1.0, 1.0, 1.0, 1.0 })
 
+let DOOR_IN = 200  // how far past a building's front edge a unit stepping through its door is drawn at the door, milli-tiles
+
 def collect_units(alpha:float):
     perf_unseen = 0
     let hc = inside_col()
     for(u_x.length) i:
         let px, py = prev_pos(i)
-        let x = px + (u_x[i] - px) * alpha
-        let y = py + (u_y[i] - py) * alpha
+        var x = px + (u_x[i] - px) * alpha
+        var y = py + (u_y[i] - py) * alpha
         let mine = teams[u_owner[i]] == teams[ME]
-        if (mine or visible_to_me(cell_of(u_x[i], u_y[i]))) and vx_drawn(u_kind[i]) and not is_inside(i, hc):  // (inside a building: not seen, #120)
-            let moving, walking_d = unit_walk(i, unit_dir.get(u_id[i], 2), px, py)
+        let ds, db, going_in = door_step_of(i)  // (stepping through a door: drawn walking to it, or back out, #164)
+        if (mine or visible_to_me(cell_of(u_x[i], u_y[i]))) and vx_drawn(u_kind[i]) and not hidden_inside(i, hc):  // (inside a building: not seen, #120)
+            var moving, walking_d = unit_walk(i, unit_dir.get(u_id[i], 2), px, py)
+            if ds > 0:
+                let door_x = float((b_cx[db] + b_sx[db] / 2) * 1000 + 500)
+                let door_y = float((b_cy[db] + b_sy[db]) * 1000 - DOOR_IN)
+                let nd = if going_in: dir_of(iso(door_x - x, door_y - y)) else: dir_of(iso(x - door_x, y - door_y))
+                if nd >= 0: walking_d = nd
+                moving = true
+                let f = float(ds) / 1000.0
+                x += (door_x - x) * f
+                y += (door_y - y) * f
             var d = walking_d
             if moving: pass()
             elif u_foe[i] != 0 and not t_mounts[u_kind[i]].length:  // (a mounted hull doesn't turn to its foe: its guns do)
