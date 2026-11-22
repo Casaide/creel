@@ -781,7 +781,7 @@ def solid_tick():
 // where it started may now stand in another's new step. Two bodies that overlap are never nearer than at the start of
 // these moves: of such a pair the one that moved (the later in slot order if both did) is set out along the line between
 // them to how far apart they were, so it still slides past; a second time, or onto ground it can't stand on, it goes
-// back to where it started. Until none is left (each goes back once at most, and where everyone started holds). Two
+// back to where it started; someone idle it pressed into steps aside for it. Until none is left (each goes back once at most, and where everyone started holds). Two
 // walkers in the forced swap are let be.
 def solid_settle(hc:int):
     let back = map(u_x.length): 0
@@ -812,6 +812,7 @@ def solid_settle(hc:int):
                                     let who = if jm and back[j] < 2: j else: if im and back[i] < 2: i else: -1
                                     if not swap and who >= 0:
                                         let other = if who == j: i else: j
+                                        push_aside(who, other, u_x[who] - solid_px[who], u_y[who] - solid_py[who], hc)  // (someone idle in its way steps off it)
                                         let was = min(rr, isqrt(dist2(solid_px[i], solid_py[i], solid_px[j], solid_py[j])) + 2)
                                         let d = max(1, isqrt(d2))
                                         let sx = u_x[other] + (u_x[who] - u_x[other]) * was / d
