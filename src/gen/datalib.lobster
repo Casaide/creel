@@ -74,6 +74,8 @@ class Pack:
     lua_read = false           // its Lua (data/hooks/*.lua) read: gen/mods' pack_lua
     lua_files = []::string     // by name
     lua_sources = []::string   // their text, line ends as \n: the files checked are the files run
+    test_files = []::string    // its tests (data/tests/*.lua, testkit/pack_tests): never run in play, not in its signature
+    test_sources = []::string
 
 var lib_packs = []::Pack  // in load order, the game first
 
@@ -88,18 +90,23 @@ def lx_no_cr(text:string) -> string:
     return out + substring(text, k, text.length - k)
 
 // A pack's Lua, data/hooks/*.lua by name, read once and kept on it (with \r\n read as \n): what's checked is what runs.
+// Its tests, data/tests/*.lua, the same way.
 def pack_lua(p:Pack):
     if p.lua_read: return
     p.lua_read = true
-    let names, sizes = scan_folder(p.root + "/hooks", true)
+    pack_lua_dir(p.root + "/hooks", p.lua_files, p.lua_sources)
+    pack_lua_dir(p.root + "/tests", p.test_files, p.test_sources)
+
+def pack_lua_dir(dir:string, files_out:[string], sources_out:[string]):
+    let names, sizes = scan_folder(dir, true)
     if not names or not sizes: return
     let files = []::string
     for(names) n, k:
         if sizes[k] >= 0 and ends_with(n, ".lua"): files.push(n)
     for(sorted_strs(files)) f:
-        let text = read_file(p.root + "/hooks/" + f)
-        p.lua_files.push(f)
-        p.lua_sources.push(if text: lx_no_cr(text) else: "")
+        let text = read_file(dir + "/" + f)
+        files_out.push(f)
+        sources_out.push(if text: lx_no_cr(text) else: "")
 
 def pack_open(id:string, dir:string, manifest:JV) -> Pack:
     let d = gstr(manifest, "data", "data")

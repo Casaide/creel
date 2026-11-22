@@ -43,7 +43,7 @@ async function main () {
   check(init.result && init.result.capabilities.tools, 'initialize offers tools')
   proc.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n')
   const list = (await rpc('tools/list', {})).result.tools.map(t => t.name)
-  for (const n of ['creel_start', 'creel_step', 'creel_state', 'creel_units', 'creel_buildings', 'creel_order', 'creel_save', 'creel_invariants', 'creel_events', 'creel_run_tests']) check(list.includes(n), 'tools/list has ' + n)
+  for (const n of ['creel_start', 'creel_step', 'creel_state', 'creel_units', 'creel_buildings', 'creel_order', 'creel_save', 'creel_invariants', 'creel_events', 'creel_pack_tests', 'creel_run_tests']) check(list.includes(n), 'tools/list has ' + n)
   check(!list.includes('creel_capture'), 'no capture tool without a capture command')
 
   const st = await tool('creel_state', {})
@@ -52,6 +52,8 @@ async function main () {
   check(names.commands[0] === 'move' && names.commands[27] === 'demolish' && names.tile === 1000, 'names: the order names and the tile')
   const early = await tool('creel_step', { ticks: 5 })
   check(early.isError && /start one first/.test(body(early)), 'step before start is refused')
+  const pt = await tool('creel_pack_tests', { pack: 'nope' })
+  check(pt.isError && /no pack "nope"/.test(body(pt)), 'a pack that isn\'t there has no tests to run')
   const inv = await tool('creel_invariants', {})
   check(inv.isError && /start one first/.test(body(inv)), 'invariants before start is refused')
   const evs = await tool('creel_events', {})

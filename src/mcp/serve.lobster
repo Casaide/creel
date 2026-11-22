@@ -13,6 +13,7 @@
 // Imported after every sim module. Nothing here writes the sim's state except through issue_cmd, as a player's order.
 
 import testkit.invariants
+import testkit.pack_tests
 
 let MCP_PREFIX = "@mcp "
 let MCP_MAX_STEP = 72000  // one hour of ticks a request at most
@@ -28,16 +29,11 @@ var mcp_events = []::Event
 var mcp_event_ticks = []::int
 var mcp_events_dropped = 0
 
-// The event kinds by name (lib/state's EV_*); a pack's own are "pack:<code>".
-let MCP_EV_NAMES = [ "hit", "die", "shot", "miss", "heal", "splash", "", "", "", "", "pick", "drop", "gather", "made", "used", "built",
-    "trained", "lost", "taken", "put" ]
-
-def mcp_ev_name(k:int) -> string: return if k >= EV_PACK: "pack:{k - EV_PACK}" else: if k < MCP_EV_NAMES.length: MCP_EV_NAMES[k] else: string(k)
+def mcp_ev_name(k:int) -> string: return ev_name(k)
 
 def mcp_ev_kind(v:JV) -> int:  // (a name or a code)
     if v.kind == J_STR:
-        if starts_with(v.s, "pack:"): return EV_PACK + string_to_int(substring(v.s, 5, v.s.length - 5))
-        return find(MCP_EV_NAMES): _ == v.s
+        return ev_kind(v.s)
     return as_int(v)
 
 // One tick the game's way, its events kept.
@@ -231,7 +227,7 @@ def mcp_names() -> JV:
     o.set("tile", jint(TILE))
     o.set("ticks_per_turn", jint(TICKS_PER_TURN))
     o.set("map", mcp_ints([ W, H ]))
-    o.set("events", jstrs(MCP_EV_NAMES))
+    o.set("events", jstrs(EV_NAMES))
     return o
 
 // A player's order, run at the start of turn + 2 like every order.
@@ -263,6 +259,22 @@ def mcp_handle(q:JV) -> string, JV:
         mcp_event_ticks = []
         mcp_events_dropped = 0
         return "", mcp_state()
+    if cmd == "pack_tests":  // (#190: a pack's tests/*.lua, each in a fresh match from args; the last one's is left running)
+        let id = gstr(q, "pack", "")
+        if (find(lib_packs) p: p.id == id) < 0: return "no pack \"{id}\" (packs: {concat_string(map(lib_packs) p: p.id, ", ")})", jnull()
+        var why = ""
+        let ran = pack_tests_of(id):
+            let err = mcp_start(gobj(q, "args"))
+            if why == "": why = err
+        fn: mcp_step()
+        if why != "": return why, jnull()
+        if not ran.length: return "the pack {id} has no tests (data/tests/*.lua)", jnull()
+        mcp_started = true
+        events_on = true
+        let o = mcp_state()
+        o.set("tests", jstrs(ran))
+        o.set("failed", jint((filter(ran) l: starts_with(l, "FAIL")).length))
+        return "", o
     if cmd == "state": return "", mcp_state()
     if cmd == "names": return "", mcp_names()
     if not mcp_started: return "no match yet: start one first", jnull()

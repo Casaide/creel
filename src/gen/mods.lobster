@@ -104,10 +104,11 @@ def mod_read(rec:Pack) -> string:
         let base = if has_char(f, '/'): substring(f, 0, find_string(f, "/")) else: ""
         let model = starts_with(f, "voxel/models/") and ends_with(f, ".vox")
         let code = base == "hooks" and ends_with(f, ".lua") and find_string(substring(f, 6, f.length - 6), "/") < 0
+        let test = base == "tests" and ends_with(f, ".lua") and find_string(substring(f, 6, f.length - 6), "/") < 0
         let icon = base == "icons" and ends_with(f, ".png") and find_string(substring(f, 6, f.length - 6), "/") < 0
-        if not (has_s(MOD_DATA_FILES, f) or (has_s(MOD_DATA_DIRS, base) and ends_with(f, ".json")) or model or code or icon):
-            return "data/{f} can\'t be modded yet (moddable: {concat_string(MOD_DATA_FILES, ", ")}, rules/*.json, maps/*.json, voxel/**.json, voxel/models/*.vox, hooks/*.lua, icons/*.png)"
-        if code or icon: continue  // (Lua: read below; an icon is only drawn (icon_file, #117), so not in the signature)
+        if not (has_s(MOD_DATA_FILES, f) or (has_s(MOD_DATA_DIRS, base) and ends_with(f, ".json")) or model or code or test or icon):
+            return "data/{f} can\'t be modded yet (moddable: {concat_string(MOD_DATA_FILES, ", ")}, rules/*.json, maps/*.json, voxel/**.json, voxel/models/*.vox, hooks/*.lua, tests/*.lua, icons/*.png)"
+        if code or test or icon: continue  // (Lua: read below; an icon is only drawn (icon_file, #117), so not in the signature)
         let text = read_file(root + "/" + f)
         if not text: return "data/{f} can\'t be read"
         if model: models += f + sha256_text(text)
@@ -119,6 +120,9 @@ def mod_read(rec:Pack) -> string:
         let why = lua_check_source("{rec.id}/hooks/{f}", rec.lua_sources[j])
         if why != "": return why
         models += "hooks/" + f + sha256_text(rec.lua_sources[j])
+    for(rec.test_files) f, j:  // (checked, but a pack's tests don't change how it plays: not in its signature)
+        let why = lua_check_source("{rec.id}/tests/{f}", rec.test_sources[j])
+        if why != "": return why
     // (the hash is of the parsed data, not the files' bytes: line endings differ between checkouts)
     rec.sig = "{rec.id}@{gstr(rec.manifest, "version", "")}#{substring(sha256_text(stringify(jobj_without(jobj_without(rec.data, "audio.json"), "atmosphere.json")) + models), 0, 8)}"
     return ""

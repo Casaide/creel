@@ -6,6 +6,7 @@
 // Imported after every sim, bot and setup module, and Lua's.
 
 import testkit.invariants
+import testkit.pack_tests
 
 let KIT_JITTER = 400  // World.SPAWN_JITTER
 var kit_dump = -1     // dump:<tick>: the state then (dump_state, as export.gd's), to diff against GDScript's

@@ -139,6 +139,7 @@ function tools (cfg) {
     { name: 'creel_step', description: 'Run the sim for this many ticks (20 a second), then give the tick and the hash. With until, it stops early on the first matching event. With invariants, every tick is checked (see creel_invariants) and the run stops on the tick one breaks: broken says which, and where.', inputSchema: { type: 'object', properties: { ticks: { type: 'integer', minimum: 1, maximum: 72000 }, invariants: { type: 'boolean' }, until: { type: 'object', description: 'stop after the tick an event like this happens: kinds, a, b, c as in creel_events; the result\'s event is it, or null' }, stuck_limit: { type: 'integer', minimum: 0, description: 'ticks a walker may be held up before "stuck" breaks (0: not checked)' } }, required: ['ticks'] } },
     { name: 'creel_events', description: 'What happened since the match started (the newest 20,000 kept): goods picked up, dropped, gathered, made, used and lost; built, trained, hits, deaths; packs\' own (pack:<code>). a is the unit, b the building (or cell), c the resource, n how many. Filter by kinds (names from creel_names or codes), a, b, c, since (a tick).', inputSchema: { type: 'object', properties: { kinds: { type: 'array', items: { type: ['string', 'integer'] } }, a: { type: 'integer' }, b: { type: 'integer' }, c: { type: 'integer' }, since: { type: 'integer' }, limit: { type: 'integer' } } } },
     { name: 'creel_invariants', description: 'Check the invariants now: the engine\'s (columns, ids, on_map, carry, stock, holds, jobs, solid, stuck) and the packs\' own (a Lua invariants() hook). broken is "" while all hold.', inputSchema: { type: 'object', properties: {} } },
+    { name: 'creel_pack_tests', description: 'Run a pack\'s own tests (its data/tests/*.lua: docs/lua.md), each in a fresh match from args (as creel_start\'s), with every invariant checked each tick. tests is a line a test, "ok <name>" or "FAIL <name>: why"; failed counts them. The last test\'s match is left running.', inputSchema: { type: 'object', properties: { pack: { type: 'string' }, args: { type: 'object' } }, required: ['pack'] } },
     { name: 'creel_names', description: 'Unit types, building types, resources and order names by index, the tile size and the map size. Kinds and resources elsewhere are these indexes.', inputSchema: { type: 'object', properties: {} } },
     { name: 'creel_units', description: 'Units with their state (position, task, target, carry, hp, ...), filtered.', inputSchema: { type: 'object', properties: filters } },
     { name: 'creel_buildings', description: 'Buildings and sites with their state (cell, done, progress, what they hold, want and have coming), filtered.', inputSchema: { type: 'object', properties: filters } },
@@ -182,6 +183,11 @@ async function call (cfg, sim, name, a) {
   switch (name) {
     case 'creel_start': {
       const r = await simCall('start', { args: a.args || {} })
+      if (!r.isError) sim.startArgs = a.args || {}
+      return r
+    }
+    case 'creel_pack_tests': {
+      const r = await simCall('pack_tests', { pack: a.pack, args: a.args || {} })
       if (!r.isError) sim.startArgs = a.args || {}
       return r
     }

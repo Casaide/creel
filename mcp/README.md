@@ -59,6 +59,7 @@ is missing is left out.
 | `creel_step` | Runs the sim for this many ticks (20 a second, up to an hour per call), then gives the tick and the hash. With `invariants`, it checks every tick and stops on the first that breaks. |
 | `creel_events` | What happened since the start: goods picked up, dropped, gathered, made, used, lost; built, trained, deaths; packs' own. Filtered by kind, unit, building, resource, tick. `creel_step`'s `until` stops on one. |
 | `creel_invariants` | Checks the invariants now: the engine's and the packs' own (`src/testkit/invariants.lobster`). |
+| `creel_pack_tests` | Runs a pack's own tests (`data/tests/*.lua`, [docs/lua.md](../docs/lua.md#a-packs-own-tests)), each in a fresh match from the start args, with every invariant checked each tick. It gives a line a test, `ok` or `FAIL` and why. |
 | `creel_state` | Gives the tick, the hash and whether a match is running. |
 | `creel_names` | Gives unit types, building types, resources and order names by index, plus the tile size and the map size. |
 | `creel_units`, `creel_buildings` | Give the state of units or buildings, filtered by ids, owner, kind or a rectangle. |

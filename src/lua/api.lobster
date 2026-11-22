@@ -16,7 +16,9 @@ let LA_NAMES = [ "unit_count", "u_id", "u_x", "u_y", "u_kind", "u_owner", "u_tas
     "resource_index", "nearest_resource", "start_gather", "start_build", "approach_building", "clear_task", "in_reach", "unit_column", "building_column", "player_column",
     "unit_get", "unit_set", "building_get", "building_set", "player_get", "player_set", "rules", "player_count", "resource_count", "cell_of",
     "t_animal", "u_hp", "b_hp", "lay_foundation", "fits", "plant", "terrain_at", "terrain_type", "approach_cell", "b_making", "bt_drag", "entry_rect", "hold_put",
-    "emit", "event_count", "event_get" ]
+    "emit", "event_count", "event_get",
+    "place", "give", "spawn", "wait", "wait_for", "expect", "keep", "kept" ]
+let LA_TEST_FIRST = 96  // place ... kept: a pack's tests' own (testkit/pack_tests, #190), refused to its rules
 
 // The constants: the engine's task codes and units, and the map's size (set as a match starts).
 def lua_api_consts():
@@ -93,6 +95,33 @@ let LA_WRITES = map(LA_WRITE_NAMES) n:
     assert id >= 0
     id
 var lua_read_only = false
+
+// A pack's tests (testkit/pack_tests): what the phase that's running asked for, read by the runner when it returns.
+var lua_testing = false          // a test's phase is running: the test functions answer
+var lt_wait = 0                  // ticks to run before the next phase (or at most, waiting for an event)
+var lt_until = -1                // the event kind it waits for (-1: none), and its a, b, c (LV_NIL: any)
+let lt_until_abc = [ 0, 0, 0 ]
+let lt_until_set = [ false, false, false ]
+var lt_failed = []::string       // what expect() found wrong
+var lt_keep_names = []::string   // keep(name, v): what a test carries from one phase to the next
+var lt_keep_vals = []::int
+var lt_rets = []::int            // a test function's results (lua_api_call)
+
+def lt_r_int(n:int): lt_rets.push(lv_int(n))
+
+// A test's own functions (place, spawn ...) run the sim, whose hooks run the packs' Lua inside the call: their results
+// are theirs, so the test function's own are made apart and are what the call returns.
+def lua_api_call(id:int, a:[int]):
+    if id < LA_TEST_FIRST:
+        lua_api(id, a)
+        return
+    if not lua_testing:
+        lua_fail("{lx_la_name(id)}: only a pack\'s tests may (tests/*.lua)")
+        return
+    lua_api(id, a)
+    let got = lt_rets
+    lt_rets = []
+    rets = got
 
 def lua_api(id:int, a:[int]):
     if lua_read_only and contains(LA_WRITES, id):
@@ -386,12 +415,85 @@ def lua_api(id:int, a:[int]):
                 else:
                     let e = events[i]
                     lx_r_int([ e.kind, e.a, e.b, e.c, e.n, e.x, e.y ][f])
+        case 96:  // place(p, type, cx, cy, built): building type `type` (its id) for player p with its corner on cx, cy, where it fits; its id or 0
+            let p = lx_a_player(a, 0, id)
+            let name = lx_want_str(a, 1, "place")
+            let cx = lx_want_int(a, 2, "place")
+            let cy = lx_want_int(a, 3, "place")
+            let built = lx_a_bool(a, 4)
+            if p >= 0 and not lfail:
+                let k = btype_index(name)
+                if k < 0: lua_fail("place: no building type \"{name}\"")
+                elif not can_place(p, k, cx, cy): lt_r_int(0)
+                elif built:
+                    let b = place(p, k, cx, cy)
+                    b_done[b] = 1
+                    b_progress[b] = bt_build_ticks[k]
+                    b_hp[b] = bm_hp[p][k]
+                    update_pop()
+                    mark_carry(p)
+                    lt_r_int(b_id[b])
+                else: lt_r_int(place_site(p, k, cx, cy, 0))
+        case 97:  // give(b, r, n): n of r into building slot b, as much as it has room for; how many went in
+            let b = lx_a_building(a, 0, id)
+            let r = lx_a_res(a, 1, id)
+            let n = lx_want_int(a, 2, "give")
+            if b >= 0 and r >= 0 and not lfail:
+                if b_hold[b].length <= r: lua_fail("give: building {b} holds nothing (the economy isn\'t stocked)")
+                else: lt_r_int(hold_put(b, r, max(0, n)))
+        case 98:  // spawn(p, slot, x, y): a unit of player p's type in slot `slot` at x, y (sim units); its slot
+            let p = lx_a_player(a, 0, id)
+            let slot = lx_want_str(a, 1, "spawn")
+            let x = lx_want_int(a, 2, "spawn")
+            let y = lx_want_int(a, 3, "spawn")
+            if p >= 0 and not lfail:
+                let k = type_of_slot(p, slot)
+                if k < 0: lua_fail("spawn: player {p} has no \"{slot}\"")
+                elif x < 0 or y < 0 or x >= W * TILE or y >= H * TILE: lua_fail("spawn: {x}, {y} is off the map")
+                else: lt_r_int(add_unit(p, k, x, y))
+        case 99:  // wait(n): after this phase, run n ticks, then the next phase
+            let n = lx_want_int(a, 0, "wait")
+            if not lfail:
+                lt_wait = n
+                lt_until = -1
+        case 100:  // wait_for(kind, max, a, b, c): run until an event of this kind (its name, or a pack's own code as emit takes) and a, b, c where given happens, at most max ticks
+            let kv = lx_arg_of(a, 0)
+            let k = if lv_is_int(kv): (if (kv >> 3) >= 0 and (kv >> 3) < 900: EV_PACK + (kv >> 3) else: -1) else: ev_kind(lx_want_str(a, 0, "wait_for"))
+            let n = lx_want_int(a, 1, "wait_for")
+            if not lfail:
+                if k < 0: lua_fail("wait_for: no event kind {lua_tostring(kv)} (a name, or a pack\'s own code, 0 to 899)")
+                else:
+                    lt_wait = n
+                    lt_until = k
+                    for(3) f:
+                        let v = lx_arg_of(a, 2 + f)
+                        lt_until_set[f] = lv_is_int(v)
+                        lt_until_abc[f] = if lv_is_int(v): v >> 3 else: 0
+        case 101:  // expect(ok, what): a test's check; what's said when it doesn't hold
+            if not lx_a_bool(a, 0): lt_failed.push(if (lx_arg_of(a, 1) & 7) == LT_STR: lv_text(lx_arg_of(a, 1)) else: "expect() failed")
+        case 102:  // keep(name, v): an integer kept for the test's later phases
+            let name = lx_want_str(a, 0, "keep")
+            let v = lx_want_int(a, 1, "keep")
+            if not lfail:
+                let at_ = find(lt_keep_names): _ == name
+                if at_ >= 0: lt_keep_vals[at_] = v
+                else:
+                    lt_keep_names.push(name)
+                    lt_keep_vals.push(v)
+        case 103:  // kept(name): what keep() kept, or nil
+            let name = lx_want_str(a, 0, "kept")
+            if not lfail:
+                let at_ = find(lt_keep_names): _ == name
+                if at_ >= 0: lt_r_int(lt_keep_vals[at_])
         default: lua_fail("an unknown API function")
 
 // ------------------------------------------------------------------ the hook points
 var hook_view = false  // the view is asking a hook (the placement preview, the panel): it may only read, and a failure
                        // there mustn't change the sim (it runs on one machine). Not the match's state.
 var lua_on = false  // a pack has Lua: the hooks below have something to call
+var lua_test_id = ""                 // a pack's tests, loaded after the packs while they run (testkit/pack_tests)
+var lua_test_files = []::string
+var lua_test_sources = []::string
 var lua_rules = jobj()  // the rules the packs' Lua last loaded with: a new match or a loaded save loads it again
 let L_BUDGET_TICK = 4000000  // a pack's steps in one tick, all its calls together
 let L_BUDGET_VIEW = 100000   // a call the view makes (the placement preview, the panel)
@@ -404,7 +506,7 @@ def lx_note_stop(pk:LPack):
 
 // As a match starts (the game's hook_declare): every pack's Lua runs, the game's first, and is then read-only. A pack
 // the match's state says stopped stays stopped (a loaded save).
-def lua_declare():
+def lua_declare() -> void:
     l_api_names = LA_NAMES
     lua_reset()
     lua_api_consts()
@@ -419,6 +521,9 @@ def lua_declare():
             let was = find(hook_stopped) id: id == p.id
             if was >= 0: pk.error = hook_stopped_why[was]
             else: lx_note_stop(pk)
+    if lua_test_files.length:  // (a pack's tests, last: testkit/pack_tests)
+        lua_on = true
+        lua_load_pack(lua_test_id, lua_test_files, lua_test_sources)
     lua_freeze()
 
 // The packs' Lua for this match: loaded again if the rules aren't the ones it loaded with (a save was loaded). Never

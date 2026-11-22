@@ -98,6 +98,45 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
 
 New API functions are added in `src/lua/api.lobster` (`LA_NAMES` and the switch in `lua_api`), when a rule needs one.
 
+## A pack's own tests
+
+A pack can carry tests of its rules: `data/tests/*.lua`. They're checked when the pack loads, like its hooks, but never
+run in a match, and they aren't in its signature (a pack with new tests plays the same). Each global
+`function test_<name>()` is a test. It runs in a fresh match the game makes, with the pack's rules loaded and every
+invariant (`src/testkit/invariants.lobster`) checked on every tick.
+
+A test runs in phases: `test_<name>`, then `test_<name>_2`, `_3` and on, as long as there are more. A phase sets things
+up or checks them, then says what to run before the next one. Besides the whole API, a phase may call:
+
+| Function | What it does |
+| --- | --- |
+| `place(p, type, cx, cy, built)` | Building type `type` (its id) for player `p` with its corner on cell `cx, cy`, where it fits: a site asking for its goods, or with `built` finished. Its id, or 0 if it doesn't fit. |
+| `give(b, r, n)` | Puts `n` of resource `r` into building slot `b`, as far as it has room. How many went in. |
+| `spawn(p, slot, x, y)` | A unit of player `p`'s type in roster slot `slot` (`worker`, `spear` ...) at `x, y` in sim units. Its slot. |
+| `wait(n)` | After this phase, run `n` ticks. |
+| `wait_for(kind, max, a, b, c)` | After this phase, run until an event of this kind happens with these `a, b, c` (`nil` for any), at most `max` ticks. The kind is a name (`pick`, `drop`, `gather`, `made`, `used`, `built`, `trained`, `lost`, `taken`, `put` ...) or a pack's own code, as `emit` takes. |
+| `expect(ok, what)` | A check: the test fails with `what` if `ok` isn't true. |
+| `keep(name, n)`, `kept(name)` | An integer kept for a later phase (a phase's locals are gone when it ends). |
+
+A test fails on an `expect` that doesn't hold, an error, an invariant that breaks (with the tick and what broke), or an
+event that doesn't come in time. These functions are refused to a pack's rules: only its tests may call them.
+
+```lua
+-- data/tests/roads.lua: a road cell takes one stone, carried to it by a carrier, then it's laid
+function test_road_takes_one_stone()
+  keep("road", place(0, "road", 14, 12, false))
+  wait_for("drop", 2400, nil, kept("road"), resource_index("stone"))
+end
+
+function test_road_takes_one_stone_2()
+  wait_for("built", 1200, nil, kept("road"))
+end
+```
+
+A game runs them with `pack_tests_of(id, make_world, one_tick)` (`src/testkit/pack_tests.lobster`): `make_world` makes
+a fresh match, `one_tick` runs one tick the game's way. The MCP's `creel_pack_tests` does the same with `creel_start`'s
+args.
+
 ## A game's side
 
 A game chains each of its hook points (`hooks/active.lobster`) on to `lua_<hook>` after its own rules, and calls

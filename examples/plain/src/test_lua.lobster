@@ -1,6 +1,8 @@
 // Lua for mods (#82): the language, its refusals and its limits, headless. ../../../check.sh runs it.
 //   lobster test_lua.lobster
 import sim_modules
+import testkit.invariants
+import testkit.pack_tests
 
 var fails = 0
 var passes = 0
@@ -235,6 +237,30 @@ def test_events():  // (#187: a pack's own events, and reading this tick's)
     events = []
     events_on = false
 
+def test_pack_tests():  // (#190: a pack's own tests, tests/*.lua, run by testkit/pack_tests)
+    check(equal(pack_test_names([ "function test_a() end\nfunction test_a_2() end\nlocal function helper() end", "function test_b_x() end\nfunction test_a() end" ]), [ "test_a", "test_b_x" ]), "a pack\'s tests are its test_ functions, a later phase (_2) not one")
+    let src = "function test_kept() keep(\"n\", 3) wait(2) end\n" +
+        "function test_kept_2() expect(kept(\"n\") == 3, \"kept from the phase before\") expect(tick() == 2, \"two ticks on\") end\n" +
+        "function test_wrong() expect(1 == 2, \"one is two\") end\n" +
+        "function test_late() wait_for(\"built\", 3) end\n" +
+        "function test_mine() emit(5, 0, 0, 0, 0) end\n" +
+        "function test_soon() wait_for(7, 10) end\n"
+    lua_quiet = true
+    let got = pack_tests("plain", [ "t.lua" ], [ src ]):
+        tick = 0
+        events = []
+    fn:
+        events = []
+        if tick == 4: events.push(Event { EV_PACK + 7, 0, 0, 0, 0, 0, 0 })
+        tick++
+    check(equal(got, [ "ok test_kept", "FAIL test_wrong: test_wrong: one is two", "FAIL test_late: after test_late: no built event in 3 ticks", "ok test_mine", "ok test_soon" ]), "a pack\'s tests pass, fail on an expect, and wait for ticks and events: {got}")
+    tick = 0
+    events = []
+    run("function go() wait(1) end")
+    check(find_string(call("go", []), "only a pack\'s tests") >= 0, "the tests\' own functions are refused to a pack\'s rules")
+    run("function go() place(0, \"hut\", 1, 1, true) end")
+    check(find_string(call("go", []), "only a pack\'s tests") >= 0, "place too")
+
 def test_budgets():
     // a pack's calls in one tick share a budget: past it, the pack stops
     run("function work(n) for i = 1, n do end end")
@@ -362,6 +388,7 @@ test_check_source()
 test_crashes()
 test_view()
 test_events()
+test_pack_tests()
 test_budgets()
 test_dispatch()
 test_tables_edges()
