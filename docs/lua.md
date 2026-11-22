@@ -58,6 +58,7 @@ Lua 5.4, cut to what lockstep needs:
 | `on_order(code, p, ids, x, y)` | an order with a code from `HOOK_ORDER_BASE` up | |
 | `ai_train_score(p, slot, k, score)` | a bot weighs training type `k` | the score |
 | `task_name(i)` | the panel names what unit `i` is doing; may only read | a string, `""` for none |
+| `invariants()` | after a tick, when the testkit or the MCP checks the invariants (`src/testkit/invariants.lobster`); may only read, on the view's budget | `nil` while the pack's rules hold, else a string saying which broke and where |
 
 ## The API
 

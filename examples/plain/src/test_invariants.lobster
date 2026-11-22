@@ -1,0 +1,137 @@
+// The per-tick invariants (src/testkit/invariants.lobster, #186), headless: a small world by hand where every one holds,
+// then one break planted for each, caught by its own name. ../../../check.sh runs it.
+//   lobster test_invariants.lobster
+import sim_modules
+import testkit.invariants
+
+var fails = 0
+var passes = 0
+
+def check(ok:bool, what:string):
+    if ok: passes++
+    else:
+        fails++
+        print "FAIL: {what}"
+
+// A 12 x 12 map, one unit type (radius a third of a tile), two resources, two players, stocked: two units apart, a store.
+def tiny_world():
+    W = 12
+    H = 12
+    for([ t_hp, t_posture, t_speed, t_radius, t_mclass, t_air, t_carry_add ]) col: col.remove_range(0, col.length)
+    t_hp.push(10)
+    t_posture.push(0)
+    t_speed.push(100)
+    t_radius.push(TILE / 3)
+    t_mclass.push(0)
+    t_air.push(0)
+    t_carry_add.push(0)
+    resource_names = [ "wood", "stone" ]
+    num_resources = 2
+    stock = [ [ 0, 0 ], [ 0, 0 ] ]
+    r_stocked = 1
+    r_solid = 1
+    for(unit_columns()) col: col.remove_range(0, col.length)
+    u_orders = []
+    u_mount = []
+    u_inside = []
+    for(building_columns()) col: col.remove_range(0, col.length)
+    b_queue = []
+    b_inside = []
+    b_hold = []
+    b_want = []
+    b_resv = []
+    b_coming = []
+    b_make = []
+    b_site = []
+    for([ jb_id, jb_unit, jb_from, jb_to, jb_res, jb_n, jb_phase, jb_want ]) col: col.remove_range(0, col.length)
+    next_id = 1
+    add_unit(0, 0, 2 * TILE + TILE / 2, 2 * TILE + TILE / 2)
+    add_unit(0, 0, 6 * TILE + TILE / 2, 2 * TILE + TILE / 2)
+    add_unit(1, 0, 9 * TILE + TILE / 2, 9 * TILE + TILE / 2)
+    add_building(100, 0, 0, 4, 6, 2, 2, 0)
+    b_hold[0] = [ 5, 3 ]
+    sp_cell = map(u_id.length): 0
+    sp_items = map(u_id.length + 1): 0
+    spatial_clear()
+    spatial_build()
+    inv_stuck_limit = 0
+
+// The world as tiny_world() leaves it, a tick "run" by change(), then the invariants: the first broken ("" for none).
+def after(change) -> string:
+    tiny_world()
+    inv_before()
+    change()
+    sp_cell = map(u_id.length): 0
+    sp_items = map(u_id.length + 1): 0
+    spatial_build()
+    return inv_after()
+
+def caught(name:string, change):
+    let why = after(change)
+    check(starts_with(why, name + ":"), "a planted {name} break is caught as {name}: \"{why}\"")
+
+def test_invariants():
+    let none = after(): pass()
+    check(none == "", "every invariant holds in the tiny world: \"{none}\"")
+    let clear = after(): u_x[1] = 4 * TILE
+    check(clear == "", "a step that keeps clear of everyone holds: \"{clear}\"")
+    caught("columns"): u_hp.pop()
+    caught("columns"): b_hold.push([ 0, 0 ])
+    caught("ids"): u_id[1] = u_id[0]
+    caught("ids"): u_id[2] = 0
+    caught("on_map"): u_x[2] = W * TILE
+    caught("on_map"): b_cx[0] = W - 1
+    caught("carry"): u_carry[0] = -1
+    caught("carry"):
+        u_carry[0] = 2
+        u_carry_kind[0] = 0
+    caught("carry"): u_carry_kind[0] = 3
+    caught("stock"): stock[1][0] = -4
+    caught("holds"): b_hold[0][1] = -1
+    caught("holds"): b_resv[0] = [ 0, -1 ]
+    caught("jobs"):
+        jb_id.push(1)
+        for([ jb_unit, jb_from, jb_to, jb_res, jb_n, jb_phase, jb_want ]) col: col.push(0)
+        jb_unit[0] = 99
+        jb_n[0] = 1
+    caught("jobs"):
+        jb_id.push(1)
+        for([ jb_unit, jb_from, jb_to, jb_res, jb_n, jb_phase, jb_want ]) col: col.push(0)
+        jb_unit[0] = u_id[0]
+    caught("solid"): u_x[1] = u_x[0] + TILE / 4
+    let soft = after():
+        r_solid = 0
+        u_x[1] = u_x[0] + TILE / 4
+    check(soft == "", "with bodies not solid, walking into one holds: \"{soft}\"")
+    caught("stuck"):
+        inv_stuck_limit = 80
+        u_moving[0] = 1
+        u_stuck[0] = 81
+    let unlimited = after():
+        u_moving[0] = 1
+        u_stuck[0] = 81
+    check(unlimited == "", "held up long holds when no limit is set: \"{unlimited}\"")
+
+def test_pack():
+    lua_on = true
+    l_api_names = LA_NAMES
+    lua_reset()
+    lua_api_consts()
+    lua_rules = su_rules
+    lua_quiet = true
+    lua_load_pack("t", [ "t.lua" ], [ "function invariants() if unit_count() > 3 then return \'too many: \' .. unit_count() end end" ], L_BUDGET_LOAD)
+    lua_freeze()
+    let held = after(): pass()
+    check(held == "", "a pack\'s invariant that holds: \"{held}\"")
+    caught("pack"): add_unit(1, 0, 10 * TILE, 10 * TILE)
+    let words = after(): add_unit(1, 0, 10 * TILE, 10 * TILE)
+    check(find_string(words, "too many: 4") >= 0, "and says the pack\'s words: \"{words}\"")
+    lua_load_pack("u", [ "u.lua" ], [ "function invariants() set_pop(0, 1) end" ], L_BUDGET_LOAD)
+    lua_freeze()
+    caught("pack"): pass()  // (only reads: a pack's invariants that writes is a break, and the sim is untouched)
+    check(l_packs[1].error == "", "and the pack runs on")
+    lua_on = false
+
+test_invariants()
+test_pack()
+print "test_invariants: {passes} passed, {fails} failed"

@@ -3,7 +3,9 @@
 // path_audit.gd: a fresh world, World's SPAWN (deferred to its turn like a command), the bots on both
 // sides (full bots and eco bots), the bots' config at a level and with a test's changes, what the
 // GDScript events told (research, ages, heroes, trade, webs) read off the state, shards, the clock.
-// Imported after every sim, bot and setup module.
+// Imported after every sim, bot and setup module, and Lua's.
+
+import testkit.invariants
 
 let KIT_JITTER = 400  // World.SPAWN_JITTER
 var kit_dump = -1     // dump:<tick>: the state then (dump_state, as export.gd's), to diff against GDScript's
@@ -65,7 +67,8 @@ def plain_args(args:[string]) -> [string]:
     for(args) a:
         if starts_with(a, "trace:"): kit_trace = string_to_int(a.substring(6, a.length - 6))
         if starts_with(a, "dump:"): kit_dump = string_to_int(a.substring(5, a.length - 5))
-    return filter(args) a: not starts_with(a, "shard:") and not starts_with(a, "trace:") and not starts_with(a, "dump:")
+        if a == "invariants": inv_on = true
+    return filter(args) a: not starts_with(a, "shard:") and not starts_with(a, "trace:") and not starts_with(a, "dump:") and a != "invariants"
 
 // ---- the world
 
@@ -129,10 +132,19 @@ def run_spawns():
 // One tick: the spawns due, World.step, the ids seen.
 def wstep():
     run_spawns()
+    if inv_on: inv_before()
     step()
+    if inv_on and inv_broken == "": inv_tick()
     note_ids()
     if kit_trace > 0 and tick % kit_trace == 0: print "h {tick} {state_hash()}"
     if tick == kit_dump: print dump_state()
+
+// The invariants after a tick (inv_on: the `invariants` arg, or a test's own): the first that breaks fails the run, once.
+def inv_tick():
+    let why = inv_after()
+    if why != "":
+        inv_broken = "tick {tick}: {why}"
+        check(false, "invariant broken at " + inv_broken)
 
 // A unit type's name as its line stands (the last step its player has researched).
 def unit_name(k:int) -> string:
