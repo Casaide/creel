@@ -8,6 +8,9 @@ Instructions for AI coding agents working on Creel, the engine. Humans: see [CON
 LOBSTER=<path to lobster> ./check.sh   # Creel's modules compile with nothing from a game but examples/plain's hooks
 ```
 
+A game on Creel can be run headless through MCP while you work on it: start a match, step, order, query, hash, save, capture,
+run its tests ([mcp/README.md](mcp/README.md)).
+
 Creel is built with [Lobster](https://github.com/aardappel/lobster); `LOBSTER_VERSION` names the commit it was last tested with.
 Games use Creel as a git submodule pinned to a commit, so a change here only reaches a game when it bumps its pin.
 
