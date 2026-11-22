@@ -84,7 +84,11 @@ def step():
     if r_solid != 0:
         solid_tick()
         spatial_build()
+        solid_before()  // (separate()'s pushes are steps too: none into another's body)
     separate()
+    if r_solid != 0:
+        spatial_build()
+        solid_tick()
     trace("separate")
     tick++
 
