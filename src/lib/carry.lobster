@@ -79,7 +79,7 @@ def start_job(i:int, src:int, dst:int, r:int, n:int, wanted:bool):
     u_task[i] = T_CARRY
     u_home[i] = jid
     u_target[i] = b_id[src]
-    approach_building(i, src)
+    carry_approach(i, src)
 
 // Is workshop b's out slot for r too full for another round of its recipe? Goods already reserved are as good as
 // gone. (A gatherer's hut has no recipe: it is never held up this way, its goods wait their turn.)
@@ -193,13 +193,41 @@ def store_with_room(i:int, r:int) -> int:
                 best = b
     return best
 
-// Unit i, in reach of a building: whether it's still inside (another tick of r_inside_ticks); false once it's out.
+// Unit i, in reach of a building: whether it's still in its visit (another tick of r_inside_ticks, with r_door_step
+// stepping in before and out after); false once it's out.
 def still_inside(i:int) -> bool:
-    if u_work[i] >= r_inside_ticks:
+    if u_work[i] >= r_inside_ticks + 2 * r_door_step:
         u_work[i] = 0
         return false
     u_work[i]++
     return true
+
+// The building unit i is visiting (going in, inside or coming out: u_work counts the visit), or -1.
+def visiting(i:int) -> int:
+    if r_inside_ticks <= 0 or u_work[i] <= 0: return -1
+    if u_task[i] == T_CARRY:
+        let j = job_index(u_home[i])
+        if j < 0: return -1
+        return b_index_of(if jb_phase[j] == CARRY_TO_SOURCE: jb_from[j] else: jb_to[j])
+    if u_task[i] == T_RETURN: return b_index_of(u_target[i])
+    return -1
+
+// For the view (rules economy "door_step"): how far unit i is through the door of the building it visits, in 1/1000
+// (0 when it isn't stepping: outside, or out of sight inside), that building, and whether it's going in.
+def door_step_of(i:int) -> int, int, bool:
+    if r_door_step <= 0: return 0, -1, false
+    let b = visiting(i)
+    if b < 0 or not by_door(b): return 0, -1, false
+    let w = u_work[i]
+    if w <= r_door_step: return w * 1000 / r_door_step, b, true
+    if w > r_inside_ticks + r_door_step: return (r_inside_ticks + 2 * r_door_step + 1 - w) * 1000 / r_door_step, b, false
+    return 0, -1, false
+
+// Whether unit i is out of sight in a building now: inside, not stepping through its door.
+def hidden_inside(i:int, hc:int) -> bool:
+    if not is_inside(i, hc): return false
+    let ds = door_step_of(i)
+    return ds == 0
 
 def carry_done(i:int, j:int):
     end_job(j)
@@ -228,12 +256,12 @@ def carry_step(i:int):
         jb_to[j] = b_id[to]
         jb_want[j] = 0
         b_coming[to][r] += jb_n[j]
-        approach_building(i, to)
-    let x0, y0, x1, y1 = entry_rect(to)
+        carry_approach(i, to)
+    let x0, y0, x1, y1 = carry_rect(to)
     if u_work[i] > 0 or in_reach(i, x0, y0, x1, y1):  // (once inside, it stays till it comes out)
         u_moving[i] = 0
         u_stuck[i] = 0
-        if r_inside_ticks > 0 and still_inside(i): return
+        if r_inside_ticks > 0 and b_done[to] != 0 and still_inside(i): return  // (at a site, the goods are put down outside)
         if phase == CARRY_TO_SOURCE:
             b_resv[to][r] -= jb_n[j]
             let n = hold_take(to, r, jb_n[j])  // (a cost may have taken reserved goods: less comes out)
@@ -249,7 +277,7 @@ def carry_step(i:int):
             u_carry_kind[i] = r + 1
             jb_phase[j] = CARRY_TO_DEST
             u_target[i] = jb_to[j]
-            approach_building(i, if dst >= 0: dst else: to)
+            carry_approach(i, if dst >= 0: dst else: to)
         else:
             b_coming[to][r] -= jb_n[j]
             u_carry[i] -= hold_put(to, r, u_carry[i])
@@ -260,14 +288,62 @@ def carry_step(i:int):
                     jb_want[j] = 0
                     jb_n[j] = u_carry[i]
                     b_coming[s][r] += u_carry[i]
-                    approach_building(i, s)
+                    carry_approach(i, s)
                     return
                 u_carry[i] = 0  // (lost)
             u_carry_kind[i] = 0
             carry_done(i, j)
     elif u_moving[i] == 0:
         if u_stuck[i] >= GIVE_UP: u_stuck[i] = 0
-        approach_building(i, to)
+        carry_approach(i, to)
+
+// ---- standing aside (rules economy "idle_aside", #164)
+
+// The door tiles of the finished buildings units go in by (by_door).
+def door_cells() -> [int]: return map(filter(b_id.length) b: by_door(b)) b: door_cell(b)
+
+// Is anyone standing (not walking) within half a tile of (x, y), unit i left out? With idle_only, only an idle carrier
+// before i by id counts (the one of a heap that stays).
+def spot_taken(i:int, x:int, y:int, idle_only:bool) -> bool:
+    for(u_x.length) j:
+        if j != i and u_moving[j] == 0 and abs(u_x[j] - x) < TILE / 2 and abs(u_y[j] - y) < TILE / 2:
+            if not idle_only or (u_id[j] < u_id[i] and t_carrier[u_kind[j]] != 0 and u_task[j] == T_NONE): return true
+    return false
+
+// The nearest road cell to stand on beside c for unit i (as the genre's idle ones wait on the road, not on ground a
+// building may go up on): walkable, no building but the road on it, no door, nobody standing there; -1 if none within 2.
+def aside_cell(i:int, c:int, doors:[int]) -> int:
+    let ln = lane(i)
+    for(2) r0:
+        let r = r0 + 1
+        for(2 * r + 1) dy:
+            for(2 * r + 1) dx:
+                let x = c % W + dx - r
+                let y = c / W + dy - r
+                if max(abs(dx - r), abs(dy - r)) == r and cell_walkable(x, y, ln):
+                    let n = y * W + x
+                    let ob = if occupied[n] != 0: b_index_of(occupied[n]) else: -1
+                    if (ob < 0 or bt_road[b_kind[ob]] >= 0) and not contains(doors, n):
+                        let cx, cy = centre(n)
+                        if road.length and road[n] > 0 and not spot_taken(i, cx, cy, false): return n
+    return -1
+
+// Each idle carrier looks every 3 s, in a tick of its own: standing in a doorway, or on the spot of an idle one before it
+// by id, it walks to an open cell beside it. So idle ones never block a door or stand in a heap; walkers still pass through.
+def stand_aside_tick():
+    var doors = []::int
+    var doors_found = false
+    for(u_x.length) i:
+        if (tick + u_id[i]) % 60 == 0 and t_carrier[u_kind[i]] != 0 and u_task[i] == T_NONE and u_moving[i] == 0 and not u_orders[i].length:
+            if not doors_found:
+                doors = door_cells()
+                doors_found = true
+            let c = cell_of(u_x[i], u_y[i])
+            if contains(doors, c) or spot_taken(i, u_x[i], u_y[i], true):
+                let to = aside_cell(i, c, doors)
+                if to >= 0:
+                    let x, y = centre(to)
+                    order_move(i, x, y, SLOT_ARRIVE, 0, -1, -1, 0, true)
 
 // One tick: drop jobs whose carrier went, move every carrier, then match what changed.
 def carry_tick():
@@ -279,6 +355,7 @@ def carry_tick():
         else: j++
     for(u_x.length) i:
         if u_task[i] == T_CARRY: carry_step(i)
+    if r_idle_aside != 0: stand_aside_tick()
     for(num_players) p:
         if tick % CARRY_BACKSTOP == 0: carry_dirty[p] = 1
         if carry_dirty[p]: carry_match(p)

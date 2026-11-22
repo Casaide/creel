@@ -62,6 +62,9 @@ def setup_world(seed_value:int, map_id:string, sides:[JV], rules:JV, team_ids:[i
     r_foundation_pct = gint(ec, "foundation_pct", 0)
     r_goods_after_foundation = if gbool(ec, "goods_after_foundation", false): 1 else: 0
     r_inside_ticks = gint(ec, "inside_ticks", 0)
+    r_door_step = gint(ec, "door_step", 0)
+    r_idle_aside = if gbool(ec, "idle_aside", false): 1 else: 0
+    r_solid = if gbool(ec, "solid_bodies", false): 1 else: 0
     r_doors = if gbool(ec, "doors", false): 1 else: 0
     r_carrier_slots = gstrs(ec, "carriers")
     rd_names = map(glist(ec, "roads")): gstr(_, "name", "")

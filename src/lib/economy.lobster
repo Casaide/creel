@@ -271,6 +271,24 @@ def approach_building(i:int, b:int):
     let x0, y0, x1, y1 = building_rect(b)
     order_reach(i, x0, y0, x1, y1, building_field(b_id[b], true, lane(i)))
 
+// Whether carriers bring goods to building b at its door tile (rules economy "doors"): a site's too, where the goods are
+// put down in front of its door (#164); a finished one they go into there (by_door).
+def carry_door(b:int) -> bool:
+    if r_doors == 0 or b_diag[b] != 0 or bt_road[b_kind[b]] >= 0: return false
+    return b_done[b] != 0 or walks[lane_base[b_owner[b]]][door_cell(b)] == 1  // (a site whose door tile is blocked: round it)
+
+// Where a carrier stands to take goods from building b or bring them to it.
+def carry_rect(b:int) -> int, int, int, int:
+    if carry_door(b): return cell_rect(door_cell(b))
+    return building_rect(b)
+
+def carry_approach(i:int, b:int):
+    if carry_door(b) and not by_door(b):  // (a site: to the tile in front of its door)
+        let dx, dy = centre(door_cell(b))
+        order_move(i, dx, dy, SLOT_ARRIVE, 0, -1, -1, 0, true)
+        return
+    approach_building(i, b)
+
 // ---- gather spots
 
 // Do gatherers at this tile stand at spots round it? Not on a farm; otherwise as its resource says.

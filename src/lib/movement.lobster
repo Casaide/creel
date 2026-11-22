@@ -511,7 +511,7 @@ def separate():
                     if dx >= rr or dx <= -rr or dy >= rr or dy <= -rr: continue
                     let d2 = dx * dx + dy * dy
                     if d2 >= rr * rr: continue
-                    if (mv[u] == 1 or mv[v] == 1) and owners[u] == owners[v] and on_middle(sp_cell[u]) and on_middle(sp_cell[v]): continue  // (one of a side walking down a road's middle passes another there, walking or standing, as the genre's do, trading places, not shoving off it: #129)
+                    if r_solid == 0 and (mv[u] == 1 or mv[v] == 1) and owners[u] == owners[v] and on_middle(sp_cell[u]) and on_middle(sp_cell[v]): continue  // (one of a side walking down a road's middle passes another there, walking or standing, as the genre's do, trading places, not shoving off it: #129)
                     var i = u
                     var j = v
                     if v < u:
@@ -641,3 +641,120 @@ def separate():
                 let hx, hy = pen_inside(pen, i, xs[i], ys[i])
                 xs[i] += clamp(hx - xs[i], -CORRECT_MAX, CORRECT_MAX)
                 ys[i] += clamp(hy - ys[i], -CORRECT_MAX, CORRECT_MAX)
+
+// ---- solid bodies (rules economy "solid_bodies", #165): nobody walks through anybody. A step that would press into
+// another's body, nearer it than before, is taken to the walker's right instead (so two meeting head on both keep right
+// and pass side by side), else to its left, else not at all: it waits. One held up long squeezes past (the genre's forced swap).
+
+var solid_px = []::int  // each unit's place at the tick's start (solid_before)
+var solid_py = []::int
+
+def solid_before():
+    if r_solid == 0: return
+    solid_px = copy(u_x)
+    solid_py = copy(u_y)
+
+def solid_body(i:int, hc:int) -> bool: return u_perch[i] == 0 and t_air[u_kind[i]] == 0 and not is_inside(i, hc)
+
+// Would unit i at (x, y) press into another's body, no further from it than from (ox, oy)? The one it would press into, or -1.
+def pressed(i:int, x:int, y:int, ox:int, oy:int, hc:int) -> int:
+    let cx = clamp(x / TILE, 0, W - 1)
+    let cy = clamp(y / TILE, 0, H - 1)
+    for(3) dy:
+        for(3) dx:
+            let nx = cx + dx - 1
+            let ny = cy + dy - 1
+            if nx >= 0 and ny >= 0 and nx < W and ny < H:
+                let c = ny * W + nx
+                var k = sp_start[c]
+                while k < sp_end[c]:
+                    let j = sp_items[k]
+                    k++
+                    if j != i and solid_body(j, hc):
+                        let rr = u_radius[i] + u_radius[j]
+                        let d2 = dist2(x, y, u_x[j], u_y[j])
+                        if d2 < rr * rr and d2 <= dist2(ox, oy, u_x[j], u_y[j]): return j  // (in its body and no further off)
+    return -1
+
+def presses(i:int, x:int, y:int, ox:int, oy:int, hc:int) -> bool: return pressed(i, x, y, ox, oy, hc) >= 0
+
+let ASIDE = 500  // how far an idle unit steps off a walker's line, milli-tiles
+
+// Unit j, standing about with nothing to do, in walker i's way (going by vx, vy): it steps aside off i's line, as a
+// walker pushes an idle one aside in the genre, rather than i going through it.
+def push_aside(i:int, j:int, vx:int, vy:int):
+    if u_task[j] != T_NONE or u_moving[j] != 0 or u_foe[j] != 0 or u_orders[j].length or u_perch[j] != 0: return
+    let v = max(1, isqrt(vx * vx + vy * vy))
+    let side = if (u_x[j] - u_x[i]) * vy - (u_y[j] - u_y[i]) * vx > 0: -1 else: 1  // (the side of i's line it stands on)
+    for(2) k:
+        let sg = if k == 0: side else: -side
+        let tx = u_x[j] - sg * vy * ASIDE / v
+        let ty = u_y[j] + sg * vx * ASIDE / v
+        if walkable(tx, ty, lane(j)):
+            order_move(j, tx, ty, SLOT_ARRIVE, 0, -1, -1, 0, true)
+            return
+
+let SOLID_EASE = 30  // how far one of two standing in each other steps clear a tick, milli-tiles
+
+// After move (its buckets built): each walker's step checked against the others' bodies, in slot order.
+def solid_tick():
+    if r_solid == 0 or solid_px.length != u_x.length: return
+    let hc = inside_col()
+    for(u_x.length) i:
+        let ox = solid_px[i]
+        let oy = solid_py[i]
+        let x = u_x[i]
+        let y = u_y[i]
+        let pj = if (x != ox or y != oy) and solid_body(i, hc) and u_stuck[i] < STUCK_LIMIT / 2: pressed(i, x, y, ox, oy, hc) else: -1
+        if pj >= 0:
+            let vx = x - ox
+            let vy = y - oy
+            push_aside(i, pj, vx, vy)
+            let ln = lane(i)
+            var bx = ox
+            var by = oy
+            for(4) k:  // (ahead and to its right, straight to its right, then the same to its left: round whoever is in the way)
+                if bx == ox and by == oy:
+                    let ahead = if k % 2 == 0: 1 else: 0
+                    let side = if k < 2: 1 else: -1
+                    let f = if ahead == 1: 7 else: 10
+                    let sx = ox + (ahead * vx - side * vy) * f / 10
+                    let sy = oy + (ahead * vy + side * vx) * f / 10
+                    if walkable(sx, sy, ln) and not presses(i, sx, sy, ox, oy, hc):
+                        bx = sx
+                        by = sy
+            if bx == ox and by == oy:  // (round the one in its way: along its edge, the way it's going first)
+                let ax = -(u_y[pj] - oy)
+                let ay = u_x[pj] - ox
+                let a = max(1, isqrt(ax * ax + ay * ay))
+                let v = isqrt(vx * vx + vy * vy)
+                let first = if ax * vx + ay * vy >= 0: 1 else: -1
+                for(2) k:
+                    if bx == ox and by == oy:
+                        let sg = if k == 0: first else: -first
+                        let sx = ox + sg * ax * v / a
+                        let sy = oy + sg * ay * v / a
+                        if walkable(sx, sy, ln) and not presses(i, sx, sy, ox, oy, hc):
+                            bx = sx
+                            by = sy
+            u_x[i] = bx
+            u_y[i] = by
+    // Two standing with their bodies in each other (one just out of a building, say): the later by id steps clear.
+    for(u_x.length) i:
+        if u_moving[i] == 0 and solid_body(i, hc):
+            let j = pressed(i, u_x[i], u_y[i], u_x[i], u_y[i], hc)
+            if j >= 0 and u_moving[j] == 0 and u_id[j] < u_id[i]:
+                let rr = u_radius[i] + u_radius[j]
+                let dx = u_x[i] - u_x[j]
+                let dy = u_y[i] - u_y[j]
+                let d = isqrt(dx * dx + dy * dy)
+                let ux = if d > 0: dx * 1000 / d else: 1000
+                let uy = if d > 0: dy * 1000 / d else: 0
+                let nx = u_x[j] + ux * rr / 1000
+                let ny = u_y[j] + uy * rr / 1000
+                let step = min(rr - d, SOLID_EASE)
+                let sx = u_x[i] + (nx - u_x[i]) * step / max(1, rr - d)
+                let sy = u_y[i] + (ny - u_y[i]) * step / max(1, rr - d)
+                if walkable(sx, sy, lane(i)) and not presses(i, sx, sy, u_x[i], u_y[i], hc):
+                    u_x[i] = sx
+                    u_y[i] = sy
