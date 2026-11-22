@@ -63,12 +63,17 @@ def shard_of(args:[string]) -> int, int:
             return string_to_int(i), string_to_int(n)
     return 0, 1
 
+let ev_log = []::Event   // every tick's events, oldest first, while ev_logging (a test that follows goods or a carrier)
+let ev_log_tick = []::int // and the tick each happened in
+var ev_logging = false  // (the `events` arg, or a test's own)
+
 def plain_args(args:[string]) -> [string]:
     for(args) a:
         if starts_with(a, "trace:"): kit_trace = string_to_int(a.substring(6, a.length - 6))
         if starts_with(a, "dump:"): kit_dump = string_to_int(a.substring(5, a.length - 5))
         if a == "invariants": inv_on = true
-    return filter(args) a: not starts_with(a, "shard:") and not starts_with(a, "trace:") and not starts_with(a, "dump:") and a != "invariants"
+        if a == "events": ev_logging = true
+    return filter(args) a: not starts_with(a, "shard:") and not starts_with(a, "trace:") and not starts_with(a, "dump:") and a != "invariants" and a != "events"
 
 // ---- the world
 
@@ -130,10 +135,6 @@ def run_spawns():
     grow_scratch()
 
 // One tick: the spawns due, World.step, the ids seen.
-var ev_log = []::Event   // every tick's events, oldest first, while ev_logging (a test that follows goods or a carrier)
-var ev_log_tick = []::int  // and the tick each happened in
-var ev_logging = false
-
 def wstep():
     run_spawns()
     if inv_on: inv_before()
