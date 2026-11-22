@@ -299,47 +299,50 @@ def carry_step(i:int):
 
 // ---- standing aside (rules economy "idle_aside", #164)
 
-// The door tiles of the finished buildings units go in by (by_door).
-def door_cells() -> [int]: return map(filter(b_id.length) b: by_door(b)) b: door_cell(b)
+// The door tiles units go in by, or bring a site's goods to (carry_door).
+def door_cells() -> [int]: return map(filter(b_id.length) b: carry_door(b)) b: door_cell(b)
 
-// Is anyone standing (not walking) within half a tile of (x, y), unit i left out? With idle_only, only an idle carrier
-// before i by id counts (the one of a heap that stays).
-def spot_taken(i:int, x:int, y:int, idle_only:bool) -> bool:
+// Is anyone standing (not walking) within half a tile of (x, y), unit i left out?
+def anyone_standing(i:int, x:int, y:int) -> bool:
     for(u_x.length) j:
-        if j != i and u_moving[j] == 0 and abs(u_x[j] - x) < TILE / 2 and abs(u_y[j] - y) < TILE / 2:
-            if not idle_only or (u_id[j] < u_id[i] and t_carrier[u_kind[j]] != 0 and u_task[j] == T_NONE): return true
+        if j != i and u_moving[j] == 0 and abs(u_x[j] - x) < TILE / 2 and abs(u_y[j] - y) < TILE / 2: return true
     return false
 
-// The nearest road cell to stand on beside c for unit i (as the genre's idle ones wait on the road, not on ground a
-// building may go up on): walkable, no building but the road on it, no door, nobody standing there; -1 if none within 2.
+// Is idle unit i standing in the body of an idle one before it by id (a heap of them)?
+def in_a_heap(i:int) -> bool:
+    for(u_x.length) j:
+        if j != i and u_id[j] < u_id[i] and u_moving[j] == 0 and t_carrier[u_kind[j]] != 0 and u_task[j] == T_NONE:
+            let rr = (u_radius[i] + u_radius[j]) * 4 / 5
+            if dist2(u_x[i], u_y[i], u_x[j], u_y[j]) < rr * rr: return true
+    return false
+
+// A road tile to stand on beside c for unit i (as the genre's idle ones wait on the road, not on ground a building may go
+// up on): walkable, no building but the road on it, no door, nobody standing there; -1 if none.
 def aside_cell(i:int, c:int, doors:[int]) -> int:
     let ln = lane(i)
-    for(2) r0:
-        let r = r0 + 1
-        for(2 * r + 1) dy:
-            for(2 * r + 1) dx:
-                let x = c % W + dx - r
-                let y = c / W + dy - r
-                if max(abs(dx - r), abs(dy - r)) == r and cell_walkable(x, y, ln):
-                    let n = y * W + x
-                    let ob = if occupied[n] != 0: b_index_of(occupied[n]) else: -1
-                    if (ob < 0 or bt_road[b_kind[ob]] >= 0) and not contains(doors, n):
-                        let cx, cy = centre(n)
-                        if road.length and road[n] > 0 and not spot_taken(i, cx, cy, false): return n
+    for(9) k:
+        let x = c % W + k % 3 - 1
+        let y = c / W + k / 3 - 1
+        if k != 4 and cell_walkable(x, y, ln):
+            let n = y * W + x
+            let ob = if occupied[n] != 0: b_index_of(occupied[n]) else: -1
+            if (ob < 0 or bt_road[b_kind[ob]] >= 0) and not contains(doors, n):
+                let cx, cy = centre(n)
+                if road.length and road[n] > 0 and not anyone_standing(i, cx, cy): return n
     return -1
 
-// Each idle carrier looks every 3 s, in a tick of its own: standing in a doorway, or on the spot of an idle one before it
-// by id, it walks to an open cell beside it. So idle ones never block a door or stand in a heap; walkers still pass through.
+// Each idle carrier looks once a second, in a tick of its own: standing in a doorway, or in the body of an idle one before it,
+// it walks to a free road tile beside it. So idle ones never block a door or stand in a heap.
 def stand_aside_tick():
     var doors = []::int
     var doors_found = false
     for(u_x.length) i:
-        if (tick + u_id[i]) % 60 == 0 and t_carrier[u_kind[i]] != 0 and u_task[i] == T_NONE and u_moving[i] == 0 and not u_orders[i].length:
+        if (tick + u_id[i]) % 20 == 0 and t_carrier[u_kind[i]] != 0 and u_task[i] == T_NONE and u_moving[i] == 0 and not u_orders[i].length:
             if not doors_found:
                 doors = door_cells()
                 doors_found = true
             let c = cell_of(u_x[i], u_y[i])
-            if contains(doors, c) or spot_taken(i, u_x[i], u_y[i], true):
+            if contains(doors, c) or in_a_heap(i):
                 let to = aside_cell(i, c, doors)
                 if to >= 0:
                     let x, y = centre(to)

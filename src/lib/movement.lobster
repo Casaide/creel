@@ -643,8 +643,10 @@ def separate():
                 ys[i] += clamp(hy - ys[i], -CORRECT_MAX, CORRECT_MAX)
 
 // ---- solid bodies (rules economy "solid_bodies", #165): nobody walks through anybody. A step that would press into
-// another's body, nearer it than before, is taken to the walker's right instead (so two meeting head on both keep right
-// and pass side by side), else to its left, else not at all: it waits. One held up long squeezes past (the genre's forced swap).
+// another's body, no further from it than before, is taken to the walker's right instead (so two meeting head on both
+// keep right and pass side by side), else to its left, else round the edge of the one in the way, else not at all: it
+// waits, and someone idle in its way is eased aside. Never through anyone standing; two walkers held up by each other
+// long (head on in a gap too narrow to pass) slip past, the genre's forced swap.
 
 var solid_px = []::int  // each unit's place at the tick's start (solid_before)
 var solid_py = []::int
@@ -678,22 +680,24 @@ def pressed(i:int, x:int, y:int, ox:int, oy:int, hc:int) -> int:
 
 def presses(i:int, x:int, y:int, ox:int, oy:int, hc:int) -> bool: return pressed(i, x, y, ox, oy, hc) >= 0
 
-let ASIDE = 500  // how far an idle unit steps off a walker's line, milli-tiles
+let ASIDE = 600  // how far an idle unit steps off a walker's line, milli-tiles
 
-// Unit j, standing about with nothing to do, in walker i's way (going by vx, vy): it steps aside off i's line, as a
-// walker pushes an idle one aside in the genre, rather than i going through it.
-def push_aside(i:int, j:int, vx:int, vy:int):
+// Unit j, standing about with nothing to do, in walker i's way (going by vx, vy): it steps off i's line, to a side or on
+// ahead, wherever there's room, as a walker pushes an idle one aside in the genre, rather than i going through it.
+def push_aside(i:int, j:int, vx:int, vy:int, hc:int):
     if u_task[j] != T_NONE or u_moving[j] != 0 or u_foe[j] != 0 or u_orders[j].length or u_perch[j] != 0: return
     let v = max(1, isqrt(vx * vx + vy * vy))
     let side = if (u_x[j] - u_x[i]) * vy - (u_y[j] - u_y[i]) * vx > 0: -1 else: 1  // (the side of i's line it stands on)
-    for(2) k:
-        let sg = if k == 0: side else: -side
-        let tx = u_x[j] - sg * vy * ASIDE / v
-        let ty = u_y[j] + sg * vx * ASIDE / v
-        if walkable(tx, ty, lane(j)):
+    for(6) k:
+        let sg = if k % 2 == 0: side else: -side
+        let ahead = [ 0, 0, 1, 1, 2, 2 ][k]  // (straight aside, then aside and on, then further on)
+        let tx = u_x[j] + (-sg * vy * ASIDE + ahead * vx * ASIDE) / v
+        let ty = u_y[j] + (sg * vx * ASIDE + ahead * vy * ASIDE) / v
+        if walkable(tx, ty, lane(j)) and clear_path(u_x[j], u_y[j], tx, ty, u_radius[j], lane(j)) and not presses(j, tx, ty, u_x[j], u_y[j], hc):
             order_move(j, tx, ty, SLOT_ARRIVE, 0, -1, -1, 0, true)
             return
 
+let PUSH_GAP = 100  // how near ahead of a held-up walker someone idle is pushed aside, milli-tiles past touching
 let SOLID_EASE = 30  // how far one of two standing in each other steps clear a tick, milli-tiles
 
 // After move (its buckets built): each walker's step checked against the others' bodies, in slot order.
@@ -705,11 +709,11 @@ def solid_tick():
         let oy = solid_py[i]
         let x = u_x[i]
         let y = u_y[i]
-        let pj = if (x != ox or y != oy) and solid_body(i, hc) and u_stuck[i] < STUCK_LIMIT / 2: pressed(i, x, y, ox, oy, hc) else: -1
+        var pj = if (x != ox or y != oy) and solid_body(i, hc): pressed(i, x, y, ox, oy, hc) else: -1
+        if pj >= 0 and u_stuck[i] >= STUCK_LIMIT / 2 and u_moving[pj] != 0 and u_stuck[pj] >= STUCK_LIMIT / 2: pj = -1  // (two walkers held up by each other long: they slip past, the genre's forced swap)
         if pj >= 0:
             let vx = x - ox
             let vy = y - oy
-            push_aside(i, pj, vx, vy)
             let ln = lane(i)
             var bx = ox
             var by = oy
@@ -737,8 +741,21 @@ def solid_tick():
                         if walkable(sx, sy, ln) and not presses(i, sx, sy, ox, oy, hc):
                             bx = sx
                             by = sy
+            if bx == ox and by == oy: push_aside(i, pj, vx, vy, hc)  // (no way round: an idle one in the way is pushed aside)
             u_x[i] = bx
             u_y[i] = by
+    // A walker held up (no headway at its last look) and standing still for someone idle in its way (its steering holds it
+    // short of them): they're pushed aside.
+    for(u_x.length) i:
+        if u_moving[i] != 0 and u_stuck[i] > 0 and u_x[i] == solid_px[i] and u_y[i] == solid_py[i] and solid_body(i, hc):
+            let gx = u_wx[i] - u_x[i]
+            let gy = u_wy[i] - u_y[i]
+            for(u_x.length) j:
+                if j != i and u_moving[j] == 0 and u_task[j] == T_NONE and solid_body(j, hc):
+                    let dx = u_x[j] - u_x[i]
+                    let dy = u_y[j] - u_y[i]
+                    let rr = u_radius[i] + u_radius[j] + PUSH_GAP
+                    if dx * dx + dy * dy < rr * rr and dx * gx + dy * gy > 0: push_aside(i, j, gx, gy, hc)
     // Two standing with their bodies in each other (one just out of a building, say): the later by id steps clear.
     for(u_x.length) i:
         if u_moving[i] == 0 and solid_body(i, hc):
