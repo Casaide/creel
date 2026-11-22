@@ -779,8 +779,10 @@ def solid_tick():
 
 // Last, a pass over every pair (#201): steps were each checked against the others in slot order, so one held back to
 // where it started may now stand in another's new step. Two bodies that overlap are never nearer than at the start of
-// these moves: of such a pair the one that moved (the later in slot order if both did) goes back, until none is left
-// (each goes back once at most, and where everyone started holds). Two walkers in the forced swap are let be.
+// these moves: of such a pair the one that moved (the later in slot order if both did) is set out along the line between
+// them to how far apart they were, so it still slides past; a second time, or onto ground it can't stand on, it goes
+// back to where it started. Until none is left (each goes back once at most, and where everyone started holds). Two
+// walkers in the forced swap are let be.
 def solid_settle(hc:int):
     let back = map(u_x.length): 0
     var again = true
@@ -807,9 +809,19 @@ def solid_settle(hc:int):
                                     let swap = u_moving[i] != 0 and u_moving[j] != 0 and u_stuck[i] >= STUCK_LIMIT / 2 and u_stuck[j] >= STUCK_LIMIT / 2
                                     let jm = u_x[j] != solid_px[j] or u_y[j] != solid_py[j]
                                     let im = u_x[i] != solid_px[i] or u_y[i] != solid_py[i]
-                                    let who = if jm and back[j] == 0: j else: if im and back[i] == 0: i else: -1
+                                    let who = if jm and back[j] < 2: j else: if im and back[i] < 2: i else: -1
                                     if not swap and who >= 0:
-                                        u_x[who] = solid_px[who]
-                                        u_y[who] = solid_py[who]
-                                        back[who] = 1
+                                        let other = if who == j: i else: j
+                                        let was = min(rr, isqrt(dist2(solid_px[i], solid_py[i], solid_px[j], solid_py[j])) + 2)
+                                        let d = max(1, isqrt(d2))
+                                        let sx = u_x[other] + (u_x[who] - u_x[other]) * was / d
+                                        let sy = u_y[other] + (u_y[who] - u_y[other]) * was / d
+                                        if back[who] == 0 and isqrt(d2) > 0 and walkable(sx, sy, lane(who)):
+                                            u_x[who] = sx
+                                            u_y[who] = sy
+                                            back[who] = 1
+                                        else:
+                                            u_x[who] = solid_px[who]
+                                            u_y[who] = solid_py[who]
+                                            back[who] = 2
                                         again = true
