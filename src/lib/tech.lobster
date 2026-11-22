@@ -250,7 +250,7 @@ def tech_refresh(p:int):
         var pct = 0
         for(fxs) fx:
             if fx.kind == 7 and fx.stat == r: pct += fx.value
-        gather_ticks[p][r] = max(1, base_gather_ticks[r] * (100 - pct) / 100)
+        gather_ticks[p][r] = max(1, base_gather_ticks[r] * 100 / max(1, 100 + pct))
     let old_hp = copy(bm_hp[p])
     for(bt_size.length) k:
         let add = map(6): 0  // BUILDING_ADD: sight armour.melee armour.pierce trade_fee range pop
