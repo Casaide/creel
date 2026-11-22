@@ -361,8 +361,13 @@ def collect_buildings():
             if look:
                 var name = look.body
                 if b_done[b] == 0:
-                    let st = clamp(b_progress[b] * 4 / max(1, bt_build_ticks[k]), 0, 3)
-                    if look.stages[st] != "-": name = look.stages[st]
+                    // (its plot being levelled, its foundation share: nothing of it yet, the game draws the plot; then
+                    // its stages over the rest, #182)
+                    let found = bt_build_ticks[k] * r_foundation_pct / 100
+                    if levelling(b): name = "-"
+                    else:
+                        let st = clamp((b_progress[b] - found) * 4 / max(1, bt_build_ticks[k] - found), 0, 3)
+                        if look.stages[st] != "-": name = look.stages[st]
                 else:  // broken up as it's damaged (BuildingArt._broken)
                     let damage = damage_of(b)
                     for(RUIN_AT) at_least, n:
@@ -433,7 +438,7 @@ def collect_buildings():
                             // (one that makes things turns only while it makes them: a mill's sails while it mills)
                             let still = bt_make_ticks[k] > 0 and b_make[b] == 0
                             add(frame_index(look.turns[if still: 0 else: int(clock_s * float(look.turns.length)) % look.turns.length]), at.x, at.y - up, at.y + 1.0, col)
-                        if look.front != "-": add(frame_index(look.front), at.x, at.y - up, at.y + 2.0, col)
+                        if look.front != "-" and name == look.body: add(frame_index(look.front), at.x, at.y - up, at.y + 2.0, col)  // (over the finished body only: on a site it was the roof before the walls, #182)
     bld_seen = seen
     fx_ruins = filter(fx_ruins) r: clock_s - r.t0 < RUIN_STAYS + RUIN_FADE  // (they burn out, lie there, fade)
     for(fx_ruins) r:                                                        // the fallen buildings' ruins, fading at the end
