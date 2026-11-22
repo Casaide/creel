@@ -18,6 +18,7 @@ var inv_stuck_limit = 0   // "stuck": a walker held up this many ticks is a brea
 var inv_px = []::int      // inv_before: each unit's place, by slot, and its id
 var inv_py = []::int
 var inv_pid = []::int
+var inv_pin = []::int     // and 1 if it was inside then
 
 // The engine's invariants by name, in the order they're checked.
 let INV_NAMES = [ "columns", "ids", "on_map", "carry", "stock", "holds", "jobs", "solid", "stuck", "pack" ]
@@ -26,6 +27,8 @@ def inv_before():
     inv_px = copy(u_x)
     inv_py = copy(u_y)
     inv_pid = copy(u_id)
+    let hc = inside_col()
+    inv_pin = map(u_id.length) i: if is_inside(i, hc): 1 else: 0
 
 def inv_sorted(xs:[int]) -> int:  // (the slot of the first id out of order, or -1: index_of's binary search needs them rising)
     for(xs.length - 1) k:
@@ -97,17 +100,48 @@ def inv_jobs() -> string:
         if jb_n[j] <= 0: return "job {jid} moves {jb_n[j]}"
     return ""
 
-// Solid bodies (rules economy "solid_bodies"): nobody stepped into another's body this tick, as movement allows it
-// (a step that ends no further from them than it started, the forced swap of two held up long excepted).
+// Solid bodies (rules economy "solid_bodies"): nobody goes further into another's body. Two whose bodies overlap at the
+// tick's end are no nearer than at its start (they may part, or stand as they were: one just out of a door is eased
+// clear), except the forced swap of two walkers held up by each other long. One that came out of a building or is new
+// this tick has no start to compare. Two walkers each stepping in slot order, by whole milli-tiles, can graze by a few
+// thousandths of a tile; deeper than INV_GRAZE is a break.
+let INV_GRAZE = 10
+
 def inv_solid() -> string:
     if r_solid == 0: return ""
     let hc = inside_col()
+    let head = map(W * H): -1  // (the units by cell, as linked lists: its own, so a check only reads)
+    let next = map(u_id.length): -1
+    for(u_id.length) i:
+        let c = clamp(u_y[i] / TILE, 0, H - 1) * W + clamp(u_x[i] / TILE, 0, W - 1)
+        next[i] = head[c]
+        head[c] = i
+    var span = 1  // (cells to look across: two of the widest bodies)
+    for(u_radius) r: span = max(span, 2 * r / TILE + 1)
+    let side = 2 * span + 1
     for(u_id) uid, i:
         let k = int_find(inv_pid, uid)
-        if k >= 0 and (u_x[i] != inv_px[k] or u_y[i] != inv_py[k]) and solid_body(i, hc):
-            let j = pressed(i, u_x[i], u_y[i], inv_px[k], inv_py[k], hc)
-            if j >= 0 and not (u_stuck[i] >= STUCK_LIMIT / 2 and u_moving[j] != 0 and u_stuck[j] >= STUCK_LIMIT / 2):
-                return "unit {uid} stepped into unit {u_id[j]} at {u_x[i]}, {u_y[i]}"
+        if k >= 0 and inv_pin[k] == 0 and solid_body(i, hc):
+            let cx = clamp(u_x[i] / TILE, 0, W - 1)
+            let cy = clamp(u_y[i] / TILE, 0, H - 1)
+            for(side * side) n:
+                let nx = cx + n % side - span
+                let ny = cy + n / side - span
+                if nx >= 0 and ny >= 0 and nx < W and ny < H:
+                    var j = head[ny * W + nx]
+                    while j >= 0:
+                        let vid = u_id[j]
+                        if vid > uid and solid_body(j, hc):
+                            let m = int_find(inv_pid, vid)
+                            let rr = u_radius[i] + u_radius[j]
+                            let d2 = dist2(u_x[i], u_y[i], u_x[j], u_y[j])
+                            if m >= 0 and inv_pin[m] == 0 and d2 < rr * rr:
+                                let was2 = dist2(inv_px[k], inv_py[k], inv_px[m], inv_py[m])
+                                let swap = u_stuck[i] >= STUCK_LIMIT / 2 and u_stuck[j] >= STUCK_LIMIT / 2 and u_moving[i] != 0 and u_moving[j] != 0
+                                let deep = rr - isqrt(d2)
+                                if d2 < was2 and deep > INV_GRAZE and not swap:
+                                    return "units {uid} (task {u_task[i]}) and {vid} (task {u_task[j]}) went further into each other at {u_x[i]}, {u_y[i]}: {isqrt(was2)} apart, now {isqrt(d2)}, bodies {rr}"
+                        j = next[j]
     return ""
 
 def int_find(xs:[int], v:int) -> int:  // (xs rising)

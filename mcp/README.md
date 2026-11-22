@@ -56,7 +56,8 @@ is missing is left out.
 | Tool | What it does |
 | --- | --- |
 | `creel_start` | Starts a fresh match. The args are the game's own; `start_help` says what they are. |
-| `creel_step` | Runs the sim for this many ticks (20 a second, up to an hour per call), then gives the tick and the hash. |
+| `creel_step` | Runs the sim for this many ticks (20 a second, up to an hour per call), then gives the tick and the hash. With `invariants`, it checks every tick and stops on the first that breaks. |
+| `creel_invariants` | Checks the invariants now: the engine's and the packs' own (`src/testkit/invariants.lobster`). |
 | `creel_state` | Gives the tick, the hash and whether a match is running. |
 | `creel_names` | Gives unit types, building types, resources and order names by index, plus the tile size and the map size. |
 | `creel_units`, `creel_buildings` | Give the state of units or buildings, filtered by ids, owner, kind or a rectangle. |
@@ -75,8 +76,7 @@ one at a time and in order, so the same calls from the same start give the same 
 
 ## Coming next
 
-As the engine work lands, each piece adds its tool here: invariants ([#186](https://github.com/Casaide/creel/issues/186)),
-the event log and stepping until an event ([#187](https://github.com/Casaide/creel/issues/187)), the draw probe
+As the engine work lands, each piece adds its tool here: the event log and stepping until an event ([#187](https://github.com/Casaide/creel/issues/187)), the draw probe
 ([#188](https://github.com/Casaide/creel/issues/188)) and packs' own Lua tests ([#190](https://github.com/Casaide/creel/issues/190)).
 
 `mcp/test/test.js` drives the server as an agent would. `check.sh` runs it when there's a Node.
