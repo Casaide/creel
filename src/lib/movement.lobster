@@ -775,3 +775,41 @@ def solid_tick():
                 if walkable(sx, sy, lane(i)) and not presses(i, sx, sy, u_x[i], u_y[i], hc):
                     u_x[i] = sx
                     u_y[i] = sy
+    solid_settle(hc)
+
+// Last, a pass over every pair (#201): steps were each checked against the others in slot order, so one held back to
+// where it started may now stand in another's new step. Two bodies that overlap are never nearer than at the start of
+// these moves: of such a pair the one that moved (the later in slot order if both did) goes back, until none is left
+// (each goes back once at most, and where everyone started holds). Two walkers in the forced swap are let be.
+def solid_settle(hc:int):
+    let back = map(u_x.length): 0
+    var again = true
+    while again:
+        again = false
+        spatial_build()
+        for(u_x.length) i:
+            if solid_body(i, hc):
+                let cx = clamp(u_x[i] / TILE, 0, W - 1)
+                let cy = clamp(u_y[i] / TILE, 0, H - 1)
+                for(9) n:
+                    let nx = cx + n % 3 - 1
+                    let ny = cy + n / 3 - 1
+                    if nx >= 0 and ny >= 0 and nx < W and ny < H:
+                        let c = ny * W + nx
+                        var k = sp_start[c]
+                        while k < sp_end[c]:
+                            let j = sp_items[k]
+                            k++
+                            if j > i and solid_body(j, hc):
+                                let rr = u_radius[i] + u_radius[j]
+                                let d2 = dist2(u_x[i], u_y[i], u_x[j], u_y[j])
+                                if d2 < rr * rr and d2 < dist2(solid_px[i], solid_py[i], solid_px[j], solid_py[j]):
+                                    let swap = u_moving[i] != 0 and u_moving[j] != 0 and u_stuck[i] >= STUCK_LIMIT / 2 and u_stuck[j] >= STUCK_LIMIT / 2
+                                    let jm = u_x[j] != solid_px[j] or u_y[j] != solid_py[j]
+                                    let im = u_x[i] != solid_px[i] or u_y[i] != solid_py[i]
+                                    let who = if jm and back[j] == 0: j else: if im and back[i] == 0: i else: -1
+                                    if not swap and who >= 0:
+                                        u_x[who] = solid_px[who]
+                                        u_y[who] = solid_py[who]
+                                        back[who] = 1
+                                        again = true
