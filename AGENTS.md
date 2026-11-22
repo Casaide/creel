@@ -16,6 +16,11 @@ Games use Creel as a git submodule pinned to a commit, so a change here only rea
 
 ## Rules
 
+**The line.** Creel holds only what any RTS needs: primitives every game uses with its own data, and what keeps the sim
+deterministic, checkable and sealed. A rule that names a good, a trade, a building, a number or a priority order belongs to
+a game or mod (data, or Lua through hooks), and if no hook can carry it, Creel gains a general hook instead. The three
+questions and their examples are in [CONTRIBUTING.md](CONTRIBUTING.md#what-belongs-in-creel).
+
 Read [CONTRIBUTING.md](CONTRIBUTING.md); these are the parts agents most often get wrong.
 
 - **Issue first.** Find or open a GitHub issue (problem, plan, how we'll know it's done) before writing code. Commits name it (`#12`).
