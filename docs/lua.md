@@ -86,6 +86,10 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
   `clear_task(i)`, `in_reach(i, x0, y0, x1, y1)`, `fits(p, k, cx, cy)` (whether the ground lets p lay type k there, the packs' own rules aside),
   `lay_foundation(p, k, cx, cy)` (a site, paid or asking its goods, where `fits` and its type is open to p: its id, or
   0; #105).
+- **Events (#187):** `emit(code, a, b, c, n)` puts the pack's own event in this tick's (kind 100 + code, code 0 to 899; the
+  sim only), `event_count()` and `event_get(i, field)` read this tick's so far (field 0 kind, 1 a, 2 b, 3 c, 4 n, 5 x,
+  6 y). The engine's kinds are `EV_*` in `src/lib/state.lobster`; `hold_take` and `hold_put` add `taken` and `put` events.
+  Events aren't state: they're never saved or hashed.
 - **State:** `unit_column`, `building_column`, `player_column` (at load); `unit_get(col, i)`, `unit_set(col, i, v)`,
   `building_get`, `building_set`, `player_get`, `player_set`.
 - **Data:** `rules()` (the match's rules, as a table; a fraction is nil).
