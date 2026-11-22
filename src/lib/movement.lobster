@@ -688,11 +688,13 @@ def push_aside(i:int, j:int, vx:int, vy:int, hc:int):
     if u_task[j] != T_NONE or u_moving[j] != 0 or u_foe[j] != 0 or u_orders[j].length or u_perch[j] != 0: return
     let v = max(1, isqrt(vx * vx + vy * vy))
     let side = if (u_x[j] - u_x[i]) * vy - (u_y[j] - u_y[i]) * vx > 0: -1 else: 1  // (the side of i's line it stands on)
-    for(6) k:
+    for(18) n:  // (and if there's no room that near, twice and three times as far: a crowd at a door makes way)
+        let k = n % 6
+        let far = ASIDE * (n / 6 + 1)
         let sg = if k % 2 == 0: side else: -side
         let ahead = [ 0, 0, 1, 1, 2, 2 ][k]  // (straight aside, then aside and on, then further on)
-        let tx = u_x[j] + (-sg * vy * ASIDE + ahead * vx * ASIDE) / v
-        let ty = u_y[j] + (sg * vx * ASIDE + ahead * vy * ASIDE) / v
+        let tx = u_x[j] + (-sg * vy * far + ahead * vx * far) / v
+        let ty = u_y[j] + (sg * vx * far + ahead * vy * far) / v
         if walkable(tx, ty, lane(j)) and clear_path(u_x[j], u_y[j], tx, ty, u_radius[j], lane(j)) and not presses(j, tx, ty, u_x[j], u_y[j], hc):
             order_move(j, tx, ty, SLOT_ARRIVE, 0, -1, -1, 0, true)
             return
