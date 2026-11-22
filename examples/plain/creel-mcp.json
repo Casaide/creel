@@ -1,0 +1,10 @@
+{
+  "name": "plain",
+  "lobster": "~/Dev/lobster/bin/lobster",
+  "cwd": "src",
+  "server": "mcp_server.lobster",
+  "start_help": "examples/plain has no data, so start always refuses; a game says here what its args are.",
+  "tests": {
+    "edge_scroll": ["{lobster}", "test_edge_scroll.lobster"]
+  }
+}
