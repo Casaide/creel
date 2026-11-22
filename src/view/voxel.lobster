@@ -305,6 +305,7 @@ class vx_spec:
     az:float3 = float3_0
     bone:bool = false  // a limb's part: on the bone from pa to pb, turned from its drawn direction (rest) along it
     rest:float3 = float3_0
+    swing:string = ""  // one of its body's swings: turned about that hinge through an attack (#176)
 
 def vx_v3(v:JV) -> float3: return float3 { as_float(v.a[0]), as_float(v.a[1]), as_float(v.a[2]) }
 def vx_pt(v:JV) -> string, float3: return as_str(v.a[0]), float3 { as_float(v.a[1]), as_float(v.a[2]), as_float(v.a[3]) }
@@ -314,6 +315,7 @@ def vx_parse_shape(o:JV, hard_by_default:bool) -> vx_spec:
     let s = vx_spec { vx_k_cap, gbool(o, "hard", hard_by_default), gbool(o, "mirror", false), "", float3_0, "", float3_0, 0.0, 0.0,
                       if has(o, "mat"): vx_mat(as_str(at(o, "mat"))) else: 0, 0, float3_0, float3_0, [], [], 0.0, 0.0,
                       gstrs(o, "if"), gstrs(o, "unless") }
+    s.swing = gstr(o, "swing", "")
     let rr = if has(o, "r"): at(o, "r") else: jnull()
     let r0 = if rr.kind == J_ARR: as_float(rr.a[0]) elif rr.kind != J_NULL: as_float(rr) else: 0.0
     let r1 = if rr.kind == J_ARR: as_float(rr.a[1]) else: r0
@@ -520,6 +522,30 @@ class vx_part_spec:
     point_names:[string]  // named points on it (a muzzle), in the body's frame
     point_at:[float3]
 
+// A group of a body's shapes (each tagged "swing": its name) turned about a hinge as it attacks (#176): a throwing arm, a
+// beam. keys: (t through the attack, 0 to 1; degrees about the axis, right-handed), straight lines between them.
+class vx_swing_spec:
+    name:string
+    hinge:float3
+    axis:float3
+    keys:[float2]
+
+def vx_swing_angle(w:vx_swing_spec, t:float) -> float:
+    var a = 0.0
+    for(w.keys) k, n:
+        if n == 0 or t >= k.x: a = k.y
+        if n > 0 and t < k.x:
+            let p = w.keys[n - 1]
+            if t >= p.x: a = p.y + (k.y - p.y) * (t - p.x) / max(0.0001, k.x - p.x)
+    return a
+
+// p turned by deg about the axis (a unit vector) through c.
+def vx_turned(q:float3, c:float3, axis:float3, deg:float) -> float3:
+    let v = q - c
+    let co = cos(deg)
+    let si = sin(deg)
+    return c + v * co + cross(axis, v) * si + axis * (dot(axis, v) * (1.0 - co))
+
 class vx_body_spec:
     id:string
     size:float
@@ -573,6 +599,7 @@ class vx_body_spec:
     seats:[float3] = []        // a war beast: where its crew sit (a howdah), at their seat height
     style_names:[string] = []  // an engine in each culture's style (siege.<kind>.<style>): its skin, pale, mark
     packed:string = ""         // an engine that packs (lib/siege's packed): the body it's drawn as while packed (a frame on its wagon)
+    swings:[vx_swing_spec] = []  // shape groups that turn about a hinge as it attacks (#176)
     parts:[vx_part_spec] = []  // pieces that turn on their own (a turret): this body is the whole figure (a portrait, a fall)
     hull:string = ""           // with parts: the body without them
     piece:bool = false         // a hull or a part: on the ground as the whole body is, not under its own lowest point
@@ -732,6 +759,16 @@ def vx_parse_body(id:string, o:JV) -> vx_body_spec:
     let tr = b.track
     b.wheels = map(glist(o, "wheels")) w: vx_parse_wheel(w, if tr: tr.pitch else: 0.0)
     b.death = gstr(o, "death", "")
+    let sw = gobj(o, "swings")
+    for(sw.keys) name, n:
+        let w = sw.a[n]
+        b.swings.push(vx_swing_spec { name, vx_v3(at(w, "hinge")), normalize(vx_v3(at(w, "axis"))), map(glist(w, "keys")) k: float2 { as_float(k.a[0]), as_float(k.a[1]) } })
+    let names = map(b.swings) w: w.name
+    for(b.shapes) s:
+        if s.swing != "":
+            let known = find(names) nm: nm == s.swing
+            if known < 0: print "body {b.id}: a shape swings on {s.swing}, not one of its swings"
+            assert known >= 0
     vx_parse_parts(b, glist(o, "parts"))
     if has(o, "vox"): vx_vox_body(b, as_str(at(o, "vox")), gobj(o, "mats"))
     return b
@@ -1610,7 +1647,16 @@ def vx_whole_body(out:[vx_prim], u:vx_unit_def, b:vx_body_spec, p:vx_points, ph:
         let s = if picks: vx_raise(t) - vx_blow(t) elif vx_aiming(u): -0.25 * vx_kick(t) else: vx_strike(t)
         p.at = map(p.at) a, k: a + float3 { 0.0, b.pdrive[k] * s, -g.dip * max(0.0, s) }
     if not vx_seated: vx_legs(out, u, b, p, ph, flags)
-    for(b.shapes) s: vx_emit(out, s, p, vx_X, vx_Y, vx_Z, flags, b)
+    for(b.shapes) s: if s.swing == "": vx_emit(out, s, p, vx_X, vx_Y, vx_Z, flags, b)
+    for(b.swings) w:  // (each group turned through the attack; as drawn otherwise)
+        let n0 = out.length
+        for(b.shapes) s: if s.swing == w.name: vx_emit(out, s, p, vx_X, vx_Y, vx_Z, flags, b)
+        let deg = if vx_act == "attack": vx_swing_angle(w, t) else: 0.0
+        if deg != 0.0:
+            for(out.length - n0) k:
+                let q = out[n0 + k]
+                let a = vx_turned(q.a, w.hinge, w.axis, deg)
+                out[n0 + k] = vx_prim { a, vx_turned(q.b, w.hinge, w.axis, deg), q.ra, q.rb, q.mat, q.hard, q.disc, q.box, model: q.model, mx: vx_turned(q.a + q.mx, w.hinge, w.axis, deg) - a, mz: vx_turned(q.a + q.mz, w.hinge, w.axis, deg) - a }
     let track = b.track
     if track: vx_track_prims(out, track, ph)
     vx_wheel_prims(out, b.wheels, ph)
