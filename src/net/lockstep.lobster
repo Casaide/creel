@@ -39,6 +39,8 @@ class Lockstep:
     relay = false    // the host: every turn that comes in goes on to the others (and it starts the match: ls_begin)
     started = false  // every player has loaded and the first tick may run (ls_begin_tick)
     ready = []::int  // the host: the links whose player has loaded
+    loads = []::int  // per seat: how far that player has loaded, per mille, as last heard (ls_load)
+    load_sent = -10  // our own, as last sent
 
 def net_host(port:int) -> Link:
     let l, err = tcp.listen("0.0.0.0", port)
@@ -126,6 +128,7 @@ def net_poll(link:Link) -> [[string]]:
 def new_lockstep(link:Link, me:int, players:[int]) -> Lockstep:
     let ls = Lockstep { link, me, players, map(num_players): tick / TICKS_PER_TURN - 1 }
     ls.first_seq = next_seq[me]
+    ls.loads = map(num_players): 0
     return ls
 
 def check_hashes(ls:Lockstep):
@@ -171,7 +174,23 @@ def ls_receive(ls:Lockstep) -> [[string]]:
 // one begins a turn behind. Call ls_begin once loaded, then ls_begin_tick each frame until it's true. Other frames
 // (none should come before the start) go back on their link.
 def ls_begin(ls:Lockstep):
+    ls_load(ls, 1.0)
     if not ls.relay: net_send(ls.link, 'R', "")
+
+// Before the start: how far this machine has loaded (0 to 1), for the others' loading screens (#173). A 'Q' frame,
+// "<seat>|<per mille>", goes out when it has moved a percent; the host passes the joiners' on to each other.
+def ls_load(ls:Lockstep, frac:float):
+    let p = clamp(int(frac * 1000.0), 0, 1000)
+    ls.loads[ls.me] = p
+    if p - ls.load_sent < 10 and not (p == 1000 and ls.load_sent < 1000): return
+    ls.load_sent = p
+    for(ls_links(ls)) l:
+        net_send(l, 'Q', "{ls.me}|{p}")
+        net_flush(l)
+
+// What's known of a seat's loading (0 to 1), as last heard.
+def ls_loaded(ls:Lockstep, seat:int) -> float:
+    return if seat >= 0 and seat < ls.loads.length: float(ls.loads[seat]) / 1000.0 else: 0.0
 
 def ls_begin_tick(ls:Lockstep) -> bool:
     if ls.started: return true
@@ -181,6 +200,13 @@ def ls_begin_tick(ls:Lockstep) -> bool:
             if f[0] == "R" and ls.relay:
                 if (find(ls.ready) r: r == k) < 0: ls.ready.push(k)
             elif f[0] == "G" and not ls.relay: ls.started = true
+            elif f[0] == "Q":
+                let bar = find_string(f[1], "|")
+                let seat = string_to_int(substring(f[1], 0, max(0, bar)))
+                if bar > 0 and seat >= 0 and seat < ls.loads.length and seat != ls.me:
+                    ls.loads[seat] = string_to_int(substring(f[1], bar + 1, f[1].length - bar - 1))
+                    if ls.relay:
+                        for(ls_links(ls)) o, j: if j != k: net_send(o, 'Q', f[1])
             else: rest.push(f)
         net_unread(l, rest)
     if ls.relay and ls.ready.length >= ls_links(ls).length:
