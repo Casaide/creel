@@ -360,6 +360,10 @@ def vx_ask_carry(lk:int, m:int):
 
 def vx_ready(lk:int) -> bool: return vx_frames.get(vx_fkey(lk, 0, VX_IDLE, 0, 0), -1) >= 0
 
+// A job that can't wait for a calm frame: the first bake of a look a unit is drawn with and has nothing for (its other
+// modes and looks draw as that one meanwhile).
+def vx_urgent(j:vx_job) -> bool: return vx_lks[j.lk].waited_for and vx_first_job(j) and not vx_ready(j.lk)
+
 // A look wanted now: its first bake to the front of the queue.
 def vx_want(lk:int):
     vx_lks[lk].waited_for = true
@@ -521,9 +525,10 @@ def vx_bake_tick(budget:float, calm:bool = true, save:bool = true):
     let until = seconds_elapsed() + budget
     while seconds_elapsed() < until:
         var d = vx_doing
+        if d and not calm and not vx_urgent(d): return  // (one begun when calm waits for the next calm frame too)
         if not d:
             if not vx_queue.length: return
-            if not calm and not vx_lks[vx_queue[0].lk].waited_for: return
+            if not calm and not vx_urgent(vx_queue[0]): return
             d = vx_queue[0]
             vx_queue.remove(0)
             vx_doing = d

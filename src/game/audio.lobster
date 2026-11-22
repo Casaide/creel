@@ -117,6 +117,16 @@ def music_play(m:JV, piece:string):
             music_now.push(0.0)
     print "music: {piece}, {music_ids.length} tracks playing"
 
+// Every stem of the match's pieces (the rotation and the tense one) decoded now, while the game's loader is up (#181):
+// play_music decodes a whole file the first time and keeps it, so a piece started mid-match then costs no frame.
+def music_preload():
+    let m = music_cfg
+    if not m: return
+    let pieces = gstrs(m, "rotation")
+    let tense = gstr(m, "tense", "")
+    if tense != "" and (find(pieces) p: p == tense) < 0: pieces.push(tense)
+    for(pieces) piece: for(gstrs(m, "stems")) stem: load_ogg(audio_file("music/{piece}_{stem}.ogg"))
+
 def music_start():
     let m = at(lib_data("audio.json"), "music")
     music_cfg = m
