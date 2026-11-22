@@ -83,14 +83,13 @@ def inv_stock() -> string:
             if n < 0: return "player {p} has {n} {if r < resource_names.length: resource_names[r] else: string(r)}"
     return ""
 
-// A building holds, wants, has on its way and keeps for carriers never below nothing; kept for carriers, never above what it holds.
+// A building holds, wants, has on its way and keeps for carriers never below nothing. (What it keeps for carriers may
+// be more than it holds: a cost paid from a store can take goods kept for a carrier, who then takes what's left.)
 def inv_holds() -> string:
     for(b_id) bid, b:
         for([ b_hold[b], b_want[b], b_resv[b], b_coming[b], b_site[b] ]) xs, k:
             for(xs) n, r:
                 if n < 0: return "building {bid}\'s {[ "hold", "want", "resv", "coming", "site" ][k]} of resource {r} is {n}"
-        for(b_resv[b]) n, r:
-            if n > (if r < b_hold[b].length: b_hold[b][r] else: 0): return "building {bid} keeps {n} of resource {r} for carriers, more than it holds"
     return ""
 
 // A carrier's job always has its carrier, and what it moves is more than nothing.

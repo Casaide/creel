@@ -88,7 +88,7 @@ def test_invariants():
     caught("carry"): u_carry_kind[0] = 3
     caught("stock"): stock[1][0] = -4
     caught("holds"): b_hold[0][1] = -1
-    caught("holds"): b_resv[0] = [ 6, 0 ]
+    caught("holds"): b_resv[0] = [ 0, -1 ]
     caught("jobs"):
         jb_id.push(1)
         for([ jb_unit, jb_from, jb_to, jb_res, jb_n, jb_phase, jb_want ]) col: col.push(0)
