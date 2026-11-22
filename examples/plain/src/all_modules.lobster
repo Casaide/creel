@@ -74,6 +74,7 @@ import game.ground
 import game.doodads
 import game.fx
 import game.topbar_fit
+import game.edge_scroll
 import game.ui
 import game.view_state
 import game.text_cache
