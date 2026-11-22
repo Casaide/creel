@@ -12,6 +12,8 @@
 //
 // Imported after every sim module. Nothing here writes the sim's state except through issue_cmd, as a player's order.
 
+import testkit.invariants
+
 let MCP_PREFIX = "@mcp "
 let MCP_MAX_STEP = 72000  // one hour of ticks a request at most
 
@@ -197,8 +199,23 @@ def mcp_handle(q:JV) -> string, JV:
         case "step":
             let n = gint(q, "ticks", 1)
             if n < 1 or n > MCP_MAX_STEP: return "ticks must be 1 to {MCP_MAX_STEP}", jnull()
-            for(n): mcp_step()
-            return "", mcp_state()
+            let checked = gbool(q, "invariants", false)
+            inv_stuck_limit = gint(q, "stuck_limit", inv_stuck_limit)
+            var broken = ""
+            for(n):
+                if broken == "":
+                    if checked: inv_before()
+                    mcp_step()
+                    if checked: broken = inv_after()
+            let o = mcp_state()
+            if checked: o.set("broken", jstr(broken))  // (the first invariant broken, on the tick the state gives: the run stops there)
+            return "", o
+        case "invariants":
+            inv_before()  // (no tick: nobody moved, so "solid" has nothing to compare)
+            let o = mcp_state()
+            o.set("names", jstrs(INV_NAMES))
+            o.set("broken", jstr(inv_after()))
+            return "", o
         case "order": return mcp_order(q)
         case "units": return "", mcp_units(q)
         case "buildings": return "", mcp_buildings(q)
