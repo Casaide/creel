@@ -36,7 +36,7 @@ mcp_serve()
   "server": "mcp_server.lobster",
   "start_help": "args: {\"map\": ..., \"seed\": ...}",
   "tests": { "sim": ["{lobster}", "test_sim.lobster"] },
-  "capture": ["{lobster}", "game.lobster", "loadsave:{save}", "shot:{png}", "at:3"],
+  "capture": ["{lobster}", "game.lobster", "mods:{start.mods}", "loadsave:{save}", "shot:{png}", "at:3"],
   "timeout_s": 600
 }
 ```
@@ -47,8 +47,9 @@ It also adds an `.mcp.json`, so that Claude Code in the game's folder offers the
 { "mcpServers": { "my-game": { "command": "node", "args": ["creel/mcp/creel-mcp.js", "creel-mcp.json"] } } }
 ```
 
-`LOBSTER` in the environment overrides `lobster`. In commands, `{lobster}`, `{save}`, `{png}` and `{scratch}` are
-filled in.
+`LOBSTER` in the environment overrides `lobster`. Commands can use `{lobster}`, `{save}`, `{png}` and `{scratch}`. They can
+also use `{start.<key>}`, which is that arg of the last `creel_start`, with a list joined by commas. An argument whose key
+is missing is left out.
 
 ## Tools
 
