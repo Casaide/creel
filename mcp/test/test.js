@@ -43,7 +43,7 @@ async function main () {
   check(init.result && init.result.capabilities.tools, 'initialize offers tools')
   proc.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n')
   const list = (await rpc('tools/list', {})).result.tools.map(t => t.name)
-  for (const n of ['creel_start', 'creel_step', 'creel_state', 'creel_units', 'creel_buildings', 'creel_order', 'creel_save', 'creel_invariants', 'creel_run_tests']) check(list.includes(n), 'tools/list has ' + n)
+  for (const n of ['creel_start', 'creel_step', 'creel_state', 'creel_units', 'creel_buildings', 'creel_order', 'creel_save', 'creel_invariants', 'creel_events', 'creel_run_tests']) check(list.includes(n), 'tools/list has ' + n)
   check(!list.includes('creel_capture'), 'no capture tool without a capture command')
 
   const st = await tool('creel_state', {})
@@ -54,6 +54,9 @@ async function main () {
   check(early.isError && /start one first/.test(body(early)), 'step before start is refused')
   const inv = await tool('creel_invariants', {})
   check(inv.isError && /start one first/.test(body(inv)), 'invariants before start is refused')
+  const evs = await tool('creel_events', {})
+  check(evs.isError && /start one first/.test(body(evs)), 'events before start is refused')
+  check(names.events[10] === 'pick' && names.events[19] === 'put', 'names: the event kinds')
   const start = await tool('creel_start', { args: { note: 'x'.repeat(3000) } })
   check(start.isError && /no data/.test(body(start)), 'start reaches the game\'s mcp_start, through a request longer than a line (' + JSON.stringify(start) + ')')
   const bad = await tool('creel_save', { name: '../escape' })

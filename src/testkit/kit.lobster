@@ -130,11 +130,19 @@ def run_spawns():
     grow_scratch()
 
 // One tick: the spawns due, World.step, the ids seen.
+var ev_log = []::Event   // every tick's events, oldest first, while ev_logging (a test that follows goods or a carrier)
+var ev_log_tick = []::int  // and the tick each happened in
+var ev_logging = false
+
 def wstep():
     run_spawns()
     if inv_on: inv_before()
     step()
     if inv_on and inv_broken == "": inv_tick()
+    if ev_logging:
+        for(events) e:
+            ev_log.push(e)
+            ev_log_tick.push(tick - 1)
     note_ids()
     if kit_trace > 0 and tick % kit_trace == 0: print "h {tick} {state_hash()}"
     if tick == kit_dump: print dump_state()

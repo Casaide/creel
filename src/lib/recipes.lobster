@@ -33,10 +33,13 @@ def recipes_tick():
                     for(bt_out[k]) n, r:
                         if n > 0:
                             hold_put(b, r, n)
+                            ev_goods(EV_MADE, 0, b, r, n)
                             produced[r][b_owner[b]] += n
                     mark_carry(b_owner[b])
             if b_make[b] == 0 and can_start(b) and hook_can_make(b):  // (a pack may hold it back: its worker away, #98)
                 for(bt_in[k]) need, r:
-                    if need > 0: b_hold[b][r] -= need
+                    if need > 0:
+                        b_hold[b][r] -= need
+                        ev_goods(EV_USED, 0, b, r, need)
                 b_make[b] = bt_make_ticks[k]
             top_up(b)

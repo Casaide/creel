@@ -15,7 +15,8 @@ let LA_NAMES = [ "unit_count", "u_id", "u_x", "u_y", "u_kind", "u_owner", "u_tas
     "worker_type", "road", "occupied", "amount", "res_at", "stocked", "tick", "want", "hold_take", "trained",
     "resource_index", "nearest_resource", "start_gather", "start_build", "approach_building", "clear_task", "in_reach", "unit_column", "building_column", "player_column",
     "unit_get", "unit_set", "building_get", "building_set", "player_get", "player_set", "rules", "player_count", "resource_count", "cell_of",
-    "t_animal", "u_hp", "b_hp", "lay_foundation", "fits", "plant", "terrain_at", "terrain_type", "approach_cell", "b_making", "bt_drag", "entry_rect", "hold_put" ]
+    "t_animal", "u_hp", "b_hp", "lay_foundation", "fits", "plant", "terrain_at", "terrain_type", "approach_cell", "b_making", "bt_drag", "entry_rect", "hold_put",
+    "emit", "event_count", "event_get" ]
 
 // The constants: the engine's task codes and units, and the map's size (set as a match starts).
 def lua_api_consts():
@@ -86,7 +87,7 @@ def lua_of_json(v:JV) -> int:
 
 // The functions that change the sim: not while it's only being read (the view's calls, and can_place).
 let LA_WRITE_NAMES = [ "lay_foundation", "plant", "approach_cell", "set_u_task", "set_u_target", "set_u_work", "set_u_stuck", "set_u_moving", "set_pop", "want", "hold_take", "hold_put",
-    "trained", "start_gather", "start_build", "approach_building", "clear_task", "unit_set", "building_set", "player_set" ]
+    "emit", "trained", "start_gather", "start_build", "approach_building", "clear_task", "unit_set", "building_set", "player_set" ]
 let LA_WRITES = map(LA_WRITE_NAMES) n:
     let id = find(LA_NAMES) x: x == n
     assert id >= 0
@@ -227,7 +228,10 @@ def lua_api(id:int, a:[int]):
             if b >= 0 and r >= 0 and not lfail:
                 if b_hold[b].length <= r: lua_fail("{lx_la_name(id)}: building {b} holds nothing (the economy isn\'t stocked)")
                 elif id == 57: want(b, r, n)
-                else: lx_r_int(hold_take(b, r, n))
+                else:
+                    let got = hold_take(b, r, n)
+                    if got > 0: ev_goods(EV_TAKEN, 0, b, r, got)
+                    lx_r_int(got)
         case 59:
             let b = lx_a_building(a, 0, id)
             let k = lx_a_utype(a, 1, id)
@@ -360,7 +364,28 @@ def lua_api(id:int, a:[int]):
             let n = lx_want_int(a, 2, lx_la_name(id))
             if b >= 0 and r >= 0 and not lfail:
                 if b_hold[b].length <= r: lua_fail("hold_put: building {b} holds nothing (the economy isn\'t stocked)")
-                else: lx_r_int(hold_put(b, r, max(0, n)))
+                else:
+                    let put = hold_put(b, r, max(0, n))
+                    if put > 0: ev_goods(EV_PUT, 0, b, r, put)
+                    lx_r_int(put)
+        case 93:  // emit(code, a, b, c, n): the pack's own event, EV_PACK + code (0 to 899), in this tick's events (#187)
+            let code = lx_want_int(a, 0, "emit")
+            let ea = lx_want_int(a, 1, "emit")
+            let eb = lx_want_int(a, 2, "emit")
+            let ec = lx_want_int(a, 3, "emit")
+            let en = lx_want_int(a, 4, "emit")
+            if not lfail:
+                if code < 0 or code >= 900: lua_fail("emit: a pack\'s event code is 0 to 899, not {code}")
+                elif events_on: events.push(Event { EV_PACK + code, ea, eb, ec, 0, 0, en })
+        case 94: lx_r_int(events.length)  // event_count(): this tick's events so far
+        case 95:  // event_get(i, field): field 0 kind, 1 a, 2 b, 3 c, 4 n, 5 x, 6 y of this tick's event i (from 0)
+            let i = lx_want_int(a, 0, "event_get")
+            let f = lx_want_int(a, 1, "event_get")
+            if not lfail:
+                if i < 0 or i >= events.length or f < 0 or f > 6: lua_fail("event_get: no event {i} field {f} ({events.length} this tick)")
+                else:
+                    let e = events[i]
+                    lx_r_int([ e.kind, e.a, e.b, e.c, e.n, e.x, e.y ][f])
         default: lua_fail("an unknown API function")
 
 // ------------------------------------------------------------------ the hook points

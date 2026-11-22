@@ -250,6 +250,7 @@ def carry_step(i:int):
             return
         to = store_with_room(i, r)  // the destination fell: take the goods to a store
         if to < 0:
+            if events_on: events.push(Event { EV_LOST, u_id[i], 0, r, u_x[i], u_y[i], u_carry[i] })
             u_carry[i] = 0  // (nowhere left to put them: lost)
             carry_done(i, j)
             return
@@ -275,12 +276,15 @@ def carry_step(i:int):
                 return
             u_carry[i] = n
             u_carry_kind[i] = r + 1
+            ev_goods(EV_PICK, u_id[i], to, r, n)
             jb_phase[j] = CARRY_TO_DEST
             u_target[i] = jb_to[j]
             carry_approach(i, if dst >= 0: dst else: to)
         else:
             b_coming[to][r] -= jb_n[j]
-            u_carry[i] -= hold_put(to, r, u_carry[i])
+            let put = hold_put(to, r, u_carry[i])
+            if put > 0: ev_goods(EV_DROP, u_id[i], to, r, put)
+            u_carry[i] -= put
             if u_carry[i] > 0:  // no room after all: on to a store
                 let s = store_with_room(i, r)
                 if s >= 0 and s != to:

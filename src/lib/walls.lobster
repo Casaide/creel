@@ -438,7 +438,7 @@ def push_ladders():
                 if defenders > 0 and attackers == 0:
                     b_hp[b] -= walk_push * defenders
                     if b_hp[b] <= 0:
-                        if events_on: events.push(Event { EV_DIE, b_id[b], 1, 0, b_cx[b] * TILE + TILE / 2, b_cy[b] * TILE + TILE / 2 })
+                        if events_on: events.push(Event { EV_DIE, b_id[b], 1, 0, b_cx[b] * TILE + TILE / 2, b_cy[b] * TILE + TILE / 2, 0 })
                         breach(b)
                         occupy(footprint(b), 0)
                         remove_building(b)
@@ -591,7 +591,7 @@ def pour():
                         c_hurt[j] += hook_on_hit(b_id[b], j, d)
                         c_hurt_by[j] = b_id[b]
                         hit = true
-                        if events_on: events.push(Event { EV_HIT, b_id[b], u_id[j], d, u_x[j], u_y[j] })
+                        if events_on: events.push(Event { EV_HIT, b_id[b], u_id[j], d, u_x[j], u_y[j], 0 })
                 if hit:
                     if pour_at.get(b_id[b], -1) < 0:
                         let _found, at = binary_search(pour_ids, b_id[b])

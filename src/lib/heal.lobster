@@ -98,7 +98,7 @@ def heal_tick():
                     elif u_cooldown[i] == 0:
                         u_cooldown[i] = r_heal_reload
                         h_heals[j] += r_heal_amount * t_heal[k] * (100 + t_heal_pct[k]) / 100
-                        if events_on: events.push(Event { EV_HEAL, u_id[i], u_id[j], 0, u_x[j], u_y[j] })
+                        if events_on: events.push(Event { EV_HEAL, u_id[i], u_id[j], 0, u_x[j], u_y[j], 0 })
                 elif u_posture[i] == STAND or g > r_heal_sight + 2 * TILE:
                     h_tending[j]--
                     heal_done(i)

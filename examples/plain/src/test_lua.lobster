@@ -222,6 +222,19 @@ def test_view():  // (the placement preview and the panel ask too, on one machin
         if starts_with(name, "set_") or ends_with(name, "_set"): check((find(LA_WRITE_NAMES) n: n == name) >= 0, "{name} is a writer")
     lua_on = false
 
+def test_events():  // (#187: a pack's own events, and reading this tick's)
+    events_on = true
+    events = []
+    run("function go() emit(7, 1, 2, 3, 4) print(event_count(), event_get(0, 0), event_get(0, 1), event_get(0, 4)) end")
+    check(call("go", []) == "1\t{EV_PACK + 7}\t1\t4", "a pack emits its own event and reads it back")
+    check(events.length == 1 and events[0].kind == EV_PACK + 7 and events[0].c == 3, "and it\'s in the tick\'s events")
+    run("function go() emit(900, 0, 0, 0, 0) end")
+    check(find_string(call("go", []), "0 to 899") >= 0, "a pack\'s event code is 0 to 899")
+    run("function go() return event_get(5, 0) end")
+    check(find_string(call("go", []), "no event 5") >= 0, "an event that isn\'t there is an error")
+    events = []
+    events_on = false
+
 def test_budgets():
     // a pack's calls in one tick share a budget: past it, the pack stops
     run("function work(n) for i = 1, n do end end")
@@ -348,6 +361,7 @@ test_limits()
 test_check_source()
 test_crashes()
 test_view()
+test_events()
 test_budgets()
 test_dispatch()
 test_tables_edges()
