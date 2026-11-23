@@ -688,11 +688,13 @@ def push_aside(i:int, j:int, vx:int, vy:int, hc:int):
     if u_task[j] != T_NONE or u_moving[j] != 0 or u_foe[j] != 0 or u_orders[j].length or u_perch[j] != 0: return
     let v = max(1, isqrt(vx * vx + vy * vy))
     let side = if (u_x[j] - u_x[i]) * vy - (u_y[j] - u_y[i]) * vx > 0: -1 else: 1  // (the side of i's line it stands on)
-    for(6) k:
+    for(18) n:  // (and if there's no room that near, twice and three times as far: a crowd at a door makes way)
+        let k = n % 6
+        let far = ASIDE * (n / 6 + 1)
         let sg = if k % 2 == 0: side else: -side
         let ahead = [ 0, 0, 1, 1, 2, 2 ][k]  // (straight aside, then aside and on, then further on)
-        let tx = u_x[j] + (-sg * vy * ASIDE + ahead * vx * ASIDE) / v
-        let ty = u_y[j] + (sg * vx * ASIDE + ahead * vy * ASIDE) / v
+        let tx = u_x[j] + (-sg * vy * far + ahead * vx * far) / v
+        let ty = u_y[j] + (sg * vx * far + ahead * vy * far) / v
         if walkable(tx, ty, lane(j)) and clear_path(u_x[j], u_y[j], tx, ty, u_radius[j], lane(j)) and not presses(j, tx, ty, u_x[j], u_y[j], hc):
             order_move(j, tx, ty, SLOT_ARRIVE, 0, -1, -1, 0, true)
             return
@@ -744,10 +746,11 @@ def solid_tick():
             if bx == ox and by == oy: push_aside(i, pj, vx, vy, hc)  // (no way round: an idle one in the way is pushed aside)
             u_x[i] = bx
             u_y[i] = by
-    // A walker held up (no headway at its last look) and standing still for someone idle in its way (its steering holds it
-    // short of them): they're pushed aside.
+    // A walker held up (no headway at its last look, and none this tick) by someone idle in its way: they're pushed aside.
+    // Whether it stands still for them (its steering holds it short) or only edges from side to side (against a wall
+    // beside them, #205).
     for(u_x.length) i:
-        if u_moving[i] != 0 and u_stuck[i] > 0 and u_x[i] == solid_px[i] and u_y[i] == solid_py[i] and solid_body(i, hc):
+        if u_moving[i] != 0 and u_stuck[i] > 0 and dist2(u_x[i], u_y[i], u_wx[i], u_wy[i]) >= dist2(solid_px[i], solid_py[i], u_wx[i], u_wy[i]) and solid_body(i, hc):
             let gx = u_wx[i] - u_x[i]
             let gy = u_wy[i] - u_y[i]
             for(u_x.length) j:
@@ -775,3 +778,54 @@ def solid_tick():
                 if walkable(sx, sy, lane(i)) and not presses(i, sx, sy, u_x[i], u_y[i], hc):
                     u_x[i] = sx
                     u_y[i] = sy
+    solid_settle(hc)
+
+// Last, a pass over every pair (#201): steps were each checked against the others in slot order, so one held back to
+// where it started may now stand in another's new step. Two bodies that overlap are never nearer than at the start of
+// these moves: of such a pair the one that moved (the later in slot order if both did) is set out along the line between
+// them to how far apart they were, so it still slides past; a second time, or onto ground it can't stand on, it goes
+// back to where it started; someone idle it pressed into steps aside for it. Until none is left (each goes back once at most, and where everyone started holds). Two
+// walkers in the forced swap are let be.
+def solid_settle(hc:int):
+    let back = map(u_x.length): 0
+    var again = true
+    while again:
+        again = false
+        spatial_build()
+        for(u_x.length) i:
+            if solid_body(i, hc):
+                let cx = clamp(u_x[i] / TILE, 0, W - 1)
+                let cy = clamp(u_y[i] / TILE, 0, H - 1)
+                for(9) n:
+                    let nx = cx + n % 3 - 1
+                    let ny = cy + n / 3 - 1
+                    if nx >= 0 and ny >= 0 and nx < W and ny < H:
+                        let c = ny * W + nx
+                        var k = sp_start[c]
+                        while k < sp_end[c]:
+                            let j = sp_items[k]
+                            k++
+                            if j > i and solid_body(j, hc):
+                                let rr = u_radius[i] + u_radius[j]
+                                let d2 = dist2(u_x[i], u_y[i], u_x[j], u_y[j])
+                                if d2 < rr * rr and d2 < dist2(solid_px[i], solid_py[i], solid_px[j], solid_py[j]):
+                                    let swap = u_moving[i] != 0 and u_moving[j] != 0 and u_stuck[i] >= STUCK_LIMIT / 2 and u_stuck[j] >= STUCK_LIMIT / 2
+                                    let jm = u_x[j] != solid_px[j] or u_y[j] != solid_py[j]
+                                    let im = u_x[i] != solid_px[i] or u_y[i] != solid_py[i]
+                                    let who = if jm and back[j] < 2: j else: if im and back[i] < 2: i else: -1
+                                    if not swap and who >= 0:
+                                        let other = if who == j: i else: j
+                                        push_aside(who, other, u_x[who] - solid_px[who], u_y[who] - solid_py[who], hc)  // (someone idle in its way steps off it)
+                                        let was = min(rr, isqrt(dist2(solid_px[i], solid_py[i], solid_px[j], solid_py[j])) + 2)
+                                        let d = max(1, isqrt(d2))
+                                        let sx = u_x[other] + (u_x[who] - u_x[other]) * was / d
+                                        let sy = u_y[other] + (u_y[who] - u_y[other]) * was / d
+                                        if back[who] == 0 and isqrt(d2) > 0 and walkable(sx, sy, lane(who)):
+                                            u_x[who] = sx
+                                            u_y[who] = sy
+                                            back[who] = 1
+                                        else:
+                                            u_x[who] = solid_px[who]
+                                            u_y[who] = solid_py[who]
+                                            back[who] = 2
+                                        again = true
