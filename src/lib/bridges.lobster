@@ -32,7 +32,7 @@ def bridge_hurt(k:int, d:int):
     br_work[k] = 0
     br_payer[k] = -1
     set_deck(br_cells[k], false)
-    if events_on: events.push(Event { EV_DIE, br_id[k], 1, 0, br_x0[k] + (br_x1[k] - br_x0[k]) / 2, br_y0[k] + (br_y1[k] - br_y0[k]) / 2 })
+    if events_on: events.push(Event { EV_DIE, br_id[k], 1, 0, br_x0[k] + (br_x1[k] - br_x0[k]) / 2, br_y0[k] + (br_y1[k] - br_y0[k]) / 2, 0 })
 
 def bridge_approach(i:int, k:int):
     order_reach(i, br_x0[k], br_y0[k], br_x1[k], br_y1[k], building_field(br_id[k], true, lane(i)))

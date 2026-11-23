@@ -60,7 +60,7 @@ def splash(o:int, recs:[int], b:int):
     let y = recs[o + SHOT_Y]
     let up = recs[o + SHOT_UP]
     let r = t_splash[src]
-    if events_on: events.push(Event { EV_SPLASH, by, 0, r, x, y })
+    if events_on: events.push(Event { EV_SPLASH, by, 0, r, x, y, 0 })
     let reach = (r + MAX_BODY) / TILE + 1
     let cx = x / TILE
     let cy = y / TILE
@@ -84,7 +84,7 @@ def splash(o:int, recs:[int], b:int):
                         if d > 0:
                             c_hurt[k] += hook_on_hit(by, k, d)
                             c_hurt_by[k] = by
-                            if events_on: events.push(Event { EV_HIT, by, u_id[k], d, x, y })
+                            if events_on: events.push(Event { EV_HIT, by, u_id[k], d, x, y, 0 })
             xx++
         yy++
     for(b_id.length) k:
@@ -98,7 +98,7 @@ def splash(o:int, recs:[int], b:int):
                 if k != b: d = d * (r - g) / r
                 if d > 0:
                     c_bhurt[k] += d
-                    if events_on: events.push(Event { EV_HIT, by, b_id[k], d, x, y })
+                    if events_on: events.push(Event { EV_HIT, by, b_id[k], d, x, y, 0 })
 
 // A sapper's charge goes off against building b: b takes the blow (a wall or gate at least
 // blast_line_pct of its hit points), other buildings and units within the blast less further out,
@@ -110,7 +110,7 @@ def blast(i:int, b:int, d:int):
     let x = u_x[i]
     let y = u_y[i]
     let r = t_blast[k0]
-    if events_on: events.push(Event { EV_SPLASH, by, 1, r, x, y })
+    if events_on: events.push(Event { EV_SPLASH, by, 1, r, x, y, 0 })
     for(b_id.length) k:
         let gx = max(max(b_cx[k] * TILE - x, 0), x - (b_cx[k] + b_sx[k]) * TILE)
         let gy = max(max(b_cy[k] * TILE - y, 0), y - (b_cy[k] + b_sy[k]) * TILE)
@@ -122,7 +122,7 @@ def blast(i:int, b:int, d:int):
             if not is_enemy(owner, b_owner[k]): dk = dk * r_splash_friend_pct / 100
             if dk > 0:
                 c_bhurt[k] += dk
-                if events_on: events.push(Event { EV_HIT, by, b_id[k], dk, x, y })
+                if events_on: events.push(Event { EV_HIT, by, b_id[k], dk, x, y, 0 })
     let reach = (r + MAX_BODY) / TILE + 1
     let cx = x / TILE
     let cy = y / TILE
@@ -144,7 +144,7 @@ def blast(i:int, b:int, d:int):
                         if dk > 0:
                             c_hurt[k] += hook_on_hit(by, k, dk)
                             c_hurt_by[k] = by
-                            if events_on: events.push(Event { EV_HIT, by, u_id[k], dk, x, y })
+                            if events_on: events.push(Event { EV_HIT, by, u_id[k], dk, x, y, 0 })
             xx++
         yy++
     c_hurt[i] += u_hp[i]
@@ -190,7 +190,7 @@ def pass_through(o:int, recs:[int], aimed:int):
                         let d = damage(t_atk[src], t_arm[kk], t_cls[kk], max(r_min_damage, t_min_damage[kk]))
                         c_hurt[k] += hook_on_hit(by, k, d)
                         c_hurt_by[k] = by
-                        if events_on: events.push(Event { EV_HIT, by, u_id[k], d, u_x[k], u_y[k] })
+                        if events_on: events.push(Event { EV_HIT, by, u_id[k], d, u_x[k], u_y[k], 0 })
             xx++
         yy++
 

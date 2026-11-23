@@ -6,6 +6,10 @@
 
 // ---- buildings (buildings.gd)
 
+// An event about goods at building slot b (#187: lib/state's EV_PICK ... EV_LOST).
+def ev_goods(kind:int, uid:int, b:int, r:int, n:int):
+    if events_on: events.push(Event { kind, uid, b_id[b], r, b_cx[b] * TILE + b_sx[b] * TILE / 2, b_cy[b] * TILE + b_sy[b] * TILE / 2, n })
+
 def b_index_of(bid:int) -> int:
     let found, at = binary_search(b_id, bid)
     return if found: at else: -1
@@ -663,6 +667,7 @@ def gather(i:int, carry_max:int):
             u_work[i] = 0
             take(cell)
             u_carry[i]++
+            if events_on: events.push(Event { EV_GATHER, u_id[i], cell, kind - 1, u_x[i], u_y[i], 1 })
             if res_at(cell) != kind and pool[cell] < 0: rally_on(u_owner[i], cell, i, kind)  // (a farm fallows instead)
             if pool[cell] >= 0 and left_at(cell) <= 0: farm_done(i, cell)
     elif u_moving[i] == 0:
@@ -707,6 +712,7 @@ def return_home(i:int):
         if u_carry_kind[i] > 0:
             let r = u_carry_kind[i] - 1
             let n = if r_stocked: hold_put(b, r, u_carry[i]) else: stock_add(r, p, u_carry[i])
+            if n > 0: ev_goods(EV_DROP, u_id[i], b, r, n)
             gathered[r][p] += n
             u_carry[i] -= n
             if u_carry[i] > 0:  // full: on to the next store with room
@@ -808,8 +814,11 @@ def build_job(i:int):
             b_done[b] = 1
             b_hp[b] = max_hp
             if sites_walk_over(k): set_walk_over(footprint(b), false)  // it stands: anyone inside steps out
+            if events_on: events.push(Event { EV_BUILT, 0, b_id[b], 0, b_cx[b] * TILE + b_sx[b] * TILE / 2, b_cy[b] * TILE + b_sy[b] * TILE / 2, 0 })
             if b_site[b].length:  // its goods are used up
-                for(b_site[b]) c, r: b_hold[b][r] -= c
+                for(b_site[b]) c, r:
+                    b_hold[b][r] -= c
+                    if c > 0: ev_goods(EV_USED, 0, b, r, c)
                 b_site[b] = []
             if bt_road[k] >= 0: become_road(b)
             elif bt_ground[k] >= 0: become_terrain(b)
@@ -960,7 +969,9 @@ def rally_on(p:int, cell:int, i:int, kind:int):
 def trained(b:int, k:int) -> int:
     let c = spawn_cell(b, k)
     let x, y = clear_point(b_owner[b], k, (c % W) * TILE + 500, (c / W) * TILE + 500)
-    return add_unit(b_owner[b], k, x, y)
+    let i = add_unit(b_owner[b], k, x, y)
+    if events_on: events.push(Event { EV_TRAINED, u_id[i], b_id[b], k, x, y, 0 })
+    return i
 
 def train():
     update_pop()

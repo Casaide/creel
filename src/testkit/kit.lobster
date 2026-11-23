@@ -6,6 +6,7 @@
 // Imported after every sim, bot and setup module, and Lua's.
 
 import testkit.invariants
+import testkit.pack_tests
 
 let KIT_JITTER = 400  // World.SPAWN_JITTER
 var kit_dump = -1     // dump:<tick>: the state then (dump_state, as export.gd's), to diff against GDScript's
@@ -63,12 +64,17 @@ def shard_of(args:[string]) -> int, int:
             return string_to_int(i), string_to_int(n)
     return 0, 1
 
+let ev_log = []::Event   // every tick's events, oldest first, while ev_logging (a test that follows goods or a carrier)
+let ev_log_tick = []::int // and the tick each happened in
+var ev_logging = false  // (the `events` arg, or a test's own)
+
 def plain_args(args:[string]) -> [string]:
     for(args) a:
         if starts_with(a, "trace:"): kit_trace = string_to_int(a.substring(6, a.length - 6))
         if starts_with(a, "dump:"): kit_dump = string_to_int(a.substring(5, a.length - 5))
         if a == "invariants": inv_on = true
-    return filter(args) a: not starts_with(a, "shard:") and not starts_with(a, "trace:") and not starts_with(a, "dump:") and a != "invariants"
+        if a == "events": ev_logging = true
+    return filter(args) a: not starts_with(a, "shard:") and not starts_with(a, "trace:") and not starts_with(a, "dump:") and a != "invariants" and a != "events"
 
 // ---- the world
 
@@ -135,6 +141,10 @@ def wstep():
     if inv_on: inv_before()
     step()
     if inv_on and inv_broken == "": inv_tick()
+    if ev_logging:
+        for(events) e:
+            ev_log.push(e)
+            ev_log_tick.push(tick - 1)
     note_ids()
     if kit_trace > 0 and tick % kit_trace == 0: print "h {tick} {state_hash()}"
     if tick == kit_dump: print dump_state()

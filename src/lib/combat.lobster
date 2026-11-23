@@ -258,7 +258,7 @@ def loose(by:int, owner:int, sx:int, sy:int, j:int, b:int, d:int, src:int, up:in
         ay = b_cy[b] * TILE + b_sy[b] * TILE / 2
     let f = flight(sx, sy, ax, ay, speed)
     for([ tick + f, to, by, owner, d, src, up, ax, ay, sx, sy, mount ]) v: shots.push(v)
-    if events_on: events.push(Event { EV_SHOT, by, to, 0, ax, ay })
+    if events_on: events.push(Event { EV_SHOT, by, to, 0, ax, ay, 0 })
 
 def take_shots(t:int) -> [int]:
     let out = []::int
@@ -337,7 +337,7 @@ def land():
         if src >= 0 and t_pass_len[src] > 0: pass_through(o, recs, j)  // a bolt goes through those in its way
         if b >= 0:
             c_bhurt[b] += d
-            if events_on: events.push(Event { EV_HIT, by, to, d, ax, ay })
+            if events_on: events.push(Event { EV_HIT, by, to, d, ax, ay, 0 })
         else:
             if j >= 0:
                 let r = u_radius[j] + slack
@@ -348,8 +348,8 @@ def land():
             if j >= 0:
                 c_hurt[j] += hook_on_hit(by, j, d)
                 c_hurt_by[j] = by
-                if events_on: events.push(Event { EV_HIT, by, u_id[j], d, ax, ay })
-            elif events_on: events.push(Event { EV_MISS, by, to, 0, ax, ay })
+                if events_on: events.push(Event { EV_HIT, by, u_id[j], d, ax, ay, 0 })
+            elif events_on: events.push(Event { EV_MISS, by, to, 0, ax, ay, 0 })
         o += SHOT_STRIDE
 
 def shots_inbound():
@@ -533,7 +533,7 @@ def apply_hits(n:int):
     let spilled = []::int  // riders of the fallen (owner, x, y, then the record), out once the dead are gone
     while j >= 0:
         if u_hp[j] <= 0:
-            if events_on: events.push(Event { EV_DIE, u_id[j], 0, 0, u_x[j], u_y[j] })
+            if events_on: events.push(Event { EV_DIE, u_id[j], 0, 0, u_x[j], u_y[j], 0 })
             hook_on_death(j, c_hurt_by[j])
             if t_animal[u_kind[j]] == 0: lost[u_owner[j]]++
             var o = 0
@@ -557,7 +557,7 @@ def apply_hits(n:int):
 // A building falls (lost in a fight, or taken down by its owner): it dies on screen, a farm's ground is cleared, a
 // pen's animals go free, those inside come out, a wall piece leaves rubble, and its cells are free again.
 def fall(b:int):
-    if events_on: events.push(Event { EV_DIE, b_id[b], 1, b_sx[b], b_cx[b] * TILE + b_sx[b] * TILE / 2, b_cy[b] * TILE + b_sy[b] * TILE / 2 })
+    if events_on: events.push(Event { EV_DIE, b_id[b], 1, b_sx[b], b_cx[b] * TILE + b_sx[b] * TILE / 2, b_cy[b] * TILE + b_sy[b] * TILE / 2, 0 })
     clear_farm(b)
     pen_gone(b)
     spill(b)
@@ -785,7 +785,7 @@ def combat_tick():
                     u_cooldown[i] = t_reload[k]
                     let d = bridge_damage(t_atk[k], r_min_damage)
                     brhurt[br] += d
-                    if events_on: events.push(Event { EV_HIT, u_id[i], u_foe[i], d, u_x[i], u_y[i] })
+                    if events_on: events.push(Event { EV_HIT, u_id[i], u_foe[i], d, u_x[i], u_y[i], 0 })
             elif bridge_gap(i, br) <= REACH + TILE:
                 order_direct(i, clamp(u_x[i], br_x0[br], br_x1[br]), clamp(u_y[i], br_y0[br], br_y1[br]))
             else:
@@ -839,7 +839,7 @@ def combat_tick():
                         let d = hit_on_unit(i, k, j, up)
                         c_hurt[j] += hook_on_hit(u_id[i], j, d)
                         c_hurt_by[j] = u_id[i]
-                        if events_on: events.push(Event { EV_HIT, u_id[i], u_id[j], d, u_x[j], u_y[j] })
+                        if events_on: events.push(Event { EV_HIT, u_id[i], u_id[j], d, u_x[j], u_y[j], 0 })
                 else:
                     var d = boost(i, -1, t_damage[k], damage(t_atk[k], bm_arm[b_owner[b]][b_kind[b]], building_cls(), r_min_damage), r_min_damage)
                     if up < 0: d = uphill(d)
@@ -849,7 +849,7 @@ def combat_tick():
                         blast(i, b, d)  // the sapper's charge goes off, and the sapper with it
                     else:
                         c_bhurt[b] += d
-                        if events_on: events.push(Event { EV_HIT, u_id[i], b_id[b], d, u_x[i], u_y[i] })
+                        if events_on: events.push(Event { EV_HIT, u_id[i], b_id[b], d, u_x[i], u_y[i], 0 })
         elif u_perch[i] != 0:
             if j >= 0 and u_perch[j] != 0 and not t_ranged[k] and on_net(dist_from(u_perch[i] - 1), u_perch[j] - 1):
                 if u_wgoal[i] != u_perch[j] and u_wtime[i] == 0:

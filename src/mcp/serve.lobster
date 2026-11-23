@@ -13,6 +13,7 @@
 // Imported after every sim module. Nothing here writes the sim's state except through issue_cmd, as a player's order.
 
 import testkit.invariants
+import testkit.pack_tests
 
 let MCP_PREFIX = "@mcp "
 let MCP_MAX_STEP = 72000  // one hour of ticks a request at most
@@ -23,6 +24,67 @@ let MCP_CMD_NAMES = [ "move", "attack_move", "stance", "gather", "build", "help_
     "ungarrison", "repair", "trade", "route", "pen", "release", "ability", "demolish" ]
 
 var mcp_started = false
+let MCP_EVENTS_KEPT = 20000  // the events kept for creel_events, newest (older ones are dropped and counted)
+var mcp_events = []::Event
+var mcp_event_ticks = []::int
+var mcp_events_dropped = 0
+
+def mcp_ev_name(k:int) -> string: return ev_name(k)
+
+def mcp_ev_kind(v:JV) -> int:  // (a name or a code)
+    if v.kind == J_STR:
+        return ev_kind(v.s)
+    return as_int(v)
+
+// One tick the game's way, its events kept.
+def mcp_tick():
+    mcp_step()
+    for(events) e:
+        mcp_events.push(e)
+        mcp_event_ticks.push(tick - 1)
+    if mcp_events.length > MCP_EVENTS_KEPT:
+        let n = mcp_events.length - MCP_EVENTS_KEPT
+        mcp_events.remove_range(0, n)
+        mcp_event_ticks.remove_range(0, n)
+        mcp_events_dropped += n
+
+def mcp_ev_matches(q:JV, e:Event) -> bool:
+    let kinds = glist(q, "kinds")
+    if kinds.length:
+        let wanted = exists(kinds) kv: mcp_ev_kind(kv) == e.kind
+        if not wanted: return false
+    if has(q, "a") and gint(q, "a", 0) != e.a: return false
+    if has(q, "b") and gint(q, "b", 0) != e.b: return false
+    if has(q, "c") and gint(q, "c", 0) != e.c: return false
+    return true
+
+def mcp_event(e:Event, t:int) -> JV:
+    let o = jobj()
+    o.set("tick", jint(t))
+    o.set("kind", jstr(mcp_ev_name(e.kind)))
+    o.set("a", jint(e.a))
+    o.set("b", jint(e.b))
+    o.set("c", jint(e.c))
+    o.set("n", jint(e.n))
+    o.set("x", jint(e.x))
+    o.set("y", jint(e.y))
+    return o
+
+// The events kept since the last start, filtered by kinds (names or codes), a, b, c and since (a tick), at most limit.
+def mcp_events_of(q:JV) -> JV:
+    let out = []::JV
+    let since = gint(q, "since", 0)
+    let limit = gint(q, "limit", 200)
+    var total = 0
+    for(mcp_events) e, k:
+        if mcp_event_ticks[k] >= since and mcp_ev_matches(q, e):
+            total++
+            if out.length < limit: out.push(mcp_event(e, mcp_event_ticks[k]))
+    let o = jobj()
+    o.set("total", jint(total))
+    o.set("dropped", jint(mcp_events_dropped))
+    o.set("events", jarr(out))
+    return o
 
 def mcp_reply(id:int, ok:bool, v:JV):
     let o = jobj()
@@ -165,6 +227,7 @@ def mcp_names() -> JV:
     o.set("tile", jint(TILE))
     o.set("ticks_per_turn", jint(TICKS_PER_TURN))
     o.set("map", mcp_ints([ W, H ]))
+    o.set("events", jstrs(EV_NAMES))
     return o
 
 // A player's order, run at the start of turn + 2 like every order.
@@ -191,7 +254,27 @@ def mcp_handle(q:JV) -> string, JV:
         let err = mcp_start(gobj(q, "args"))
         if err.length: return err, jnull()
         mcp_started = true
+        events_on = true
+        mcp_events = []
+        mcp_event_ticks = []
+        mcp_events_dropped = 0
         return "", mcp_state()
+    if cmd == "pack_tests":  // (#190: a pack's tests/*.lua, each in a fresh match from args; the last one's is left running)
+        let id = gstr(q, "pack", "")
+        if (find(lib_packs) p: p.id == id) < 0: return "no pack \"{id}\" (packs: {concat_string(map(lib_packs) p: p.id, ", ")})", jnull()
+        var why = ""
+        let ran = pack_tests_of(id):
+            let err = mcp_start(gobj(q, "args"))
+            if why == "": why = err
+        fn: mcp_step()
+        if why != "": return why, jnull()
+        if not ran.length: return "the pack {id} has no tests (data/tests/*.lua)", jnull()
+        mcp_started = true
+        events_on = true
+        let o = mcp_state()
+        o.set("tests", jstrs(ran))
+        o.set("failed", jint((filter(ran) l: starts_with(l, "FAIL")).length))
+        return "", o
     if cmd == "state": return "", mcp_state()
     if cmd == "names": return "", mcp_names()
     if not mcp_started: return "no match yet: start one first", jnull()
@@ -201,15 +284,22 @@ def mcp_handle(q:JV) -> string, JV:
             if n < 1 or n > MCP_MAX_STEP: return "ticks must be 1 to {MCP_MAX_STEP}", jnull()
             let checked = gbool(q, "invariants", false)
             inv_stuck_limit = gint(q, "stuck_limit", inv_stuck_limit)
+            let until = gobj(q, "until")  // (an event to stop on: kinds, a, b, c as creel_events filters)
+            let stopping = has(q, "until")
             var broken = ""
+            var met = jnull()
             for(n):
-                if broken == "":
+                if broken == "" and met.kind == J_NULL:
                     if checked: inv_before()
-                    mcp_step()
+                    mcp_tick()
                     if checked: broken = inv_after()
+                    if stopping:
+                        for(events) e: if met.kind == J_NULL and mcp_ev_matches(until, e): met = mcp_event(e, tick - 1)
             let o = mcp_state()
             if checked: o.set("broken", jstr(broken))  // (the first invariant broken, on the tick the state gives: the run stops there)
+            if stopping: o.set("event", met)  // (the event it stopped on, or null if none came)
             return "", o
+        case "events": return "", mcp_events_of(q)
         case "invariants":
             inv_before()  // (no tick: nobody moved, so "solid" has nothing to compare)
             let o = mcp_state()

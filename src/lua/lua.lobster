@@ -616,7 +616,7 @@ def lx_str_range(len:int, i:int, j:int) -> int, int:
 
 def lua_builtin(id:int, a:[int]):
     if id >= B_COUNT:
-        lua_api(id - B_COUNT, a)
+        lua_api_call(id - B_COUNT, a)
         return
     switch id:
         case B_PRINT:

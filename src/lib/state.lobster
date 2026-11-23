@@ -215,6 +215,29 @@ let EV_SHOT = 2    // a: by, b: to
 let EV_MISS = 3    // a: by (a shot in the ground at x, y); the view's (the bots don't read these three)
 let EV_HEAL = 4    // a: by, b: to
 let EV_SPLASH = 5  // c: radius (a stone or a charge comes down at x, y)
+// Goods and work (#187), for tests, the MCP and the panel to follow one good or one carrier. a: the unit (0: none),
+// b: the building (or the cell, for EV_GATHER), c: the resource, n: how many; x, y where.
+let EV_PICK = 10     // a carrier took n of c out of building b
+let EV_DROP = 11     // a unit put n of c into building b (a carrier's delivery, a gatherer's drop-off)
+let EV_GATHER = 12   // unit a took n of c from cell b
+let EV_MADE = 13     // building b made n of c
+let EV_USED = 14     // building b used up n of c (a recipe's input, a site's goods once it stands)
+let EV_BUILT = 15    // building b stands
+let EV_TRAINED = 16  // unit a came out of building b (c: its type)
+let EV_LOST = 17     // carrier a had nowhere to put n of c: they're gone
+let EV_TAKEN = 18    // a pack's rules took n of c out of building b (lua hold_take)
+let EV_PUT = 19      // a pack's rules put n of c into building b (lua hold_put)
+let EV_PACK = 100    // a pack's own (lua emit): EV_PACK + its code
+// The kinds by name ("" for none); a pack's own are "pack:<code>".
+let EV_NAMES = [ "hit", "die", "shot", "miss", "heal", "splash", "", "", "", "", "pick", "drop", "gather", "made", "used", "built",
+    "trained", "lost", "taken", "put" ]
+
+def ev_name(k:int) -> string: return if k >= EV_PACK: "pack:{k - EV_PACK}" else: if k < EV_NAMES.length: EV_NAMES[k] else: string(k)
+
+def ev_kind(name:string) -> int:  // (-1: no such kind)
+    if starts_with(name, "pack:"): return EV_PACK + string_to_int(substring(name, 5, name.length - 5))
+    if name == "": return -1
+    return find(EV_NAMES): _ == name
 class Event:
     kind:int
     a:int
@@ -222,8 +245,9 @@ class Event:
     c:int
     x:int
     y:int
-var events = []::Event
-var events_on = false  // only the bots read them
+    n:int
+var events = []::Event   // this tick's (step empties it first); not state: never saved or hashed
+var events_on = false  // the bots, the tests and the MCP read them
 
 let REC_ID = 0  // a sheltering unit's record (garrison.gd)
 let REC_KIND = 1

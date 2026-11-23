@@ -1,6 +1,8 @@
 // Lua for mods (#82): the language, its refusals and its limits, headless. ../../../check.sh runs it.
 //   lobster test_lua.lobster
 import sim_modules
+import testkit.invariants
+import testkit.pack_tests
 
 var fails = 0
 var passes = 0
@@ -222,6 +224,43 @@ def test_view():  // (the placement preview and the panel ask too, on one machin
         if starts_with(name, "set_") or ends_with(name, "_set"): check((find(LA_WRITE_NAMES) n: n == name) >= 0, "{name} is a writer")
     lua_on = false
 
+def test_events():  // (#187: a pack's own events, and reading this tick's)
+    events_on = true
+    events = []
+    run("function go() emit(7, 1, 2, 3, 4) print(event_count(), event_get(0, 0), event_get(0, 1), event_get(0, 4)) end")
+    check(call("go", []) == "1\t{EV_PACK + 7}\t1\t4", "a pack emits its own event and reads it back")
+    check(events.length == 1 and events[0].kind == EV_PACK + 7 and events[0].c == 3, "and it\'s in the tick\'s events")
+    run("function go() emit(900, 0, 0, 0, 0) end")
+    check(find_string(call("go", []), "0 to 899") >= 0, "a pack\'s event code is 0 to 899")
+    run("function go() return event_get(5, 0) end")
+    check(find_string(call("go", []), "no event 5") >= 0, "an event that isn\'t there is an error")
+    events = []
+    events_on = false
+
+def test_pack_tests():  // (#190: a pack's own tests, tests/*.lua, run by testkit/pack_tests)
+    check(equal(pack_test_names([ "function test_a() end\nfunction test_a_2() end\nlocal function helper() end", "function test_b_x() end\nfunction test_a() end" ]), [ "test_a", "test_b_x" ]), "a pack\'s tests are its test_ functions, a later phase (_2) not one")
+    let src = "function test_kept() keep(\"n\", 3) wait(2) end\n" +
+        "function test_kept_2() expect(kept(\"n\") == 3, \"kept from the phase before\") expect(tick() == 2, \"two ticks on\") end\n" +
+        "function test_wrong() expect(1 == 2, \"one is two\") end\n" +
+        "function test_late() wait_for(\"built\", 3) end\n" +
+        "function test_mine() emit(5, 0, 0, 0, 0) end\n" +
+        "function test_soon() wait_for(7, 10) end\n"
+    lua_quiet = true
+    let got = pack_tests("plain", [ "t.lua" ], [ src ]):
+        tick = 0
+        events = []
+    fn:
+        events = []
+        if tick == 4: events.push(Event { EV_PACK + 7, 0, 0, 0, 0, 0, 0 })
+        tick++
+    check(equal(got, [ "ok test_kept", "FAIL test_wrong: test_wrong: one is two", "FAIL test_late: after test_late: no built event in 3 ticks", "ok test_mine", "ok test_soon" ]), "a pack\'s tests pass, fail on an expect, and wait for ticks and events: {got}")
+    tick = 0
+    events = []
+    run("function go() wait(1) end")
+    check(find_string(call("go", []), "only a pack\'s tests") >= 0, "the tests\' own functions are refused to a pack\'s rules")
+    run("function go() place(0, \"hut\", 1, 1, true) end")
+    check(find_string(call("go", []), "only a pack\'s tests") >= 0, "place too")
+
 def test_budgets():
     // a pack's calls in one tick share a budget: past it, the pack stops
     run("function work(n) for i = 1, n do end end")
@@ -348,6 +387,8 @@ test_limits()
 test_check_source()
 test_crashes()
 test_view()
+test_events()
+test_pack_tests()
 test_budgets()
 test_dispatch()
 test_tables_edges()
