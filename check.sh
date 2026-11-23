@@ -1,5 +1,5 @@
 #!/bin/sh
-# Creel's own check: its modules compile with nothing from a game but the hooks in examples/plain, edge scrolling's, Lua's, the invariants' and the MCP's tests pass
+# Creel's own check: its modules compile with nothing from a game but the hooks in examples/plain, edge scrolling's, Lua's, the invariants', the draw probe's and the MCP's tests pass
 # (and agree with lua5.4, if it's installed: lua_diff.sh).
 #   ./check.sh        LOBSTER=<path to the lobster binary> (default ~/Dev/lobster/bin/lobster)
 LOBSTER="${LOBSTER:-$HOME/Dev/lobster/bin/lobster}"
@@ -23,6 +23,10 @@ echo "$out" | grep -q "test_lua: .* 0 failed" || bad=1
 out="$("$LOBSTER" test_invariants.lobster 2>&1)"
 echo "$out" | grep -v warning | tail -1
 echo "$out" | grep -q "test_invariants: .* 0 failed" || bad=1
+# (and the draw probe, headless: a site's stage from the sim, the probe's JSON)
+out="$("$LOBSTER" test_draw_probe.lobster 2>&1)"
+echo "$out" | grep -v warning | tail -1
+echo "$out" | grep -q "test_draw_probe: .* 0 failed" || bad=1
 # (and edge scrolling, headless)
 out="$("$LOBSTER" test_edge_scroll.lobster 2>&1)"
 echo "$out" | grep -v warning | tail -1
