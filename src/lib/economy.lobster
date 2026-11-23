@@ -811,6 +811,7 @@ def build_job(i:int):
             approach_building(i, nb)
         elif u_orders[i].length or not back_to_work(i):
             clear_task(i)
+            if not u_orders[i].length: u_moving[i] = 0  // (finished on its way: it stops where it is, not walking on to it, #214)
         return
     let x0, y0, x1, y1 = building_rect(b)
     if in_reach(i, x0, y0, x1, y1):

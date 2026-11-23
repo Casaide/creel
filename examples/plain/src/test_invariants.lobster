@@ -132,6 +132,21 @@ def test_pack():
     check(l_packs[1].error == "", "and the pack runs on")
     lua_on = false
 
+// A builder on its way to a site others finish, with no other site near and no job to go back to, stops where it is
+// with no job, not walking on to the finished building (#214).
+def test_builder_stops():
+    tiny_world()
+    b_done[0] = 1
+    u_task[0] = BUILD
+    u_target[0] = b_id[0]
+    u_home[0] = -1
+    u_moving[0] = 1
+    u_wx[0] = 5 * TILE
+    u_wy[0] = 6 * TILE
+    build_job(0)
+    check(u_task[0] == T_NONE and u_moving[0] == 0, "a builder whose site is finished on its way stops where it is (task {u_task[0]}, moving {u_moving[0]})")
+
 test_invariants()
 test_pack()
+test_builder_stops()
 print "test_invariants: {passes} passed, {fails} failed"
