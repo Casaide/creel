@@ -575,6 +575,8 @@ def vx_mode_of(state:string) -> int:
     if find_string(state, "work") == 0: return VX_WORK
     return VX_IDLE
 
+var vx_last_exact = false  // the last vx_frame_for's frame is the state asked for, not one it fell back to (the draw probe)
+
 // The frame for unit id of type k in state (unit_state's names), moving or facing screen direction d (dir_of's); packed
 // (lib/siege's packed): in its body's packed shape, if it has one.
 def vx_frame_for(id:int, k:int, state:string, d:int, n:int, packed = false) -> int:
@@ -585,6 +587,8 @@ def vx_frame_for(id:int, k:int, state:string, d:int, n:int, packed = false) -> i
     let v = vx_look_v(id, lk)
     if m >= VX_CARRY and vx_frames.get(vx_fkey(lk, v, m, f, st), -1) < 0: vx_ask_carry(lk, m)
     let fr = vx_frame(lk, v, m, f, st)
+    let st0 = if m == VX_IDLE: 0 else: st  // (standing has fewer steps than it's asked for: its first is its own)
+    vx_last_exact = fr >= 0 and (vx_frames.get(vx_fkey(lk, v, m, f, st), -1) == fr or vx_frames.get(vx_fkey(lk, 0, m, f, st), -1) == fr or vx_frames.get(vx_fkey(lk, v, m, f, st0), -1) == fr or vx_frames.get(vx_fkey(lk, 0, m, f, st0), -1) == fr)  // (its look's own, or the plain look's)
     if fr >= 0: return fr
     vx_stand_now(lk)  // (drawn before it's baked: a unit of a later age put down)
     return vx_frame(lk, 0, VX_IDLE, f, 0)

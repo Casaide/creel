@@ -4,6 +4,46 @@
 // What the game adds comes through functions it defines (examples/plain/src/hooks/view.lobster lists them, doing
 // nothing): its building looks' tile names, its paths, its town life, cracks on damaged buildings.
 
+// ---- the draw probe (#188): what was drawn for each unit and building, for a test to check instead of a person looking
+// at a picture. probe_begin() before a frame's collect, then probe_units and probe_buildings hold that frame's.
+class ProbeUnit:
+    id:int
+    state:string    // what it was drawn doing: unit_state's name (walk, idle, carry_<good>, work_<job>, attack)
+    carried:string  // the good it was drawn carrying ("": none, or its look has no load for it, so it walks empty-handed)
+    exact:bool      // its frame is that state's own, not one it fell back to (not baked yet, or no pose for it)
+
+class ProbeBuilding:
+    id:int
+    stage:int      // site_stage's: -1 finished, -2 being levelled, else its build stage 0 to 3
+    piece:string   // the look's piece drawn for its body ("-": none)
+    front:bool     // its front drawn over it (a finished body's only: on a site it was the roof)
+
+var probe_on = false
+var probe_units = []::ProbeUnit
+var probe_buildings = []::ProbeBuilding
+
+def probe_begin():
+    probe_on = true
+    probe_units = []
+    probe_buildings = []
+
+// The probe as JSON: {"units": [...], "buildings": [...]}, sorted by id.
+def probe_json() -> string:
+    let us = qsort(probe_units) a, b: a.id < b.id
+    let bs = qsort(probe_buildings) a, b: a.id < b.id
+    let ul = map(us) u: "\{\"id\": {u.id}, \"state\": \"{u.state}\", \"carried\": \"{u.carried}\", \"exact\": {u.exact}\}"
+    let bl = map(bs) b: "\{\"id\": {b.id}, \"stage\": {b.stage}, \"piece\": \"{b.piece}\", \"front\": {b.front}\}"
+    return "\{\"units\": [" + concat_string(ul, ", ") + "], \"buildings\": [" + concat_string(bl, ", ") + "]\}"
+
+// Which stage building b shows: -1 finished, -2 its plot still levelled (nothing of it yet), else 0 to 3 by how far
+// it's built past its foundation (a look's stages, #182). From the sim alone: a test can ask it without drawing.
+def site_stage(b:int) -> int:
+    if b_done[b] != 0: return -1
+    if levelling(b): return -2
+    let k = b_kind[b]
+    let found = bt_build_ticks[k] * r_foundation_pct / 100
+    return clamp((b_progress[b] - found) * 4 / max(1, bt_build_ticks[k] - found), 0, 3)
+
 // Where something stands on the canvas (Iso.to_ground: raised ground lifts it).
 def ground_at(x:int, y:int) -> float2: return canvas(float(x), float(y)) - float2 { 0.0, lift_at(float(x), float(y)) }
 
@@ -225,6 +265,9 @@ def collect_units(alpha:float):
             // (voxel units step by the ground they cover, so the planted foot doesn't slide)
             let n = if state == "walk" or find_string(state, "carry") == 0: vx_walk_step(u_id[i], u_kind[i], x, y) else: n0
             let f = vx_frame_for(u_id[i], u_kind[i], state, d, n, packed(i))
+            if probe_on:
+                let carried = if find_string(state, "carry_") == 0 and vx_mode_of(state) >= VX_CARRY: state.substring(6, state.length - 6) else: ""
+                probe_units.push(ProbeUnit { u_id[i], state, carried, f >= 0 and vx_last_exact })
             if f < 0: perf_unseen++
             let p = iso(x, y)
             let tc = team_col(u_owner[i])
@@ -360,18 +403,15 @@ def collect_buildings():
             let look = looks.get(key)
             if look:
                 var name = look.body
-                if b_done[b] == 0:
-                    // (its plot being levelled, its foundation share: nothing of it yet, the game draws the plot; then
-                    // its stages over the rest, #182)
-                    let found = bt_build_ticks[k] * r_foundation_pct / 100
-                    if levelling(b): name = "-"
-                    else:
-                        let st = clamp((b_progress[b] - found) * 4 / max(1, bt_build_ticks[k] - found), 0, 3)
-                        if look.stages[st] != "-": name = look.stages[st]
-                else:  // broken up as it's damaged (BuildingArt._broken)
+                let st = site_stage(b)
+                if st == -2: name = "-"  // (its plot being levelled, its foundation share: nothing of it yet, the game draws the plot)
+                elif st >= 0 and look.stages[st] != "-": name = look.stages[st]  // (then its stages over the rest, #182)
+                if st == -1:
+                    // broken up as it's damaged (BuildingArt._broken)
                     let damage = damage_of(b)
                     for(RUIN_AT) at_least, n:
                         if damage >= at_least and n < look.ruins.length: name = look.ruins[n]
+                if probe_on: probe_buildings.push(ProbeBuilding { b_id[b], st, name, look.front != "-" and name == look.body and look.arms.length == 0 })
                 let at = iso(float(b_cx[b] * 1000 + b_sx[b] * 500), float(b_cy[b] * 1000 + b_sy[b] * 500))
                 let up = lift_at(float(b_cx[b] * 1000 + b_sx[b] * 500), float(b_cy[b] * 1000 + b_sy[b] * 500)) * 1.5
                 let shade = if fog[ME][cell] == 2 or teams[p] == teams[ME]: 1.0 else: 0.6
