@@ -227,10 +227,11 @@ let EV_TRAINED = 16  // unit a came out of building b (c: its type)
 let EV_LOST = 17     // carrier a had nowhere to put n of c: they're gone
 let EV_TAKEN = 18    // a pack's rules took n of c out of building b (lua hold_take)
 let EV_PUT = 19      // a pack's rules put n of c into building b (lua hold_put)
+let EV_SENT = 20     // carrier a was sent with a delivery: n of c to building b (x, y: where it fetches them, #191)
 let EV_PACK = 100    // a pack's own (lua emit): EV_PACK + its code
 // The kinds by name ("" for none); a pack's own are "pack:<code>".
 let EV_NAMES = [ "hit", "die", "shot", "miss", "heal", "splash", "", "", "", "", "pick", "drop", "gather", "made", "used", "built",
-    "trained", "lost", "taken", "put" ]
+    "trained", "lost", "taken", "put", "sent" ]
 
 def ev_name(k:int) -> string: return if k >= EV_PACK: "pack:{k - EV_PACK}" else: if k < EV_NAMES.length: EV_NAMES[k] else: string(k)
 

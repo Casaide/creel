@@ -17,8 +17,10 @@ let LA_NAMES = [ "unit_count", "u_id", "u_x", "u_y", "u_kind", "u_owner", "u_tas
     "unit_get", "unit_set", "building_get", "building_set", "player_get", "player_set", "rules", "player_count", "resource_count", "cell_of",
     "t_animal", "u_hp", "b_hp", "lay_foundation", "fits", "plant", "terrain_at", "terrain_type", "approach_cell", "b_making", "bt_drag", "entry_rect", "hold_put",
     "emit", "event_count", "event_get",
-    "place", "give", "spawn", "wait", "wait_for", "expect", "keep", "kept" ]
+    "place", "give", "spawn", "wait", "wait_for", "expect", "keep", "kept",
+    "delivery_count", "delivery_get" ]
 let LA_TEST_FIRST = 96  // place ... kept: a pack's tests' own (testkit/pack_tests, #190), refused to its rules
+let LA_TEST_LAST = 103
 
 // The constants: the engine's task codes and units, and the map's size (set as a match starts).
 def lua_api_consts():
@@ -112,7 +114,7 @@ def lt_r_int(n:int): lt_rets.push(lv_int(n))
 // A test's own functions (place, spawn ...) run the sim, whose hooks run the packs' Lua inside the call: their results
 // are theirs, so the test function's own are made apart and are what the call returns.
 def lua_api_call(id:int, a:[int]):
-    if id < LA_TEST_FIRST:
+    if id < LA_TEST_FIRST or id > LA_TEST_LAST:
         lua_api(id, a)
         return
     if not lua_testing:
@@ -485,6 +487,13 @@ def lua_api(id:int, a:[int]):
             if not lfail:
                 let at_ = find(lt_keep_names): _ == name
                 if at_ >= 0: lt_r_int(lt_keep_vals[at_])
+        case 104: lx_r_int(jb_id.length)  // delivery_count(): the deliveries under way (carriers on a job, #191)
+        case 105:  // delivery_get(j, field): field 0 the carrier's id, 1 from (a building id), 2 to, 3 the good, 4 how many, 5 its phase (0 fetching, 1 bringing)
+            let j = lx_want_int(a, 0, "delivery_get")
+            let f = lx_want_int(a, 1, "delivery_get")
+            if not lfail:
+                if j < 0 or j >= jb_id.length or f < 0 or f > 5: lua_fail("delivery_get: no delivery {j} field {f} ({jb_id.length} under way)")
+                else: lx_r_int([ jb_unit[j], jb_from[j], jb_to[j], jb_res[j], jb_n[j], jb_phase[j] ][f])
         default: lua_fail("an unknown API function")
 
 // ------------------------------------------------------------------ the hook points
@@ -630,6 +639,17 @@ def lua_on_order(code:int, p:int, ids:[int], x:int, y:int):
             let list = lua_list(map(ids) v: lv_int(v))
             lua_hook_run(pk, f, [ lv_int(code), lv_int(p), list, lv_int(x), lv_int(y) ])
     lua_region_end()
+
+// The rules' level for a delivery (lib/carry's market, #191), as a pack's delivery_level(dst, r, level, kind) says.
+def lua_delivery_level(b:int, r:int, given:int, kind:int) -> int:
+    if not lua_fresh(): return given
+    var l = given
+    for(l_packs) pk:
+        let f = lua_hook_fn(pk, "delivery_level")
+        if f != LV_NIL and lua_hook_run(pk, f, [ lv_int(b), lv_int(r), lv_int(l), lv_int(kind) ]):
+            if rets.length and lv_is_int(rets[0]): l = rets[0] >> 3
+    lua_region_end()
+    return l
 
 def lua_ai_train_score(p:int, slot:string, k:int, score:int) -> int:
     if not lua_fresh(): return score

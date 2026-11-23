@@ -75,6 +75,7 @@ def start_job(i:int, src:int, dst:int, r:int, n:int, wanted:bool):
     b_resv[src][r] += n
     if wanted: b_want[dst][r] -= n
     b_coming[dst][r] += n
+    if events_on: events.push(Event { EV_SENT, u_id[i], b_id[dst], r, b_cx[src] * TILE + b_sx[src] * TILE / 2, b_cy[src] * TILE + b_sy[src] * TILE / 2, n })
     clear_task(i)
     u_task[i] = T_CARRY
     u_home[i] = jid
@@ -104,6 +105,10 @@ def wanting(p:int, r:int, fb:int) -> int:
 // wants them, else to a store): else a town busy building leaves its bakery full and its people hungry (#102). Stays
 // dirty only if it stopped at the cap.
 def carry_match(p:int):
+    let ec = rules_part("economy")
+    if has(ec, "deliveries"):
+        market_match(p, gobj(ec, "deliveries"))
+        return
     var jobs = 0
     let nb = b_id.length
     for(nb) k:  // (from a building that turns with the clock, as below)
@@ -149,6 +154,104 @@ def carry_match(p:int):
                         return
                     start_job(i, b, dst, r, min(offered(b, r), min(hold_room(dst, r) - b_coming[dst][r], r_carrier_load)), false)
                     jobs++
+    carry_dirty[p] = if jobs >= CARRY_MATCHES: 1 else: 0
+
+// ---- the delivery market (#191): rules economy "deliveries" set what matters most
+// Without it, carry_match's order above. With it, every delivery p could start is a candidate with a level, and the
+// highest go first:
+//   want        a building's or a site's want of a good (b_want): "want" (default 1), or the first of "levels" that
+//               matches it: {"to": [building type ids], "goods": [resource ids], "site": true|false, "level": n}, each
+//               key left out matching any
+//   full_out    a workshop's out slot full, so it stands idle: its goods to whoever wants them, else a store (default 2)
+//   to_store    a workshop's goods nobody asked for, to the nearest store with room (default 0)
+// A pack's Lua delivery_level(dst, r, level, kind) may change a level (kind 0 want, 1 full out, 2 to store). Ties: a
+// site nearer done first if "nearer_done_first", then as carry_match orders them. A good comes from the nearest
+// building offering it, a store counting "from_store" milli-tiles further (default: any workshop before a store).
+let DL_WANT = 0
+let DL_FULL_OUT = 1
+let DL_TO_STORE = 2
+
+class Delivery:
+    kind:int
+    b:int      // the building that wants (DL_WANT) or offers (the others) the good
+    r:int
+    level:int
+    done:int   // its site's share done, per-mille (nearer_done_first)
+    order:int  // carry_match's order, for what's left tied
+
+// Building b's level for a want of r, from the rules' levels.
+def dl_want_level(dl, b:int, r:int) -> int:
+    for(glist(dl, "levels")) e:
+        let to = gstrs(e, "to")
+        let goods = gstrs(e, "goods")
+        if (not to.length or has_s(to, bt_name[b_kind[b]])) and (not goods.length or has_s(goods, resource_names[r])) and (not has(e, "site") or gbool(e, "site", false) == (b_done[b] == 0)):
+            return gint(e, "level", 1)
+    return gint(dl, "want", 1)
+
+// Every delivery p could start now, highest first (see above).
+def market_plan(p:int, dl) -> [Delivery]:
+    let out = []::Delivery
+    let nearer = gbool(dl, "nearer_done_first", false)
+    let nb = b_id.length
+    for(nb) k:
+        let b = (tick + k) % nb
+        if b_owner[b] == p and b_done[b] != 0 and bt_store[b_kind[b]] == 0:
+            for(num_resources) r:
+                if bt_offer[b_kind[b]][r] != 0 and offered(b, r) > 0:
+                    if out_full(b, r): out.push(Delivery { DL_FULL_OUT, b, r, gint(dl, "full_out", 2), 1000, out.length })
+    for(b_id.length) b:
+        if b_owner[b] == p and not levelling(b):
+            for(num_resources) r:
+                if b_want[b][r] > 0: out.push(Delivery { DL_WANT, b, r, dl_want_level(dl, b, r), if nearer and b_done[b] == 0: site_permille(b) else: 1000, out.length })
+    for(nb) k:
+        let b = (tick + k) % nb
+        if b_owner[b] == p and b_done[b] != 0 and bt_store[b_kind[b]] == 0:
+            for(num_resources) r:
+                if bt_offer[b_kind[b]][r] != 0 and offered(b, r) > 0 and b_want[b][r] == 0 and b_coming[b][r] == 0 and not out_full(b, r):
+                    out.push(Delivery { DL_TO_STORE, b, r, gint(dl, "to_store", 0), 1000, out.length })
+    for(out) d: d.level = lua_delivery_level(d.b, d.r, d.level, d.kind)
+    return qsort(out) x, y: x.level > y.level or (x.level == y.level and (x.done > y.done or (x.done == y.done and x.order < y.order)))
+
+// Where building `to` gets r from in the market: the nearest that offers it, a store counting from_store further.
+def market_source(p:int, r:int, to:int, from_store:int) -> int:
+    var best = -1
+    var best_d = 1 << 62
+    let x = b_cx[to] * TILE + b_sx[to] * TILE / 2
+    let y = b_cy[to] * TILE + b_sy[to] * TILE / 2
+    for(b_id.length) b:
+        if b != to and gives(b, p, r) and offered(b, r) > 0:
+            let d = isqrt(mid_dist2(b, x, y)) + (if bt_store[b_kind[b]] != 0: from_store else: 0)
+            if d < best_d:
+                best_d = d
+                best = b
+    return best
+
+def market_match(p:int, dl):
+    var jobs = 0
+    let from_store = gint(dl, "from_store", 1 << 40)
+    for(market_plan(p, dl)) d:
+        let b = d.b
+        let r = d.r
+        while jobs < CARRY_MATCHES:
+            var src = b
+            var dst = b
+            var wanted = true
+            if d.kind == DL_WANT:
+                if b_want[b][r] <= 0: break
+                src = market_source(p, r, b, from_store)
+            else:
+                if offered(b, r) <= 0 or (d.kind == DL_FULL_OUT and not out_full(b, r)): break
+                dst = if d.kind == DL_FULL_OUT: wanting(p, r, b) else: -1
+                wanted = dst >= 0
+                if not wanted: dst = store_near(b, r)
+            if src < 0 or dst < 0: break
+            let i = free_carrier(p, src)
+            if i < 0:
+                carry_dirty[p] = 0
+                return
+            let room = if wanted: b_want[dst][r] else: hold_room(dst, r) - b_coming[dst][r]
+            start_job(i, src, dst, r, min(offered(src, r), min(room, r_carrier_load)), wanted)
+            jobs++
     carry_dirty[p] = if jobs >= CARRY_MATCHES: 1 else: 0
 
 // The owner's finished store nearest building `from` with room for r beyond what is on its way; -1 if none.
