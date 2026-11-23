@@ -168,6 +168,7 @@ def setup_btypes():
         let bflyers = gbool(b, "blocks_flyers", false)
         bt_size.push(size)
         bt_build_ticks.push(as_int(at(b, "build_time")) * 20)
+        bt_foundation.push(gint(b, "foundation_pct", -1))  // its own share built with no goods (a road's digging, #192)
         bt_pop.push(as_int(at(b, "pop")))
         bt_sight.push(gint(b, "sight", 0))
         bt_age.push(as_int(at(b, "age")))

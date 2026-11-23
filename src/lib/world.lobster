@@ -453,6 +453,7 @@ def load_extras():
         bt_road.push(-1)  // (a scenario has no road plans)
         bt_ground.push(-1)
         bt_drag.push(0)
+        bt_foundation.push(-1)
         bt_bridge.push(0)
         bt_walkway.push(bw[o2 + 3])
         bt_blocks_flyers.push(bw[o2 + 4])

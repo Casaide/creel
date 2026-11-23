@@ -57,6 +57,7 @@ Lua 5.4, cut to what lockstep needs:
 | `on_death(i, killer)` | unit slot `i` is dying | |
 | `on_order(code, p, ids, x, y)` | an order with a code from `HOOK_ORDER_BASE` up | |
 | `ai_train_score(p, slot, k, score)` | a bot weighs training type `k` | the score |
+| `delivery_level(b, r, level, kind)` | the delivery market (rules economy `deliveries`, #191) weighs a delivery of good `r`: kind 0 a want of building slot `b`, 1 a full workshop `b`'s goods out, 2 workshop `b`'s spare goods to a store | its level: higher goes first |
 | `task_name(i)` | the panel names what unit `i` is doing; may only read | a string, `""` for none |
 | `invariants()` | after a tick, when the testkit or the MCP checks the invariants (`src/testkit/invariants.lobster`); may only read, on the view's budget | `nil` while the pack's rules hold, else a string saying which broke and where |
 
@@ -70,7 +71,7 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
   `u_moving`, `u_stuck`, `u_work`, `u_hp`, `u_orders` (how many queued), `unit_index(id)`; `set_u_task`,
   `set_u_target`, `set_u_work`, `set_u_stuck`, `set_u_moving`.
 - **Buildings:** `building_count`, `b_id`, `b_kind`, `b_owner`, `b_done`, `b_progress`, `b_hp`, `b_hold(b, r)`,
-  `b_want(b, r)`, `b_coming(b, r)`, `offered(b, r)`, `b_is_site`, `site_permille`, `building_index(id)`,
+  `b_want(b, r)`, `b_coming(b, r)`, `offered(b, r)`, `b_is_site`, `site_permille`, `site_phase` (0 levelling, 1 waiting for goods, 2 building, 3 standing), `building_index(id)`,
   `building_rect(b)` (four values), `entry_rect(b)` (where a unit stands to reach it: its door tile with economy `doors`, else the same as building_rect; #133), `mid_dist2(b, x, y)`.
 - **Types:** `building_type_count`, `building_type(k)` (its buildings.json entry, as a table), `bt_road`, `bt_drag` (laid a cell at a time: a road or a field; #126), `bt_line`,
   `bt_ladder`, `bt_store`, `bt_hold(k, r)`, `bt_build_ticks`; `unit_type_count`, `t_pop`, `t_slot`, `t_worker`,
@@ -86,6 +87,11 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
   `clear_task(i)`, `in_reach(i, x0, y0, x1, y1)`, `fits(p, k, cx, cy)` (whether the ground lets p lay type k there, the packs' own rules aside),
   `lay_foundation(p, k, cx, cy)` (a site, paid or asking its goods, where `fits` and its type is open to p: its id, or
   0; #105).
+- **Deliveries (#191):** `delivery_count()` and `delivery_get(j, field)` read the deliveries under way (field 0 the
+  carrier's id, 1 from, 2 to (building ids), 3 the good, 4 how many, 5 its phase: 0 fetching, 1 bringing). Each one
+  starts with a `sent` event. What's still asked for is `b_want(b, r)`, what's on its way `b_coming(b, r)`, and what a
+  building offers `offered(b, r)`. What goes first is the rules' (economy `deliveries`: `src/lib/carry.lobster`, "the
+  delivery market") and `delivery_level`'s.
 - **Events (#187):** `emit(code, a, b, c, n)` puts the pack's own event in this tick's (kind 100 + code, code 0 to 899; the
   sim only), `event_count()` and `event_get(i, field)` read this tick's so far (field 0 kind, 1 a, 2 b, 3 c, 4 n, 5 x,
   6 y). The engine's kinds are `EV_*` in `src/lib/state.lobster`; `hold_take` and `hold_put` add `taken` and `put` events.

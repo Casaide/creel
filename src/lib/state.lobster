@@ -227,10 +227,11 @@ let EV_TRAINED = 16  // unit a came out of building b (c: its type)
 let EV_LOST = 17     // carrier a had nowhere to put n of c: they're gone
 let EV_TAKEN = 18    // a pack's rules took n of c out of building b (lua hold_take)
 let EV_PUT = 19      // a pack's rules put n of c into building b (lua hold_put)
+let EV_SENT = 20     // carrier a was sent with a delivery: n of c to building b (x, y: where it fetches them, #191)
 let EV_PACK = 100    // a pack's own (lua emit): EV_PACK + its code
 // The kinds by name ("" for none); a pack's own are "pack:<code>".
 let EV_NAMES = [ "hit", "die", "shot", "miss", "heal", "splash", "", "", "", "", "pick", "drop", "gather", "made", "used", "built",
-    "trained", "lost", "taken", "put" ]
+    "trained", "lost", "taken", "put", "sent" ]
 
 def ev_name(k:int) -> string: return if k >= EV_PACK: "pack:{k - EV_PACK}" else: if k < EV_NAMES.length: EV_NAMES[k] else: string(k)
 
@@ -374,6 +375,7 @@ var bt_store = []::int    // 1: what it holds counts as its owner's stock (a sto
 var bt_after = []::[int]  // building types a player needs one finished of before it may lay this one (buildings.json "after", #105)
 var bt_road = []::int     // the road kind a road plan of this type lays when built (rules economy.roads), or -1 (#51)
 var bt_ground = []::int   // the terrain a plan of this type becomes when built (buildings.json "becomes": {"terrain"}), or -1 (#123)
+var bt_foundation = []::int  // per type: buildings.json "foundation_pct", the share of its site built with no goods; -1: the rules' foundation_pct (#192)
 var bt_drag = []::int     // 1: laid by dragging, a plan a cell, as a road is (buildings.json "drag", #123)
 var bt_bridge = []::int   // a road plan that spans water: built, it stands as a bridge (lib/bridges) (#51)
 var bt_in = []::[int]     // per resource: what one round of its recipe takes (buildings.json makes.in; lib/recipes, #50)
@@ -667,6 +669,7 @@ def pad_saved_columns():
     while bt_bridge.length < bt_ladder.length: bt_bridge.push(0)
     while bt_ground.length < bt_ladder.length: bt_ground.push(-1)  // (a save from before, #123)
     while bt_drag.length < bt_ladder.length: bt_drag.push(0)
+    while bt_foundation.length < bt_ladder.length: bt_foundation.push(-1)  // (a save from before, #192)
     for(unit_columns()) col:
         while col.length < u_id.length: col.push(0)
     for(building_columns()) col:
