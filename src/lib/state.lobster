@@ -375,6 +375,7 @@ var bt_store = []::int    // 1: what it holds counts as its owner's stock (a sto
 var bt_after = []::[int]  // building types a player needs one finished of before it may lay this one (buildings.json "after", #105)
 var bt_road = []::int     // the road kind a road plan of this type lays when built (rules economy.roads), or -1 (#51)
 var bt_ground = []::int   // the terrain a plan of this type becomes when built (buildings.json "becomes": {"terrain"}), or -1 (#123)
+var bt_foundation = []::int  // per type: buildings.json "foundation_pct", the share of its site built with no goods; -1: the rules' foundation_pct (#192)
 var bt_drag = []::int     // 1: laid by dragging, a plan a cell, as a road is (buildings.json "drag", #123)
 var bt_bridge = []::int   // a road plan that spans water: built, it stands as a bridge (lib/bridges) (#51)
 var bt_in = []::[int]     // per resource: what one round of its recipe takes (buildings.json makes.in; lib/recipes, #50)
@@ -668,6 +669,7 @@ def pad_saved_columns():
     while bt_bridge.length < bt_ladder.length: bt_bridge.push(0)
     while bt_ground.length < bt_ladder.length: bt_ground.push(-1)  // (a save from before, #123)
     while bt_drag.length < bt_ladder.length: bt_drag.push(0)
+    while bt_foundation.length < bt_ladder.length: bt_foundation.push(-1)  // (a save from before, #192)
     for(unit_columns()) col:
         while col.length < u_id.length: col.push(0)
     for(building_columns()) col:

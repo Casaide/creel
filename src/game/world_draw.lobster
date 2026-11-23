@@ -41,7 +41,7 @@ def site_stage(b:int) -> int:
     if b_done[b] != 0: return -1
     if levelling(b): return -2
     let k = b_kind[b]
-    let found = bt_build_ticks[k] * r_foundation_pct / 100
+    let found = bt_build_ticks[k] * foundation_of(k) / 100
     return clamp((b_progress[b] - found) * 4 / max(1, bt_build_ticks[k] - found), 0, 3)
 
 // Where something stands on the canvas (Iso.to_ground: raised ground lifts it).

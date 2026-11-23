@@ -18,7 +18,7 @@ let LA_NAMES = [ "unit_count", "u_id", "u_x", "u_y", "u_kind", "u_owner", "u_tas
     "t_animal", "u_hp", "b_hp", "lay_foundation", "fits", "plant", "terrain_at", "terrain_type", "approach_cell", "b_making", "bt_drag", "entry_rect", "hold_put",
     "emit", "event_count", "event_get",
     "place", "give", "spawn", "wait", "wait_for", "expect", "keep", "kept",
-    "delivery_count", "delivery_get" ]
+    "delivery_count", "delivery_get", "site_phase" ]
 let LA_TEST_FIRST = 96  // place ... kept: a pack's tests' own (testkit/pack_tests, #190), refused to its rules
 let LA_TEST_LAST = 103
 
@@ -494,6 +494,9 @@ def lua_api(id:int, a:[int]):
             if not lfail:
                 if j < 0 or j >= jb_id.length or f < 0 or f > 5: lua_fail("delivery_get: no delivery {j} field {f} ({jb_id.length} under way)")
                 else: lx_r_int([ jb_unit[j], jb_from[j], jb_to[j], jb_res[j], jb_n[j], jb_phase[j] ][f])
+        case 106:  // site_phase(b): 0 levelling, 1 waiting for goods, 2 building, 3 standing (#192)
+            let b = lx_a_building(a, 0, id)
+            if b >= 0: lx_r_int(site_phase(b))
         default: lua_fail("an unknown API function")
 
 // ------------------------------------------------------------------ the hook points

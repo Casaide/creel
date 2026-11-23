@@ -172,13 +172,29 @@ def hold_room(b:int, r:int) -> int:
 def build_cap(b:int) -> int:
     let full = bt_build_ticks[b_kind[b]]
     if not b_site[b].length: return full
-    return full * (r_foundation_pct * 10 + (1000 - r_foundation_pct * 10) * site_permille(b) / 1000) / 1000
+    let f = foundation_of(b_kind[b])
+    return full * (f * 10 + (1000 - f * 10) * site_permille(b) / 1000) / 1000
 
 // Whether site b is still being levelled: under its foundation (build_cap with no goods), with rules
 // goods_after_foundation on, so its goods aren't fetched yet (#138).
 def levelling(b:int) -> bool:
     if r_goods_after_foundation == 0 or b_done[b] != 0 or not b_site[b].length: return false
-    return b_progress[b] < bt_build_ticks[b_kind[b]] * (r_foundation_pct * 10) / 1000
+    return b_progress[b] < bt_build_ticks[b_kind[b]] * (foundation_of(b_kind[b]) * 10) / 1000
+
+// Type k's foundation, in percent of its build: its own "foundation_pct", else the rules' (#192).
+def foundation_of(k:int) -> int: return if k < bt_foundation.length and bt_foundation[k] >= 0: bt_foundation[k] else: r_foundation_pct
+
+// Where site b is (#192): SP_LEVEL under its foundation (a road being dug), SP_WAIT built as far as its goods let it,
+// SP_BUILD going up, SP_DONE standing. A site with no goods to bring (a field) goes straight from levelling to building.
+let SP_LEVEL = 0
+let SP_WAIT = 1
+let SP_BUILD = 2
+let SP_DONE = 3
+
+def site_phase(b:int) -> int:
+    if b_done[b] != 0: return SP_DONE
+    if b_progress[b] < bt_build_ticks[b_kind[b]] * (foundation_of(b_kind[b]) * 10) / 1000: return SP_LEVEL
+    return if b_site[b].length and b_progress[b] >= build_cap(b): SP_WAIT else: SP_BUILD
 
 def site_permille(b:int) -> int:
     var need = 0
