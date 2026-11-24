@@ -108,6 +108,8 @@ async function main () {
   let r = await runScript(cfg, sim, { start: {}, steps: [{ step: 75 }, { units: {} }] })
   check(r.ok && r.tick === 75 && JSON.stringify(r.hashes) === '[[0,0],[30,210],[60,420]]' && r.steps[1].total === 1, 'the runner steps, keeps the hash every 30 ticks and asks (' + JSON.stringify(r) + ')')
   check(sim.asked.join(' ') === 'start step:30 step:30 step:15 units state', 'in steps that end on the hash ticks (' + sim.asked.join(' ') + ')')
+  r = await runScript(cfg, fake(), { start: {}, steps: [{ step: 20 }, { units: {} }, { step: 20 }] })
+  check(r.ok && r.tick === 40 && JSON.stringify(r.hashes) === '[[0,0],[30,210]]', 'a step after a query goes on from the tick the match is at (' + JSON.stringify(r) + ')')
   r = await runScript(cfg, fake(40), { start: {}, steps: [{ step: 100 }, { units: {} }] })
   check(!r.ok && /tick 40: solid/.test(r.error) && r.steps.length === 1, 'it stops on a broken invariant (' + r.error + ')')
   r = await runScript(cfg, fake(0, 50), { start: {}, steps: [{ step: 100, until: { kinds: ['built'] } }, { step: 5 }] })

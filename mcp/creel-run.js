@@ -45,6 +45,7 @@ async function runScript (cfg, sim, script) {
     if (script.load) out.start = await ask('load', { path: savePath(script.load) })  // (a match from the same args first: the sim side loads into one)
   } catch (e) { return fail(e.message) }
   noteHash(out.start)
+  let now = out.start.tick  // (the tick the match is at: a query's result has none)
 
   for (let j = 0; j < (script.steps || []).length; j++) {
     const st = script.steps[j]
@@ -57,7 +58,7 @@ async function runScript (cfg, sim, script) {
         if (!Number.isInteger(left) || left < 1) return fail('step ' + j + ': a whole number of ticks, 1 or more', j)
         let s = null
         while (left > 0) {
-          const tick = s ? s.tick : (out.steps.length ? out.steps[out.steps.length - 1].tick : out.start.tick)
+          const tick = s ? s.tick : now
           let n = Math.min(left, STEP_MAX)
           if (hashEvery > 0) n = Math.min(n, hashEvery - (tick % hashEvery))
           const q = { ticks: n, invariants: checked, stuck_limit: script.stuck_limit || 0 }
@@ -67,12 +68,14 @@ async function runScript (cfg, sim, script) {
           noteHash(s)
           if ((checked && s.broken) || (st.until && s.event)) break
         }
+        now = s.tick
         const r = Object.assign({ step: op }, s)
         out.steps.push(r)
         if (checked && s.broken) return fail('an invariant broke at tick ' + s.tick + ': ' + s.broken, j)
         if (st.until && !s.event) return fail('no event like ' + JSON.stringify(st.until) + ' by tick ' + s.tick, j)
       } else if (op === 'save' || op === 'load') {
         const s = await ask(op, { path: savePath(st[op]) })
+        now = s.tick
         noteHash(s)
         out.steps.push(Object.assign({ step: op }, s))
       } else if (QUERIES.includes(op)) {
