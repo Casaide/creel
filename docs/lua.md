@@ -98,11 +98,56 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
   Events aren't state: they're never saved or hashed.
 - **State:** `unit_column`, `building_column`, `player_column` (at load); `unit_get(col, i)`, `unit_set(col, i, v)`,
   `building_get`, `building_set`, `player_get`, `player_set`.
+- **Events by name:** `event_kind(name)` is the kind of an engine event (`pick`, `drop`, `built` ...), as `event_get`'s
+  field 0 gives it. A pack's Lua always has this tick's events: they're kept whenever a pack has Lua.
 - **Data:** `rules()` (the match's rules, as a table; a fraction is nil).
 - **Constants:** `TICK_HZ`, `T_NONE`, `GATHER`, `T_RETURN`, `BUILD`, `T_CARRY`, `GIVE_UP`, `HOOK_ORDER_BASE`. A pack
   that makes up a task of its own uses a code from 100 up.
 
 New API functions are added in `src/lua/api.lobster` (`LA_NAMES` and the switch in `lua_api`), when a rule needs one.
+
+## Rules in phases: `process{}`
+
+Most rules of a town are a unit (or a building) going through steps: walk to the inn, eat, wait for the next dish, go
+back to work. Creel loads a small library into every pack's Lua before its own files (`src/lua/process.lobster`), and
+`process{}` declares such a rule as named phases. Declare it as the files load, call its `tick()` from `on_tick`:
+
+```lua
+local meal = process{ name = "meal", leave = function(i) back_to_work(i) end, phases = {
+  { "walk", enter = go_to_inn, done = at_inn, next = "eat" },
+  { "eat", enter = sit_down, ticks = 3 * TICK_HZ, next = function(i) if still_hungry(i) then return "wait" end end },
+  { "wait", event = "drop", match = function(i, a, b, c, n) return b == inn_of(i) end, ticks = 10 * TICK_HZ, timeout = "walk" },
+} }
+
+function on_tick() meal.tick() end
+function task_name(i) return meal.phase(i) or "" end
+```
+
+A phase is a table: its name first, then any of these.
+
+| Field | What it does |
+| --- | --- |
+| `enter(i)` | called as `i` comes into the phase |
+| `done(i)` | checked each tick: true goes on to `next` |
+| `event`, `match(i, a, b, c, n)` | an event of this kind this tick (a name, as `event_kind` takes, or a pack's own code, as `emit` takes) for which `match` is true (or any, without `match`) goes on to `next` |
+| `ticks` | a timer: once it runs out, a phase with nothing else to wait for goes on to `next`, and one waiting on `done` or an event goes to `timeout` |
+| `next`, `timeout` | the phase after: a name, or `function(i)` that returns one; `nil` (or none) ends the process |
+
+The process's own fields: `name` (its columns are `<name>_phase` and `<name>_at`, so its state is saved, loaded and
+hashed like any hook column), `on` (`"unit"`, the default, or `"building"`), `phases`, and `leave(i)`, called when it
+ends (and when it's stopped). What it gives back:
+
+| Function | What it does |
+| --- | --- |
+| `start(i)`, `go(i, name)` | puts `i` in the first phase, or in the one named (`nil` ends it) |
+| `stop(i)` | ends it now, if `i` is in it |
+| `phase(i)` | the phase `i` is in, by name, or `nil` |
+| `left(i)` | the ticks left on its phase's timer (0 for none) |
+| `step(i)`, `tick()` | one tick for `i`, or for every unit (building) in it: an event first, then `done`, then the timer; at most one move a tick |
+
+A declaration that's wrong (a phase going on to one that isn't there, two of a name, an event kind that isn't one) is
+the pack's error as it loads. `examples/plain/src/test_lua.lobster`'s `test_process` has one rule written by hand and
+as a process, doing the same tick for tick.
 
 ## A pack's own tests
 

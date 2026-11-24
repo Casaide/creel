@@ -378,6 +378,130 @@ def test_fuzz():
         check(got == concat_string(lprint, "|") or starts_with(got, "error: "), "fuzz: {src}")
     check(tried == 20000, "fuzz: every one ran")
 
+// ------------------------------------------------------------------ process{} (#194): rules in named phases
+// A pack's Lua with Creel's process library loaded first, as lua_declare loads it, and its hook columns fresh.
+def run_process(src:string) -> string:
+    l_api_names = LA_NAMES
+    lua_reset()
+    lua_api_consts()
+    lua_quiet = true
+    stops_forgotten()
+    hook_unit_names = []
+    hook_unit_cols = []
+    hook_building_names = []
+    hook_building_cols = []
+    let why = lua_load_pack("t", [ LUA_PROCESS_FILE, "t.lua" ], [ LUA_PROCESS, src ])
+    lua_freeze()
+    return if why != "": "error: " + why else: concat_string(lprint, "|")
+
+// One rule, a meal: walk till there (x 30 on), eat 3 ticks, then one that has to (y over 0) waits up to 5 ticks for a
+// pack event naming it (code 7, a its id); one that doesn't, or that got it, is done; one that waited in vain walks again.
+let MEAL_BY_HAND = """
+local col_ph = unit_column("hand_phase")
+local col_at = unit_column("hand_at")
+local function enter(i, ph, ticks)
+  unit_set(col_ph, i, ph)
+  if ticks then unit_set(col_at, i, tick() + ticks) else unit_set(col_at, i, 0) end
+  if ph == 0 then print(tick(), u_id(i), "done") else print(tick(), u_id(i), ({ "walk", "eat", "wait" })[ph]) end
+end
+function start(i) enter(i, 1) end
+function on_tick()
+  for i = 0, unit_count() - 1 do
+    local ph = unit_get(col_ph, i)
+    if ph == 1 then
+      if u_x(i) >= 30 then enter(i, 2, 3) end
+    elseif ph == 2 then
+      if tick() >= unit_get(col_at, i) then
+        if u_y(i) > 0 then enter(i, 3, 5) else enter(i, 0) end
+      end
+    elseif ph == 3 then
+      local got = false
+      for e = 0, event_count() - 1 do
+        if event_get(e, 0) == 107 and event_get(e, 1) == u_id(i) then got = true end
+      end
+      if got then enter(i, 0)
+      elseif tick() >= unit_get(col_at, i) then enter(i, 1) end
+    end
+  end
+end
+"""
+
+let MEAL_AS_PROCESS = """
+local function say(what) return function(i) print(tick(), u_id(i), what) end end
+local meal = process{ name = "meal", leave = say("done"), phases = {
+  { "walk", enter = say("walk"), done = function(i) return u_x(i) >= 30 end, next = "eat" },
+  { "eat", enter = say("eat"), ticks = 3, next = function(i) if u_y(i) > 0 then return "wait" end end },
+  { "wait", enter = say("wait"), event = 7, match = function(i, a) return a == u_id(i) end, ticks = 5, timeout = "walk" },
+} }
+function start(i) meal.start(i) end
+function on_tick() meal.tick() end
+function phase(i) print(tostring(meal.phase(i)) .. " " .. tostring(meal.left(i))) end
+function stop(i) meal.stop(i) end
+"""
+
+// Runs a meal rule on three units for 40 ticks (each walks 5 a tick; unit 9's event comes at tick 20): what it printed.
+def meal_trace(src:string) -> string:
+    let loaded = run_process(src)
+    if loaded != "": return loaded
+    u_id = [ 4, 9, 12 ]
+    u_x = [ 0, 0, 10 ]
+    u_y = [ 0, 1, 1 ]
+    tick = 0
+    events_on = true
+    var out = []::string
+    for(3) i: out.push(call("start", [ lv_int(i) ]))
+    for(40):
+        events = []
+        if tick == 20: events.push(Event { EV_PACK + 7, 9, 0, 0, 0, 0, 0 })
+        for(3) i: u_x[i] += 5
+        let got = call("on_tick", [])
+        if got != "": out.push(got)
+        tick++
+    events = []
+    events_on = false
+    return concat_string(out, "|")
+
+def test_process():
+    let hand = meal_trace(MEAL_BY_HAND)
+    let proc = meal_trace(MEAL_AS_PROCESS)
+    check(find_string(hand, "done") >= 0 and find_string(hand, "\t12\twait") >= 0, "the hand-made meal runs: {hand}")
+    check(proc == hand, "a rule as process\{\} does what the same rule by hand does\n  hand: {hand}\n  proc: {proc}")
+    check(MEAL_AS_PROCESS.length * 2 < MEAL_BY_HAND.length + MEAL_AS_PROCESS.length, "and it\'s shorter")
+    // (unit 12 waits in vain and walks again; unit 9 got its event; unit 4 never waits)
+    check(find_string(proc, "20\t9\tdone") >= 0 or find_string(proc, "21\t9\tdone") >= 0, "a phase waiting on an event goes on when it comes: {proc}")
+    // what it says of a unit, and stopping it
+    run_process(MEAL_AS_PROCESS)
+    u_id = [ 4 ]
+    u_x = [ 50 ]
+    u_y = [ 1 ]
+    tick = 100
+    call("start", [ lv_int(0) ])
+    check(call("phase", [ lv_int(0) ]) == "walk 0" or find_string(call("phase", [ lv_int(0) ]), "walk") >= 0, "a unit\'s phase by name")
+    call("on_tick", [])
+    check(call("phase", [ lv_int(0) ]) == "eat 3", "and the ticks left of its timer: {call("phase", [ lv_int(0) ])}")
+    check(call("stop", [ lv_int(0) ]) == "100\t4\tdone", "stopping it leaves it")
+    check(call("phase", [ lv_int(0) ]) == "nil 0", "and then it has no phase")
+    check(hook_unit_names.length == 2 and hook_unit_names[0] == "meal_phase" and hook_unit_names[1] == "meal_at", "its state is two hook columns: {hook_unit_names}")
+    tick = 0
+    // a declaration that's wrong is the pack's error, as it loads
+    check(find_string(run_process("process\{ name = \"m\", phases = \{ \{ \"a\", next = \"b\" \} \} \}"), "goes on to b, which is no phase") >= 0, "a phase going on to one that isn\'t there")
+    check(find_string(run_process("process\{ name = \"m\", phases = \{ \{ \"a\" \}, \{ \"a\" \} \} \}"), "two phases are called a") >= 0, "two phases of a name")
+    check(find_string(run_process("process\{ name = \"m\", phases = \{ \{ \"a\", event = \"nope\" \} \} \}"), "no event kind nope") >= 0, "an event kind that isn\'t one")
+    check(find_string(run_process("process\{ phases = \{\} \}"), "it needs a name") >= 0, "a process without a name")
+    check(run_process("print(event_kind(\"built\") == {EV_BUILT}, event_kind(\"drop\") == {EV_DROP})") == "true\ttrue", "event_kind names the engine\'s kinds")
+    // on buildings
+    b_id = [ 7 ]
+    run_process("local p = process\{ name = \"bp\", on = \"building\", phases = \{ \{ \"one\", ticks = 2, next = \"two\" \}, \{ \"two\" \} \} \}\nfunction go() p.start(0) end function on_tick() p.tick() end function ph() print(p.phase(0)) end")
+    call("go", [])
+    tick = 2
+    call("on_tick", [])
+    check(call("ph", []) == "two" and hook_building_names.length == 2, "a process on buildings")
+    b_id = []
+    u_id = []
+    u_x = []
+    u_y = []
+    tick = 0
+
 test_values()
 test_statements()
 test_functions()
@@ -388,6 +512,7 @@ test_check_source()
 test_crashes()
 test_view()
 test_events()
+test_process()
 test_pack_tests()
 test_budgets()
 test_dispatch()
