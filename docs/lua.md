@@ -52,9 +52,9 @@ Lua 5.4, cut to what lockstep needs:
 | `on_unit_tick(i)` | each tick, for each unit whose type has `"tick": true` | |
 | `can_place(p, k, cx, cy, sx, sy)` | player `p` places building type `k` at `cx, cy` (size `sx, sy`) | false refuses |
 | `can_make(b)` | building slot `b` is about to start a round of its recipe (its inputs are in) | false holds it back this tick |
-| `on_hit(by, target, damage)` | a blow is about to land on unit slot `target` from unit id `by` | the damage |
+| `on_hit(by, target, damage)` | a blow is about to land on unit slot `target` from unit id `by` | the damage (the `hit` event gives what it returns) |
 | `on_hurt(target, by)` | after the tick's blows, for each unit hurt | |
-| `on_death(i, killer)` | unit slot `i` is dying | |
+| `on_death(i, killer)` | unit slot `i` is dying (animals too: `t_animal(u_kind(i))` tells them apart) | |
 | `on_order(code, p, ids, x, y)` | an order with a code from `HOOK_ORDER_BASE` up | |
 | `ai_train_score(p, slot, k, score)` | a bot weighs training type `k` | the score |
 | `delivery_level(b, r, level, kind)` | the delivery market (rules economy `deliveries`, #191) weighs a delivery of good `r`: kind 0 a want of building slot `b`, 1 a full workshop `b`'s goods out, 2 workshop `b`'s spare goods to a store | its level: higher goes first |
@@ -72,8 +72,8 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
   `set_u_target`, `set_u_work`, `set_u_stuck`, `set_u_moving`.
 - **Buildings:** `building_count`, `b_id`, `b_kind`, `b_owner`, `b_done`, `b_progress`, `b_hp`, `b_hold(b, r)`,
   `b_want(b, r)`, `b_coming(b, r)`, `offered(b, r)`, `b_is_site`, `site_permille`, `site_phase` (0 levelling, 1 waiting for goods, 2 building, 3 standing), `build_stage` (the stage of its type's `"stages"` it is at, from 0), `building_index(id)`,
-  `building_rect(b)` (four values), `entry_rect(b)` (where a unit stands to reach it: its door tile with economy `doors`, else the same as building_rect; #133), `mid_dist2(b, x, y)`.
-- **Types:** `building_type_count`, `building_type(k)` (its buildings.json entry, as a table), `bt_road`, `bt_drag` (laid a cell at a time: a road or a field; #126), `bt_line`,
+  `building_rect(b)` (four values: x0, y0, x1, y1 in sim units, `TILE` a tile, both edges inside it), `entry_rect(b)` (where a unit stands to reach it: its door tile with economy `doors`, else the same as building_rect; #133), `mid_dist2(b, x, y)`.
+- **Types:** `building_type_count`, `building_type(k)` (its buildings.json entry, as a table; the entry has no id of its own), `building_type_index(name)` (the type whose buildings.json key is `name`, as `place()` takes it, or -1), `bt_road`, `bt_drag` (laid a cell at a time: a road or a field; #126), `bt_line`,
   `bt_ladder`, `bt_store`, `bt_hold(k, r)`, `bt_build_ticks`; `unit_type_count`, `t_pop`, `t_slot`, `t_worker`,
   `t_animal`.
 - **Players and resources:** `player_count`, `pop`, `pop_cap`, `set_pop`, `worker_type(p)`, `resource_count`,
@@ -94,7 +94,7 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
   delivery market") and `delivery_level`'s.
 - **Events (#187):** `emit(code, a, b, c, n)` puts the pack's own event in this tick's (kind 100 + code, code 0 to 899; the
   sim only), `event_count()` and `event_get(i, field)` read this tick's so far (field 0 kind, 1 a, 2 b, 3 c, 4 n, 5 x,
-  6 y). The engine's kinds are `EV_*` in `src/lib/state.lobster`; `hold_take` and `hold_put` add `taken` and `put` events.
+  6 y). The engine's kinds are `EV_*` in `src/lib/state.lobster`; `hold_take` and `hold_put` add `taken` and `put` events (a 0, b the building's id, c the good, n how many).
   Events aren't state: they're never saved or hashed.
 - **State:** `unit_column`, `building_column`, `player_column` (at load); `unit_get(col, i)`, `unit_set(col, i, v)`,
   `building_get`, `building_set`, `player_get`, `player_set`.
@@ -171,6 +171,11 @@ up or checks them, then says what to run before the next one. Besides the whole 
 
 A test fails on an `expect` that doesn't hold, an error, an invariant that breaks (with the tick and what broke), or an
 event that doesn't come in time. These functions are refused to a pack's rules: only its tests may call them.
+
+The tests are a pack of their own, with their own Lua: a test can't call the rules' functions or read their locals. It
+reads their state the way the sim keeps it: a column declared by the same name (`unit_column("meal_phase")`) is the
+same column, and the API reads the rest. In a phase, and in `invariants()`, `tick()` is how many ticks have run: the
+tick that just ran is `tick() - 1`.
 
 ```lua
 -- data/tests/roads.lua: a road cell takes one stone, carried to it by a carrier, then it's laid

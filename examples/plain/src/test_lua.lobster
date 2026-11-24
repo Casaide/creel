@@ -224,6 +224,12 @@ def test_view():  // (the placement preview and the panel ask too, on one machin
         if starts_with(name, "set_") or ends_with(name, "_set"): check((find(LA_WRITE_NAMES) n: n == name) >= 0, "{name} is a writer")
     lua_on = false
 
+def test_type_index():  // (#226: a building type by its buildings.json key, as place() takes it)
+    bt_name = [ "hut", "hall" ]
+    run("function go() print(building_type_index(\"hall\"), building_type_index(\"hut\"), building_type_index(\"keep\")) end")
+    check(call("go", []) == "1\t0\t-1", "building_type_index finds a type by its key, -1 for none")
+    bt_name = []
+
 def test_events():  // (#187: a pack's own events, and reading this tick's)
     events_on = true
     events = []
@@ -511,6 +517,7 @@ test_limits()
 test_check_source()
 test_crashes()
 test_view()
+test_type_index()
 test_events()
 test_process()
 test_pack_tests()

@@ -57,7 +57,7 @@ is missing is left out.
 | --- | --- |
 | `creel_start` | Starts a fresh match. The args are the game's own; `start_help` says what they are. |
 | `creel_step` | Runs the sim for this many ticks (20 a second, up to an hour per call), then gives the tick and the hash. With `invariants`, it checks every tick and stops on the first that breaks. |
-| `creel_events` | What happened since the start: goods picked up, dropped, gathered, made, used, lost; built, trained, deaths; packs' own. Filtered by kind, unit, building, resource, tick. `creel_step`'s `until` stops on one. |
+| `creel_events` | What happened since the start: goods picked up, dropped, gathered, made, used, lost; built, trained, deaths; packs' own. Filtered by kind, unit, building, resource, tick. `creel_step`'s `until` stops on one. A pack's own events show as `pack:<code>`, and a filter takes that name or `100 + code`. |
 | `creel_invariants` | Checks the invariants now: the engine's and the packs' own (`src/testkit/invariants.lobster`). |
 | `creel_pack_tests` | Runs a pack's own tests (`data/tests/*.lua`, [docs/lua.md](../docs/lua.md#a-packs-own-tests)), each in a fresh match from the start args, with every invariant checked each tick. It gives a line a test, `ok` or `FAIL` and why. |
 | `creel_state` | Gives the tick, the hash and whether a match is running. |
@@ -106,9 +106,10 @@ It's locked the way the sim is. An agent can only act through a player's orders,
 can only run the commands the game's config names. Saves and pictures go in one scratch folder, by name only. Calls run
 one at a time and in order, so the same calls from the same start give the same hashes.
 
-## Coming next
+## Talking to it without an MCP client
 
-As the engine work lands, each piece adds its tool here: the draw probe
-([#188](https://github.com/Casaide/creel/issues/188)) and packs' own Lua tests ([#190](https://github.com/Casaide/creel/issues/190)).
+`creel-mcp.js` reads one JSON-RPC message a line on stdin and answers one a line on stdout: `initialize`, then
+`tools/list` and `tools/call` with `{"name": ..., "arguments": ...}`. A shell script can drive it by writing those lines;
+`mcp/test/test.js` does it from Node. For a scripted run, the runner (above) is simpler.
 
 `mcp/test/test.js` drives the server as an agent would. `check.sh` runs it when there's a Node.
