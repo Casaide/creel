@@ -62,7 +62,7 @@ is missing is left out.
 | `creel_pack_tests` | Runs a pack's own tests (`data/tests/*.lua`, [docs/lua.md](../docs/lua.md#a-packs-own-tests)), each in a fresh match from the start args, with every invariant checked each tick. It gives a line a test, `ok` or `FAIL` and why. |
 | `creel_state` | Gives the tick, the hash and whether a match is running. |
 | `creel_names` | Gives unit types, building types, resources and order names by index, plus the tile size and the map size. |
-| `creel_units`, `creel_buildings` | Give the state of units or buildings, filtered by ids, owner, kind or a rectangle. |
+| `creel_units`, `creel_buildings` | Give the state of units or buildings, filtered by ids, owner, kind or a rectangle. A unit on a pack's own task has its `task_name`, as the panel says it. |
 | `creel_players`, `creel_cell` | Give each player's population and stock, or one cell's road, building and resource. |
 | `creel_order` | Gives a player's order. Like any player's order, it runs at the start of the turn after next. |
 | `creel_save`, `creel_load` | Save or load a match by name. |
