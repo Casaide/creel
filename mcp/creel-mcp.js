@@ -280,4 +280,4 @@ function main () {
 }
 
 if (require.main === module) main()
-module.exports = { loadConfig, tools, fill }
+module.exports = { loadConfig, tools, fill, Sim }

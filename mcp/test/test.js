@@ -70,6 +70,55 @@ async function main () {
   const unknown = await rpc('no/such', {})
   check(unknown.error && unknown.error.code === -32601, 'an unknown method is an error')
 
+  // The runner (#195): examples/plain's start refuses, so the whole run says so; then a stand-in sim for the rest
+  const { spawnSync } = require('child_process')
+  const os = require('os')
+  const fs = require('fs')
+  const script = path.join(os.tmpdir(), 'creel-run-test.json')
+  fs.writeFileSync(script, JSON.stringify({ steps: [{ step: 10 }] }))
+  const ran = spawnSync(process.execPath, [path.join(root, 'mcp/creel-run.js'), path.join(root, 'examples/plain/creel-mcp.json'), script], { encoding: 'utf8' })
+  let doc = {}
+  try { doc = JSON.parse(ran.stdout) } catch (e) {}
+  check(ran.status === 1 && doc.ok === false && /no data/.test(doc.error), 'the runner runs the game\'s sim side and says why a run failed (' + ran.stdout.slice(0, 300) + ')')
+  const { runScript } = require('../creel-run.js')
+  const fake = (breakAt, eventAt) => {
+    let tick = 0
+    const asked = []
+    return {
+      asked,
+      request: async (cmd, q) => {
+        asked.push(cmd + (q.ticks ? ':' + q.ticks : ''))
+        if (cmd === 'step') {
+          let ev = null
+          let broken = ''
+          for (let n = 0; n < q.ticks; n++) {
+            tick++
+            if (tick === breakAt) { broken = 'solid: units 1 and 2'; break }
+            if (q.until && tick === eventAt) { ev = { kind: 'built', tick }; break }
+          }
+          return { ok: true, result: { tick, hash: tick * 7, broken, event: q.until ? ev : undefined } }
+        }
+        if (cmd === 'units') return { ok: true, result: { total: 1, units: [{ id: 1 }] } }
+        return { ok: true, result: { tick, hash: tick * 7 } }
+      }
+    }
+  }
+  const cfg = { scratch: os.tmpdir() }
+  let sim = fake()
+  let r = await runScript(cfg, sim, { start: {}, steps: [{ step: 75 }, { units: {} }] })
+  check(r.ok && r.tick === 75 && JSON.stringify(r.hashes) === '[[0,0],[30,210],[60,420]]' && r.steps[1].total === 1, 'the runner steps, keeps the hash every 30 ticks and asks (' + JSON.stringify(r) + ')')
+  check(sim.asked.join(' ') === 'start step:30 step:30 step:15 units state', 'in steps that end on the hash ticks (' + sim.asked.join(' ') + ')')
+  r = await runScript(cfg, fake(40), { start: {}, steps: [{ step: 100 }, { units: {} }] })
+  check(!r.ok && /tick 40: solid/.test(r.error) && r.steps.length === 1, 'it stops on a broken invariant (' + r.error + ')')
+  r = await runScript(cfg, fake(0, 50), { start: {}, steps: [{ step: 100, until: { kinds: ['built'] } }, { step: 5 }] })
+  check(r.ok && r.steps[0].tick === 50 && r.tick === 55, 'a step with until stops on its event (' + JSON.stringify(r.steps) + ')')
+  r = await runScript(cfg, fake(), { start: {}, steps: [{ step: 10, until: { kinds: ['built'] } }] })
+  check(!r.ok && /no event like/.test(r.error), 'and fails if it never comes')
+  r = await runScript(cfg, fake(), { start: {}, steps: [{ fly: 1 }] })
+  check(!r.ok && /no "fly"/.test(r.error) && r.failed_step === 0, 'a step it doesn\'t know is an error')
+  r = await runScript(cfg, fake(), { start: {}, steps: [{ save: '../x' }] })
+  check(!r.ok && /letters, digits/.test(r.error), 'save names stay in the scratch folder')
+
   proc.stdin.end()
   console.log('test_mcp: ' + passed + ' passed, ' + failed + ' failed')
   process.exit(failed ? 1 : 0)
