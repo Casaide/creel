@@ -424,8 +424,8 @@ def in_a_heap(i:int) -> bool:
     return false
 
 // A tile to stand on near c for unit i: a free road tile first (as the genre's idle ones wait on the road, not on
-// ground a building may go up on), else free plain ground, one ring out, then two (#216: a door with no road beside it
-// yet, or a crowd round it). Walkable, no building on it but a road, no door, nobody standing there; -1 if none.
+// ground a building may go up on), else free plain ground, one ring out, then two but its far corners (#216: a door
+// with no road beside it yet, or a crowd round it). Walkable, no building on it but a road, no door, nobody standing there; -1 if none.
 def aside_cell(i:int, c:int, doors:[int]) -> int:
     let ln = lane(i)
     for(2) ri:
@@ -436,7 +436,7 @@ def aside_cell(i:int, c:int, doors:[int]) -> int:
                 let dy = k / (2 * rr + 1) - rr
                 let x = c % W + dx
                 let y = c / W + dy
-                if max(abs(dx), abs(dy)) == rr and cell_walkable(x, y, ln):
+                if max(abs(dx), abs(dy)) == rr and dx * dx + dy * dy <= 5 and cell_walkable(x, y, ln):  // (not the far corners: a step aside)
                     let n = y * W + x
                     let ob = if occupied[n] != 0: b_index_of(occupied[n]) else: -1
                     if (ob < 0 or bt_road[b_kind[ob]] >= 0) and not contains(doors, n):
