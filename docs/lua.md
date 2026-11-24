@@ -71,7 +71,7 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
   `u_moving`, `u_stuck`, `u_work`, `u_hp`, `u_orders` (how many queued), `unit_index(id)`; `set_u_task`,
   `set_u_target`, `set_u_work`, `set_u_stuck`, `set_u_moving`.
 - **Buildings:** `building_count`, `b_id`, `b_kind`, `b_owner`, `b_done`, `b_progress`, `b_hp`, `b_hold(b, r)`,
-  `b_want(b, r)`, `b_coming(b, r)`, `offered(b, r)`, `b_is_site`, `site_permille`, `site_phase` (0 levelling, 1 waiting for goods, 2 building, 3 standing), `building_index(id)`,
+  `b_want(b, r)`, `b_coming(b, r)`, `offered(b, r)`, `b_is_site`, `site_permille`, `site_phase` (0 levelling, 1 waiting for goods, 2 building, 3 standing), `build_stage` (the stage of its type's `"stages"` it is at, from 0), `building_index(id)`,
   `building_rect(b)` (four values), `entry_rect(b)` (where a unit stands to reach it: its door tile with economy `doors`, else the same as building_rect; #133), `mid_dist2(b, x, y)`.
 - **Types:** `building_type_count`, `building_type(k)` (its buildings.json entry, as a table), `bt_road`, `bt_drag` (laid a cell at a time: a road or a field; #126), `bt_line`,
   `bt_ladder`, `bt_store`, `bt_hold(k, r)`, `bt_build_ticks`; `unit_type_count`, `t_pop`, `t_slot`, `t_worker`,

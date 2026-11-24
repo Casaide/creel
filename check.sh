@@ -35,6 +35,10 @@ echo "$out" | grep -q "test_market: .* 0 failed" || bad=1
 out="$("$LOBSTER" test_site_phase.lobster 2>&1)"
 echo "$out" | grep -v warning | tail -1
 echo "$out" | grep -q "test_site_phase: .* 0 failed" || bad=1
+# (and a site's stages as data, headless: each stage's goods asked for once it's reached)
+out="$("$LOBSTER" test_build_stages.lobster 2>&1)"
+echo "$out" | grep -v warning | tail -1
+echo "$out" | grep -q "test_build_stages: .* 0 failed" || bad=1
 # (and edge scrolling, headless)
 out="$("$LOBSTER" test_edge_scroll.lobster 2>&1)"
 echo "$out" | grep -v warning | tail -1

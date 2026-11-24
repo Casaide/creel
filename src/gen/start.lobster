@@ -61,6 +61,7 @@ def setup_world(seed_value:int, map_id:string, sides:[JV], rules:JV, team_ids:[i
     r_carrier_load = gint(ec, "carrier_load", 1)
     r_foundation_pct = gint(ec, "foundation_pct", 0)
     r_goods_after_foundation = if gbool(ec, "goods_after_foundation", false): 1 else: 0
+    r_stages_ahead = gint(ec, "stages_ahead", 0)
     r_inside_ticks = gint(ec, "inside_ticks", 0)
     r_door_step = gint(ec, "door_step", 0)
     r_idle_aside = if gbool(ec, "idle_aside", false): 1 else: 0
@@ -154,6 +155,21 @@ def roles_from_data():
     let d = at(lib_data("buildings.json"), "buildings")
     bt_roles = map(bt_name) id: role_bits(gstrs(at(d, id), "roles"))
 
+// A type's "stages" (#193): [{"pct": n, "goods": [resource ids]}, ...], flattened as each stage's pct then a flag per
+// resource. Their pcts add up to 100; a good of its cost in none is used in the last.
+def stages_of(b) -> [int]:
+    let out = []::int
+    var total = 0
+    for(glist(b, "stages")) st:
+        let goods = gstrs(st, "goods")
+        for(goods) g: assert has_s(resource_names, g)
+        let pct = gint(st, "pct", 0)
+        total += pct
+        out.push(pct)
+        for(resource_names) r: out.push(if has_s(goods, r): 1 else: 0)
+    assert not out.length or total == 100
+    return out
+
 def setup_btypes():
     let terrain_ids = tr_names
     for(su_btypes) b, k:
@@ -168,6 +184,7 @@ def setup_btypes():
         let bflyers = gbool(b, "blocks_flyers", false)
         bt_size.push(size)
         bt_build_ticks.push(as_int(at(b, "build_time")) * 20)
+        bt_stages.push(stages_of(b))
         bt_foundation.push(gint(b, "foundation_pct", -1))  // its own share built with no goods (a road's digging, #192)
         bt_pop.push(as_int(at(b, "pop")))
         bt_sight.push(gint(b, "sight", 0))
