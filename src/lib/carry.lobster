@@ -423,19 +423,26 @@ def in_a_heap(i:int) -> bool:
             if dist2(u_x[i], u_y[i], u_x[j], u_y[j]) < rr * rr: return true
     return false
 
-// A road tile to stand on beside c for unit i (as the genre's idle ones wait on the road, not on ground a building may go
-// up on): walkable, no building but the road on it, no door, nobody standing there; -1 if none.
+// A tile to stand on near c for unit i: a free road tile first (as the genre's idle ones wait on the road, not on
+// ground a building may go up on), else free plain ground, one ring out, then two but its far corners (#216: a door
+// with no road beside it yet, or a crowd round it). Walkable, no building on it but a road, no door, nobody standing there; -1 if none.
 def aside_cell(i:int, c:int, doors:[int]) -> int:
     let ln = lane(i)
-    for(9) k:
-        let x = c % W + k % 3 - 1
-        let y = c / W + k / 3 - 1
-        if k != 4 and cell_walkable(x, y, ln):
-            let n = y * W + x
-            let ob = if occupied[n] != 0: b_index_of(occupied[n]) else: -1
-            if (ob < 0 or bt_road[b_kind[ob]] >= 0) and not contains(doors, n):
-                let cx, cy = centre(n)
-                if road.length and road[n] > 0 and not anyone_standing(i, cx, cy): return n
+    for(2) ri:
+        let rr = ri + 1
+        for(2) ps:  // (0: road, 1: any free ground)
+            for((2 * rr + 1) * (2 * rr + 1)) k:
+                let dx = k % (2 * rr + 1) - rr
+                let dy = k / (2 * rr + 1) - rr
+                let x = c % W + dx
+                let y = c / W + dy
+                if max(abs(dx), abs(dy)) == rr and dx * dx + dy * dy <= 5 and cell_walkable(x, y, ln):  // (not the far corners: a step aside)
+                    let n = y * W + x
+                    let ob = if occupied[n] != 0: b_index_of(occupied[n]) else: -1
+                    if (ob < 0 or bt_road[b_kind[ob]] >= 0) and not contains(doors, n):
+                        let cx, cy = centre(n)
+                        let on_road = road.length > 0 and road[n] > 0
+                        if (on_road or ps == 1) and not anyone_standing(i, cx, cy) and clear_path(u_x[i], u_y[i], cx, cy, u_radius[i], ln): return n  // (a step it walks straight to, not round a building)
     return -1
 
 // Each idle carrier looks once a second, in a tick of its own: standing in a doorway, or in the body of an idle one before it,
