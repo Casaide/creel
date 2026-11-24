@@ -70,6 +70,36 @@ is missing is left out.
 | `creel_run_tests` | Runs one of the suites the game names under `tests`. |
 | `creel_restart` | Starts a fresh sim process, after a code or data change. |
 
+## The runner
+
+`mcp/creel-run.js` drives the same sim side from a script instead of an agent, for scripts and CI (#195). It needs no
+window or GPU, and prints one JSON document:
+
+```
+node creel/mcp/creel-run.js creel-mcp.json run.json [out.json]
+```
+
+```json
+{ "start": { "mods": ["steading"] }, "hash_every": 30, "invariants": true,
+  "steps": [ { "step": 1200 }, { "order": { "player": 0, "command": "move", "ids": [3], "a": 5000, "b": 4000 } },
+             { "step": 600, "until": { "kinds": ["built"] } }, { "buildings": { "owner": 0 } }, { "events": { "kinds": ["drop"] } },
+             { "save": "noon" } ] }
+```
+
+- **`start`** is the game's start args, as `creel_start` takes them. With **`load`** too, the run resumes that save instead:
+  it starts a match from the args first, then loads the save into it.
+- Each step does one thing:
+  - **`step`** runs that many ticks. With `until`, it stops on the first event like it, as `creel_step` does.
+  - **`order`**, **`units`**, **`buildings`**, **`players`**, **`cell`**, **`events`**, **`invariants`**, **`state`** and **`names`** take the same fields as their tools.
+  - **`save`** and **`load`** take a name.
+- **`hash_every`** (default 30) puts `[tick, hash]` in `hashes` every that many ticks.
+- **`invariants`** (default true) checks every invariant on every tick.
+
+The run stops at the first step that fails, the first invariant that breaks, or an `until` that never came. The JSON
+holds `ok`, `start`, each step's result, `hashes` and the last `tick` and `hash`; when a run stops, it also holds
+`error` and `failed_step`. The exit code is 0 only when every step held. A run is deterministic: the same script gives
+the same JSON on any machine, so two machines' outputs can be diffed.
+
 ## What it can't do
 
 It's locked the way the sim is. An agent can only act through a player's orders, so it can't write the sim's state. It
