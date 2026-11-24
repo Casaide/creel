@@ -442,7 +442,7 @@ def aside_cell(i:int, c:int, doors:[int]) -> int:
                     if (ob < 0 or bt_road[b_kind[ob]] >= 0) and not contains(doors, n):
                         let cx, cy = centre(n)
                         let on_road = road.length > 0 and road[n] > 0
-                        if (on_road or ps == 1) and not anyone_standing(i, cx, cy): return n
+                        if (on_road or ps == 1) and not anyone_standing(i, cx, cy) and clear_path(u_x[i], u_y[i], cx, cy, u_radius[i], ln): return n  // (a step it walks straight to, not round a building)
     return -1
 
 // Each idle carrier looks once a second, in a tick of its own: standing in a doorway, or in the body of an idle one before it,

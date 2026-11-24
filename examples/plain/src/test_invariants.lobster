@@ -151,6 +151,10 @@ def test_builder_stops():
 def test_aside_off_door():
     tiny_world()
     walks = [ map(W * H): 1 ]
+    for(footprint(0)) c: walks[0][c] = 0
+    roomy = []
+    tight = []
+    make_room()
     lane_base = [ 0, 0 ]
     occupied = map(W * H): 0
     for(footprint(0)) c: occupied[c] = b_id[0]
@@ -169,6 +173,16 @@ def test_aside_off_door():
     check(on_ring1 >= 0 and road[on_ring1] == 0, "free ground beside it comes before a road two tiles off ({on_ring1})")
     road[door + 1] = 1
     check(aside_cell(0, door, [ door ]) == door + 1, "and a free road tile beside it before free ground ({aside_cell(0, door, [ door ])})")
+    // A wall to its right: the free road and ground past it aren't a step away, so it steps left (#216).
+    for(3) k: walks[0][door - W + 1 + k * W] = 0
+    for(3) k: walks[0][door - W + 2 + k * W] = 0
+    roomy = []
+    tight = []
+    make_room()
+    road[door + 1] = 0
+    road[door + 3] = 1
+    let past_wall = aside_cell(0, door, [ door ])
+    check(past_wall >= 0 and past_wall % W < door % W + 1, "with a wall beside it, it steps the other way, not round the wall ({past_wall})")
 
 test_invariants()
 test_pack()
