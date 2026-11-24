@@ -146,7 +146,32 @@ def test_builder_stops():
     build_job(0)
     check(u_task[0] == T_NONE and u_moving[0] == 0, "a builder whose site is finished on its way stops where it is (task {u_task[0]}, moving {u_moving[0]})")
 
+// An idle carrier on a door tile steps off it: onto a free road tile beside it if there is one, else onto free ground,
+// never staying in the doorway for want of a road (#216).
+def test_aside_off_door():
+    tiny_world()
+    walks = [ map(W * H): 1 ]
+    lane_base = [ 0, 0 ]
+    occupied = map(W * H): 0
+    for(footprint(0)) c: occupied[c] = b_id[0]
+    road = []
+    bt_road = [ -1 ]  // (the store is no road plan)
+    let door = door_cell(0)
+    u_x[0] = (door % W) * TILE + TILE / 2
+    u_y[0] = (door / W) * TILE + TILE / 2
+    let to = aside_cell(0, door, [ door ])
+    check(to >= 0 and to != door and occupied[to] == 0 and max(abs(to % W - door % W), abs(to / W - door / W)) == 1,
+          "with no road near, a carrier in a doorway steps onto free ground beside it ({door} -> {to})")
+    road = map(W * H): 0
+    let rc = door + 2  // (two to the right: free road one ring further than the free ground)
+    road[rc] = 1
+    let on_ring1 = aside_cell(0, door, [ door ])
+    check(on_ring1 >= 0 and road[on_ring1] == 0, "free ground beside it comes before a road two tiles off ({on_ring1})")
+    road[door + 1] = 1
+    check(aside_cell(0, door, [ door ]) == door + 1, "and a free road tile beside it before free ground ({aside_cell(0, door, [ door ])})")
+
 test_invariants()
 test_pack()
 test_builder_stops()
+test_aside_off_door()
 print "test_invariants: {passes} passed, {fails} failed"
