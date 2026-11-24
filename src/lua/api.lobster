@@ -18,7 +18,7 @@ let LA_NAMES = [ "unit_count", "u_id", "u_x", "u_y", "u_kind", "u_owner", "u_tas
     "t_animal", "u_hp", "b_hp", "lay_foundation", "fits", "plant", "terrain_at", "terrain_type", "approach_cell", "b_making", "bt_drag", "entry_rect", "hold_put",
     "emit", "event_count", "event_get",
     "place", "give", "spawn", "wait", "wait_for", "expect", "keep", "kept",
-    "delivery_count", "delivery_get", "site_phase" ]
+    "delivery_count", "delivery_get", "site_phase", "build_stage" ]
 let LA_TEST_FIRST = 96  // place ... kept: a pack's tests' own (testkit/pack_tests, #190), refused to its rules
 let LA_TEST_LAST = 103
 
@@ -497,6 +497,9 @@ def lua_api(id:int, a:[int]):
         case 106:  // site_phase(b): 0 levelling, 1 waiting for goods, 2 building, 3 standing (#192)
             let b = lx_a_building(a, 0, id)
             if b >= 0: lx_r_int(site_phase(b))
+        case 107:  // build_stage(b): the stage of its type's "stages" site b is at, from 0 (#193)
+            let b = lx_a_building(a, 0, id)
+            if b >= 0: lx_r_int(build_stage(b))
         default: lua_fail("an unknown API function")
 
 // ------------------------------------------------------------------ the hook points

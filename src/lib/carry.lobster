@@ -93,7 +93,7 @@ def wanting(p:int, r:int, fb:int) -> int:
     let x = b_cx[fb] * TILE + b_sx[fb] * TILE / 2
     let y = b_cy[fb] * TILE + b_sy[fb] * TILE / 2
     for(b_id.length) b:
-        if b != fb and b_owner[b] == p and b_want[b][r] > 0 and not levelling(b):
+        if b != fb and b_owner[b] == p and b_want[b][r] > 0 and site_asks(b, r):
             let d2 = mid_dist2(b, x, y)
             if d2 < best_d2:
                 best_d2 = d2
@@ -128,9 +128,9 @@ def carry_match(p:int):
                     start_job(i, b, dst, r, min(offered(b, r), min(room, r_carrier_load)), wanted)
                     jobs++
     for(b_id.length) b:
-        if b_owner[b] == p and not levelling(b):  // (a site being levelled asks nothing yet, #138)
+        if b_owner[b] == p:  // (a site being levelled, or before a good's stage, doesn't ask for it yet: #138, #193)
             for(num_resources) r:
-                while jobs < CARRY_MATCHES and b_want[b][r] > 0:
+                while jobs < CARRY_MATCHES and b_want[b][r] > 0 and site_asks(b, r):
                     let src = carry_source(p, r, b)
                     if src < 0: break
                     let i = free_carrier(p, src)
@@ -200,9 +200,9 @@ def market_plan(p:int, dl) -> [Delivery]:
                 if bt_offer[b_kind[b]][r] != 0 and offered(b, r) > 0:
                     if out_full(b, r): out.push(Delivery { DL_FULL_OUT, b, r, gint(dl, "full_out", 2), 1000, out.length })
     for(b_id.length) b:
-        if b_owner[b] == p and not levelling(b):
+        if b_owner[b] == p:
             for(num_resources) r:
-                if b_want[b][r] > 0: out.push(Delivery { DL_WANT, b, r, dl_want_level(dl, b, r), if nearer and b_done[b] == 0: site_permille(b) else: 1000, out.length })
+                if b_want[b][r] > 0 and site_asks(b, r): out.push(Delivery { DL_WANT, b, r, dl_want_level(dl, b, r), if nearer and b_done[b] == 0: site_permille(b) else: 1000, out.length })
     for(nb) k:
         let b = (tick + k) % nb
         if b_owner[b] == p and b_done[b] != 0 and bt_store[b_kind[b]] == 0:

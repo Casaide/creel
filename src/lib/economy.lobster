@@ -172,13 +172,23 @@ def hold_room(b:int, r:int) -> int:
 def build_cap(b:int) -> int:
     let full = bt_build_ticks[b_kind[b]]
     if not b_site[b].length: return full
+    if staged(b_kind[b]):  // each stage in turn, only as far as its own goods are in (#193)
+        var cap = 0
+        for(stage_count(b_kind[b])) s:
+            let share = full * stage_pct(b_kind[b], s) / 100
+            let pm = stage_permille(b, s)
+            cap += share * pm / 1000
+            if pm < 1000: return cap
+        return full
     let f = foundation_of(b_kind[b])
     return full * (f * 10 + (1000 - f * 10) * site_permille(b) / 1000) / 1000
 
 // Whether site b is still being levelled: under its foundation (build_cap with no goods), with rules
 // goods_after_foundation on, so its goods aren't fetched yet (#138).
 def levelling(b:int) -> bool:
-    if r_goods_after_foundation == 0 or b_done[b] != 0 or not b_site[b].length: return false
+    if b_done[b] != 0 or not b_site[b].length: return false
+    if staged(b_kind[b]): return build_stage(b) == 0 and not stage_has_goods(b, 0)  // (its first stage, with no goods)
+    if r_goods_after_foundation == 0: return false
     return b_progress[b] < bt_build_ticks[b_kind[b]] * (foundation_of(b_kind[b]) * 10) / 1000
 
 // Type k's foundation, in percent of its build: its own "foundation_pct", else the rules' (#192).
@@ -193,8 +203,56 @@ let SP_DONE = 3
 
 def site_phase(b:int) -> int:
     if b_done[b] != 0: return SP_DONE
+    if staged(b_kind[b]):
+        if levelling(b): return SP_LEVEL
+        return if b_site[b].length and b_progress[b] >= build_cap(b): SP_WAIT else: SP_BUILD
     if b_progress[b] < bt_build_ticks[b_kind[b]] * (foundation_of(b_kind[b]) * 10) / 1000: return SP_LEVEL
     return if b_site[b].length and b_progress[b] >= build_cap(b): SP_WAIT else: SP_BUILD
+
+// ---- a site's stages, as data (#193): buildings.json "stages", each a share of the build and the goods it uses. A good
+// of the site's cost is in the first stage that names it, else the last. A site asks for a stage's goods only once it
+// has been built up to that stage.
+def staged(k:int) -> bool: return k < bt_stages.length and bt_stages[k].length > 0
+def stage_count(k:int) -> int: return bt_stages[k].length / (1 + num_resources)
+def stage_pct(k:int, s:int) -> int: return bt_stages[k][s * (1 + num_resources)]
+
+// The stage good r of type k is used in.
+def stage_of_good(k:int, r:int) -> int:
+    for(stage_count(k)) s:
+        if bt_stages[k][s * (1 + num_resources) + 1 + r] != 0: return s
+    return stage_count(k) - 1
+
+def stage_has_goods(b:int, s:int) -> bool:
+    for(b_site[b]) c, r:
+        if c > 0 and stage_of_good(b_kind[b], r) == s: return true
+    return false
+
+// Stage s of site b: its goods delivered, per-mille (1000 with none).
+def stage_permille(b:int, s:int) -> int:
+    var need = 0
+    var got = 0
+    for(b_site[b]) c, r:
+        if stage_of_good(b_kind[b], r) == s:
+            need += c
+            got += min(c, b_hold[b][r])
+    return if need == 0: 1000 else: got * 1000 / need
+
+// The stage site b is at: the first it hasn't been built through (0 for a type without stages; the last once built).
+def build_stage(b:int) -> int:
+    let k = b_kind[b]
+    if not staged(k): return 0
+    var end = 0
+    for(stage_count(k)) s:
+        end += bt_build_ticks[k] * stage_pct(k, s) / 100
+        if b_progress[b] < end: return s
+    return stage_count(k) - 1
+
+// Whether site b asks for good r now: not while it's levelled, nor before the stage that uses r, less the rules'
+// stages_ahead (#138, #193). Its goods are still used in their stages' order.
+def site_asks(b:int, r:int) -> bool:
+    if levelling(b): return false
+    if not staged(b_kind[b]) or not b_site[b].length or b_done[b] != 0: return true
+    return stage_of_good(b_kind[b], r) <= build_stage(b) + r_stages_ahead
 
 def site_permille(b:int) -> int:
     var need = 0

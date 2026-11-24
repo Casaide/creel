@@ -375,6 +375,7 @@ var bt_store = []::int    // 1: what it holds counts as its owner's stock (a sto
 var bt_after = []::[int]  // building types a player needs one finished of before it may lay this one (buildings.json "after", #105)
 var bt_road = []::int     // the road kind a road plan of this type lays when built (rules economy.roads), or -1 (#51)
 var bt_ground = []::int   // the terrain a plan of this type becomes when built (buildings.json "becomes": {"terrain"}), or -1 (#123)
+var bt_stages = []::[int]  // per type: buildings.json "stages", each its share of the build in percent then a flag per resource for the goods it uses; [] for one stage as before (#193)
 var bt_foundation = []::int  // per type: buildings.json "foundation_pct", the share of its site built with no goods; -1: the rules' foundation_pct (#192)
 var bt_drag = []::int     // 1: laid by dragging, a plan a cell, as a road is (buildings.json "drag", #123)
 var bt_bridge = []::int   // a road plan that spans water: built, it stands as a bridge (lib/bridges) (#51)
@@ -430,6 +431,7 @@ var pop_cap = []::int
 var stock = []::[int]  // [resource][player]; in a stocked economy the sum of what the owner's stores hold
 var r_stocked = 0      // rules economy.model "stocked": goods sit in buildings (b_hold), not in one pool (#48)
 var r_foundation_pct = 0  // rules economy.foundation_pct: the share of a stocked site built with no goods brought, its foundation (#105)
+var r_stages_ahead = 0  // rules economy.stages_ahead: how many stages past the one a site is at may have their goods fetched already (#193)
 var r_goods_after_foundation = 0  // rules economy.goods_after_foundation: a site's goods are fetched only once its foundation is built (#138)
 var r_inside_ticks = 0  // how long a carrier is inside a building at each pick-up and drop (rules economy "inside_ticks", #120)
 var r_door_step = 0  // rules economy "door_step": ticks a carrier takes stepping through a door, in and again out, seen (#164)
@@ -670,6 +672,7 @@ def pad_saved_columns():
     while bt_ground.length < bt_ladder.length: bt_ground.push(-1)  // (a save from before, #123)
     while bt_drag.length < bt_ladder.length: bt_drag.push(0)
     while bt_foundation.length < bt_ladder.length: bt_foundation.push(-1)  // (a save from before, #192)
+    while bt_stages.length < bt_ladder.length: bt_stages.push([])  // (a save from before, #193)
     for(unit_columns()) col:
         while col.length < u_id.length: col.push(0)
     for(building_columns()) col:
