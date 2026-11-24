@@ -5,6 +5,7 @@
 // is an error in the pack, never a crash. A game calls the lua_<hook> functions from its own hooks (examples/plain).
 
 import lua.lua
+import lua.process
 
 // The functions, in id order (lua_api's switch below goes by these ids).
 let LA_NAMES = [ "unit_count", "u_id", "u_x", "u_y", "u_kind", "u_owner", "u_task", "u_target", "u_carry", "u_carry_kind",
@@ -18,7 +19,7 @@ let LA_NAMES = [ "unit_count", "u_id", "u_x", "u_y", "u_kind", "u_owner", "u_tas
     "t_animal", "u_hp", "b_hp", "lay_foundation", "fits", "plant", "terrain_at", "terrain_type", "approach_cell", "b_making", "bt_drag", "entry_rect", "hold_put",
     "emit", "event_count", "event_get",
     "place", "give", "spawn", "wait", "wait_for", "expect", "keep", "kept",
-    "delivery_count", "delivery_get", "site_phase", "build_stage" ]
+    "delivery_count", "delivery_get", "site_phase", "build_stage", "event_kind" ]
 let LA_TEST_FIRST = 96  // place ... kept: a pack's tests' own (testkit/pack_tests, #190), refused to its rules
 let LA_TEST_LAST = 103
 
@@ -500,6 +501,12 @@ def lua_api(id:int, a:[int]):
         case 107:  // build_stage(b): the stage of its type's "stages" site b is at, from 0 (#193)
             let b = lx_a_building(a, 0, id)
             if b >= 0: lx_r_int(build_stage(b))
+        case 108:  // event_kind(name): the kind of event `name` (pick, drop, built ...: EV_NAMES), as event_get's field 0 (#194)
+            let name = lx_want_str(a, 0, "event_kind")
+            if not lfail:
+                let k = ev_kind(name)
+                if k < 0 or starts_with(name, "pack:"): lua_fail("event_kind: no event kind {name} (a pack\'s own is 100 + its code)")
+                else: lx_r_int(k)
         default: lua_fail("an unknown API function")
 
 // ------------------------------------------------------------------ the hook points
@@ -519,6 +526,12 @@ def lx_note_stop(pk:LPack):
     hook_stopped.push(pk.id)
     hook_stopped_why.push(pk.error)
 
+// A pack's files or sources with Creel's process library first (lua/process).
+def with_process(xs:[string], first:string) -> [string]:
+    let out = [ first ]
+    for(xs) x: out.push(x)
+    return out
+
 // As a match starts (the game's hook_declare): every pack's Lua runs, the game's first, and is then read-only. A pack
 // the match's state says stopped stays stopped (a loaded save).
 def lua_declare() -> void:
@@ -531,14 +544,16 @@ def lua_declare() -> void:
         pack_lua(p)
         if p.lua_files.length:
             lua_on = true
-            lua_load_pack(p.id, map(p.lua_files) f: p.id + "/hooks/" + f, p.lua_sources)
+            let files = map(p.lua_files) f: p.id + "/hooks/" + f
+            lua_load_pack(p.id, with_process(files, LUA_PROCESS_FILE), with_process(p.lua_sources, LUA_PROCESS))
             let pk = top(l_packs)
             let was = find(hook_stopped) id: id == p.id
             if was >= 0: pk.error = hook_stopped_why[was]
             else: lx_note_stop(pk)
     if lua_test_files.length:  // (a pack's tests, last: testkit/pack_tests)
         lua_on = true
-        lua_load_pack(lua_test_id, lua_test_files, lua_test_sources)
+        lua_load_pack(lua_test_id, with_process(lua_test_files, LUA_PROCESS_FILE), with_process(lua_test_sources, LUA_PROCESS))
+    if lua_on: events_on = true  // (a pack may read this tick's events: they're there whoever else reads them)
     lua_freeze()
 
 // The packs' Lua for this match: loaded again if the rules aren't the ones it loaded with (a save was loaded). Never
