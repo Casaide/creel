@@ -67,6 +67,12 @@ async function main () {
   check(none.result.isError, 'only configured suites run')
   const t = await tool('creel_run_tests', { suite: 'edge_scroll' })
   check(!t.isError && body(t).passed && /0 failed/.test(body(t).tail), 'a configured suite runs and passes (' + JSON.stringify(t).slice(0, 300) + ')')
+  const badStep = await tool('creel_step', { ticks: 'many' })
+  check(badStep.isError && /ticks should be a whole number/.test(body(badStep)), 'a field of the wrong type is an error (' + JSON.stringify(badStep) + ')')
+  const after = await tool('creel_state', {})
+  check(!after.isError, 'and the sim side goes on (' + JSON.stringify(after) + ')')
+  const packs = await tool('creel_pack_tests', { pack: 'only_in_args', args: { mods: ['only_in_args'] } })
+  check(packs.isError && /no data/.test(body(packs)), 'pack tests start a match from their args to find a pack they name (' + JSON.stringify(packs) + ')')
   const unknown = await rpc('no/such', {})
   check(unknown.error && unknown.error.code === -32601, 'an unknown method is an error')
 

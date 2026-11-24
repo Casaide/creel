@@ -103,7 +103,7 @@ the same JSON on any machine, so two machines' outputs can be diffed.
 ## What it can't do
 
 It's locked the way the sim is. An agent can only act through a player's orders, so it can't write the sim's state. It
-can only run the commands the game's config names. Saves and pictures go in one scratch folder, by name only. Calls run
+can only run the commands the game's config names. Saves and pictures go in one scratch folder, by name only. A request with a field of the wrong type is answered with an error, and the sim goes on. Calls run
 one at a time and in order, so the same calls from the same start give the same hashes.
 
 ## Coming next

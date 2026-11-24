@@ -248,6 +248,33 @@ def mcp_order(q:JV) -> string, JV:
     o.set("command", jint(code))
     return "", o
 
+// A request's fields, checked before it's read: one of the wrong type is refused with an error, and the sim side goes
+// on (the readers below assert on a type they don't expect). The game's own start args are its mcp_start's to check.
+let MCP_INTS = [ "a", "b", "c", "d", "cx", "cy", "id", "limit", "player", "queue", "since", "stuck_limit", "ticks" ]
+let MCP_INT_LISTS = [ "ids", "owner", "kind", "rect" ]
+let MCP_STRS = [ "cmd", "pack", "path" ]
+
+def mcp_whole(v:JV) -> bool: return v.kind == J_INT or (v.kind == J_FLOAT and float(int(v.f)) == v.f)  // (the reader reads every number as a float)
+
+def mcp_bad(q:JV, where:string) -> string:
+    if q.kind != J_OBJ: return "{where} should be an object"
+    for(q.keys) k, j:
+        let v = q.a[j]
+        let at_ = if where == "": k else: "{where}.{k}"
+        if (find(MCP_INTS): _ == k) >= 0 and not mcp_whole(v): return "{at_} should be a whole number"
+        if (find(MCP_STRS): _ == k) >= 0 and v.kind != J_STR: return "{at_} should be a string"
+        if (find(MCP_INT_LISTS): _ == k) >= 0:
+            if v.kind != J_ARR: return "{at_} should be a list of whole numbers"
+            for(v.a) x: if not mcp_whole(x): return "{at_} should be a list of whole numbers"
+        if k == "kinds":
+            if v.kind != J_ARR: return "{at_} should be a list of event names or codes"
+            for(v.a) x: if not mcp_whole(x) and x.kind != J_STR: return "{at_} should be a list of event names or codes"
+        if k == "invariants" and v.kind != J_BOOL: return "{at_} should be true or false"
+        if k == "until":
+            let why = mcp_bad(v, at_)
+            if why != "": return why
+    return ""
+
 def mcp_handle(q:JV) -> string, JV:
     let cmd = gstr(q, "cmd", "")
     if cmd == "start":
@@ -261,7 +288,11 @@ def mcp_handle(q:JV) -> string, JV:
         return "", mcp_state()
     if cmd == "pack_tests":  // (#190: a pack's tests/*.lua, each in a fresh match from args; the last one's is left running)
         let id = gstr(q, "pack", "")
-        if (find(lib_packs) p: p.id == id) < 0: return "no pack \"{id}\" (packs: {concat_string(map(lib_packs) p: p.id, ", ")})", jnull()
+        var started = ""
+        if (find(lib_packs) p: p.id == id) < 0: started = mcp_start(gobj(q, "args"))  // (the args' mods aren't loaded yet: a match from them loads them)
+        if (find(lib_packs) p: p.id == id) < 0:
+            let why = if started.length: "; a match from the args didn\'t start: {started}" else: ""
+            return "no pack \"{id}\" (packs: {concat_string(map(lib_packs) p: p.id, ", ")}){why}", jnull()
         var why = ""
         let ran = pack_tests_of(id):
             let err = mcp_start(gobj(q, "args"))
@@ -327,9 +358,13 @@ def mcp_serve():
         let line = mcp_read()
         if not line.length: return
         let q = parse_json(line)
-        let id = gint(q, "id", 0)
-        if gstr(q, "cmd", "") == "quit":
+        let bad = mcp_bad(q, "")
+        let idv = if q.kind == J_OBJ: get(q, "id") else: nil
+        let id = if idv and mcp_whole(idv): as_int(idv) else: 0  // (a bad request still gets its answer, by its id)
+        if bad == "" and gstr(q, "cmd", "") == "quit":
             mcp_reply(id, true, jnull())
             return
-        let err, v = mcp_handle(q)
-        mcp_reply(id, not err.length, if err.length: jstr(err) else: v)
+        if bad != "": mcp_reply(id, false, jstr(bad))
+        else:
+            let err, v = mcp_handle(q)
+            mcp_reply(id, not err.length, if err.length: jstr(err) else: v)
