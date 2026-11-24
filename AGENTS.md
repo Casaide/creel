@@ -11,6 +11,9 @@ LOBSTER=<path to lobster> ./check.sh   # Creel's modules compile with nothing fr
 A game on Creel can be run headless through MCP while you work on it: start a match, step, order, query, hash, save, capture,
 run its tests ([mcp/README.md](mcp/README.md)).
 
+A game's or mod's rules are written as a rules contract first ([docs/rules-contract.md](docs/rules-contract.md)), then tested
+and coded with the `make-rules-mod` skill (`.claude/skills/make-rules-mod/`).
+
 Creel is built with [Lobster](https://github.com/aardappel/lobster); `LOBSTER_VERSION` names the commit it was last tested with.
 Games use Creel as a git submodule pinned to a commit, so a change here only reaches a game when it bumps its pin.
 
