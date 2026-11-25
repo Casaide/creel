@@ -175,6 +175,11 @@ up or checks them, then says what to run before the next one. Besides the whole 
 | `expect(ok, what)` | A check: the test fails with `what` if `ok` isn't true. |
 | `keep(name, n)`, `kept(name)` | An integer kept for a later phase (a phase's locals are gone when it ends). |
 
+A test can run with rules of its own: a global table `test_<name>_rules` is merged into the match's rules for that
+test only (objects merge, as a mod's data does), and the packs load with them, so `rules()` gives the merged ones. Use
+it to reach a row the default numbers never reach (a feast longer than a minute). It changes what the packs read; the
+engine's own settings come from the match's start.
+
 A test fails on an `expect` that doesn't hold, an error, an invariant that breaks (with the tick and what broke), or an
 event that doesn't come in time. These functions are refused to a pack's rules: only its tests may call them.
 
