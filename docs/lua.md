@@ -78,6 +78,12 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
   `t_animal`.
 - **Players and resources:** `player_count`, `pop`, `pop_cap`, `set_pop`, `worker_type(p)`, `resource_count`,
   `resource_index(name)`.
+- **Goods, by economy.** In a pooled economy (each player keeps its goods in one pool, the default) `stock(p, r)` reads
+  player p's goods of r, and `stock_take(p, r, n)` and `stock_put(p, r, n)` change them: how many moved, with a
+  `stock_taken` or `stock_put` event (a the player, c the good, n how many; #222). In a stocked economy (rules economy
+  `model: "stocked"`: goods are in buildings' holds, sites ask for them and carriers fetch them) `stock` reads the sum of
+  the player's stores, and the goods move by building: `b_hold`, `hold_take`, `hold_put`, `want`. Each function
+  refuses the other economy's goods with an error that says so.
 - **The map:** `W`, `H`, `TILE`, `cell_of(x, y)`, `road(c)`, `occupied(c)`, `amount(c)`, `res_at(c)`,
   `nearest_resource(x, y, kind, i, farms, roomy_only, seen)`, `terrain_at(c)`, `terrain_type(id)` (-1 if there's none),
   `plant(c, t)` (terrain t, one that `grows` in terrain.json, on free walkable ground at c; it grows on by itself,

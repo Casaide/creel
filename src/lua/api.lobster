@@ -19,7 +19,7 @@ let LA_NAMES = [ "unit_count", "u_id", "u_x", "u_y", "u_kind", "u_owner", "u_tas
     "t_animal", "u_hp", "b_hp", "lay_foundation", "fits", "plant", "terrain_at", "terrain_type", "approach_cell", "b_making", "bt_drag", "entry_rect", "hold_put",
     "emit", "event_count", "event_get",
     "place", "give", "spawn", "wait", "wait_for", "expect", "keep", "kept",
-    "delivery_count", "delivery_get", "site_phase", "build_stage", "event_kind", "building_type_index" ]
+    "delivery_count", "delivery_get", "site_phase", "build_stage", "event_kind", "building_type_index", "stock", "stock_take", "stock_put" ]
 let LA_TEST_FIRST = 96  // place ... kept: a pack's tests' own (testkit/pack_tests, #190), refused to its rules
 let LA_TEST_LAST = 103
 
@@ -91,7 +91,7 @@ def lua_of_json(v:JV) -> int:
     return t
 
 // The functions that change the sim: not while it's only being read (the view's calls, and can_place).
-let LA_WRITE_NAMES = [ "lay_foundation", "plant", "approach_cell", "set_u_task", "set_u_target", "set_u_work", "set_u_stuck", "set_u_moving", "set_pop", "want", "hold_take", "hold_put",
+let LA_WRITE_NAMES = [ "lay_foundation", "plant", "approach_cell", "set_u_task", "set_u_target", "set_u_work", "set_u_stuck", "set_u_moving", "set_pop", "want", "hold_take", "hold_put", "stock_take", "stock_put",
     "emit", "trained", "start_gather", "start_build", "approach_building", "clear_task", "unit_set", "building_set", "player_set" ]
 let LA_WRITES = map(LA_WRITE_NAMES) n:
     let id = find(LA_NAMES) x: x == n
@@ -510,6 +510,27 @@ def lua_api(id:int, a:[int]):
         case 109:  // building_type_index(name): the type whose buildings.json key is name, or -1 (#226)
             let name = lx_want_str(a, 0, "building_type_index")
             if not lfail: lx_r_int(find(bt_name): _ == name)
+        case 110, 111, 112:  // stock(p, r), stock_take(p, r, n), stock_put(p, r, n): player p's goods of r (#222)
+            let p = lx_a_player(a, 0, id)
+            let r = lx_a_res(a, 1, id)
+            if p >= 0 and r >= 0 and not lfail:
+                let have = if r < stock.length and p < stock[r].length: stock[r][p] else: 0
+                if id == 110: lx_r_int(have)
+                else:
+                    let n = lx_want_int(a, 2, lx_la_name(id))
+                    if lfail: return
+                    if r_stocked != 0: lua_fail("{lx_la_name(id)}: the economy is stocked, its goods are in buildings\' holds (hold_take, hold_put)")
+                    elif r >= stock.length or p >= stock[r].length: lua_fail("{lx_la_name(id)}: player {p} keeps no {r}")
+                    elif id == 111:
+                        let got = clamp(n, 0, have)
+                        stock[r][p] -= got
+                        if got > 0 and events_on: events.push(Event { EV_STOCK_TAKEN, p, 0, r, 0, 0, got })
+                        lx_r_int(got)
+                    else:
+                        let put = max(0, n)
+                        stock[r][p] += put
+                        if put > 0 and events_on: events.push(Event { EV_STOCK_PUT, p, 0, r, 0, 0, put })
+                        lx_r_int(put)
         default: lua_fail("an unknown API function")
 
 // ------------------------------------------------------------------ the hook points
