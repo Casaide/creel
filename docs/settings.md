@@ -137,3 +137,15 @@ first sound:
 
 `play_sound(name, db)` plays the next take at `db` over its bus; `play_sound_at(name, db, pan)` does the same from the
 left or right, `pan` from -1 (all left) to 1 (all right). The player's own `sound_level` (settings.txt) is on top.
+
+## Building for the browser
+
+A game on Creel can be built for the web with Emscripten (wasm32, WebGL 2), from the C++ that `lobster --cpp` writes. It
+needs Lobster at `LOBSTER_VERSION` or later (3b1f968c has the fork's web fixes). What Lobster's web build reads:
+
+| What | Where it's set |
+|---|---|
+| The game's files | Packed into the page with `--preload-file <folder>@/`. Lobster starts in `/`, so the game's folders go at the root (`/data`, `/art`) as it would see them beside `src/` on a desktop. |
+| `LOBSTER_WEB_HIGH_DPI` | An SDL hint, read when the window is made: `1` draws at the screen's pixels rather than the page's (a Retina screen has 2 for each). Off by default. Set it from the page, e.g. `ENV.LOBSTER_WEB_HIGH_DPI = '1'` in `Module.preRun`. |
+
+Smyana's `tools/web/build.sh` and `tools/web/shell.html` are a worked example.

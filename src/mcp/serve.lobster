@@ -141,6 +141,8 @@ def mcp_unit(i:int) -> JV:
     o.set("stuck", jint(u_stuck[i]))
     o.set("work", jint(u_work[i]))
     o.set("orders", jint(u_orders[i].length))
+    let named = lua_task_name(i)  // (what the panel says it's doing: a pack's own task's name, read-only, #225)
+    if named != "": o.set("task_name", jstr(named))
     return o
 
 def mcp_building(b:int) -> JV:

@@ -224,6 +224,12 @@ def test_view():  // (the placement preview and the panel ask too, on one machin
         if starts_with(name, "set_") or ends_with(name, "_set"): check((find(LA_WRITE_NAMES) n: n == name) >= 0, "{name} is a writer")
     lua_on = false
 
+def test_type_index():  // (#226: a building type by its buildings.json key, as place() takes it)
+    bt_name = [ "hut", "hall" ]
+    run("function go() print(building_type_index(\"hall\"), building_type_index(\"hut\"), building_type_index(\"keep\")) end")
+    check(call("go", []) == "1\t0\t-1", "building_type_index finds a type by its key, -1 for none")
+    bt_name = []
+
 def test_events():  // (#187: a pack's own events, and reading this tick's)
     events_on = true
     events = []
@@ -254,6 +260,18 @@ def test_pack_tests():  // (#190: a pack's own tests, tests/*.lua, run by testki
         if tick == 4: events.push(Event { EV_PACK + 7, 0, 0, 0, 0, 0, 0 })
         tick++
     check(equal(got, [ "ok test_kept", "FAIL test_wrong: test_wrong: one is two", "FAIL test_late: after test_late: no built event in 3 ticks", "ok test_mine", "ok test_soon" ]), "a pack\'s tests pass, fail on an expect, and wait for ticks and events: {got}")
+    tick = 0
+    events = []
+    // (#223: a test's own rules, merged into the match's for it alone, the packs loaded with them)
+    let rsrc = "test_long_rules = \{ feast = \{ ticks = 9, foods = \{ \"bread\", \"ale\" \} \} \}\n" +
+        "function test_long() local f = rules().feast expect(f and f.ticks == 9 and f.foods[2] == \"ale\", \"the test\'s own rules\") end\n" +
+        "function test_after() expect(rules().feast == nil, \"and not the next test\'s\") end\n" +
+        "test_bad_rules = 3\nfunction test_bad() end\n"
+    let ran = pack_tests("plain", [ "t.lua" ], [ rsrc ]):
+        tick = 0
+        events = []
+    fn: tick++
+    check(equal(ran, [ "ok test_long", "ok test_after", "FAIL test_bad: test_bad_rules should be a table" ]), "a test runs with its own rules, and only that test: {ran}")
     tick = 0
     events = []
     run("function go() wait(1) end")
@@ -511,6 +529,7 @@ test_limits()
 test_check_source()
 test_crashes()
 test_view()
+test_type_index()
 test_events()
 test_process()
 test_pack_tests()

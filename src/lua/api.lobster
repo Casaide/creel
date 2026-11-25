@@ -19,7 +19,7 @@ let LA_NAMES = [ "unit_count", "u_id", "u_x", "u_y", "u_kind", "u_owner", "u_tas
     "t_animal", "u_hp", "b_hp", "lay_foundation", "fits", "plant", "terrain_at", "terrain_type", "approach_cell", "b_making", "bt_drag", "entry_rect", "hold_put",
     "emit", "event_count", "event_get",
     "place", "give", "spawn", "wait", "wait_for", "expect", "keep", "kept",
-    "delivery_count", "delivery_get", "site_phase", "build_stage", "event_kind" ]
+    "delivery_count", "delivery_get", "site_phase", "build_stage", "event_kind", "building_type_index" ]
 let LA_TEST_FIRST = 96  // place ... kept: a pack's tests' own (testkit/pack_tests, #190), refused to its rules
 let LA_TEST_LAST = 103
 
@@ -507,6 +507,9 @@ def lua_api(id:int, a:[int]):
                 let k = ev_kind(name)
                 if k < 0 or starts_with(name, "pack:"): lua_fail("event_kind: no event kind {name} (a pack\'s own is 100 + its code)")
                 else: lx_r_int(k)
+        case 109:  // building_type_index(name): the type whose buildings.json key is name, or -1 (#226)
+            let name = lx_want_str(a, 0, "building_type_index")
+            if not lfail: lx_r_int(find(bt_name): _ == name)
         default: lua_fail("an unknown API function")
 
 // ------------------------------------------------------------------ the hook points
