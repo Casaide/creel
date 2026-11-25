@@ -346,9 +346,10 @@ def land():
                 j = stray(recs[o + SHOT_OWNER], ax, ay, slack)
                 if j >= 0: d = shot_damage(recs[o + SHOT_SRC], recs[o + SHOT_UP], j)
             if j >= 0:
-                c_hurt[j] += hook_on_hit(by, j, d)
+                let landed = hook_on_hit(by, j, d)  // (the blow as it lands, a pack's on_hit had its say: the event says that one)
+                c_hurt[j] += landed
                 c_hurt_by[j] = by
-                if events_on: events.push(Event { EV_HIT, by, u_id[j], d, ax, ay, 0 })
+                if events_on: events.push(Event { EV_HIT, by, u_id[j], landed, ax, ay, 0 })
             elif events_on: events.push(Event { EV_MISS, by, to, 0, ax, ay, 0 })
         o += SHOT_STRIDE
 
@@ -837,9 +838,10 @@ def combat_tick():
                         shoot_unit(i, k, j, up)
                     else:
                         let d = hit_on_unit(i, k, j, up)
-                        c_hurt[j] += hook_on_hit(u_id[i], j, d)
+                        let landed = hook_on_hit(u_id[i], j, d)
+                        c_hurt[j] += landed
                         c_hurt_by[j] = u_id[i]
-                        if events_on: events.push(Event { EV_HIT, u_id[i], u_id[j], d, u_x[j], u_y[j], 0 })
+                        if events_on: events.push(Event { EV_HIT, u_id[i], u_id[j], landed, u_x[j], u_y[j], 0 })
                 else:
                     var d = boost(i, -1, t_damage[k], damage(t_atk[k], bm_arm[b_owner[b]][b_kind[b]], building_cls(), r_min_damage), r_min_damage)
                     if up < 0: d = uphill(d)
