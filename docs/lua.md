@@ -112,6 +112,8 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
   sets `lua_bots`; #255): a rule that helps the bots with a pack's own mechanics can leave people's sides alone.
   `build_site(b, n)` moves site b on by n ticks of building, as a builder's work would, and it stands at its build time with
   the same `built` event (#257): a rule can raise a building with nobody hammering at it.
+  `hurt_building(b, n)` takes n hit points from building b (its hit points left); at none it falls as it would to blows, and
+  the slots after it move (#258).
   `freeze(i, ticks)` holds unit i still, no moves and no blows, for `ticks` (the longer of two); `frozen(i)` is how many are left. `t_tag(k, name)` says whether type k's line carries a tag (its
   row in the race's table), `t_ranged(k)` whether it shoots.
 - **Events (#187):** `emit(code, a, b, c, n)` puts the pack's own event in this tick's (kind 100 + code, code 0 to 899; the

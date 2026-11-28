@@ -390,6 +390,10 @@ def test_build_site():  // (#257: a site moved on by a pack's rule, no builder)
     check(b_done[0] == 0, "and it isn\'t up yet")
     run("function go() build_site(0, -1) end")
     check(find_string(call("go", []), "0 or more") >= 0, "a site moves on by 0 or more")
+    run("function go() print(hurt_building(0, 30), b_hp(0)) end")
+    check(call("go", []) == "170\t170", "hurt_building takes hit points from a building (#258)")
+    run("function go() hurt_building(0, -1) end")
+    check(find_string(call("go", []), "by 0 or more") >= 0, "a building is hurt by 0 or more")
     b_id = []
     b_kind = []
     b_owner = []

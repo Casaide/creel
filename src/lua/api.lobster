@@ -20,7 +20,7 @@ let LA_NAMES = [ "unit_count", "u_id", "u_x", "u_y", "u_kind", "u_owner", "u_tas
     "emit", "event_count", "event_get",
     "place", "give", "spawn", "wait", "wait_for", "expect", "keep", "kept",
     "delivery_count", "delivery_get", "site_phase", "build_stage", "event_kind", "building_type_index", "stock", "stock_take", "stock_put", "hurt",
-    "reveal", "hide_cell", "discover_cell", "cell_known", "heal", "freeze", "frozen", "t_tag", "t_ranged", "take_cell", "defeat", "defeated", "is_bot", "build_site" ]
+    "reveal", "hide_cell", "discover_cell", "cell_known", "heal", "freeze", "frozen", "t_tag", "t_ranged", "take_cell", "defeat", "defeated", "is_bot", "build_site", "hurt_building" ]
 let LA_TEST_FIRST = 96  // place ... kept: a pack's tests' own (testkit/pack_tests, #190), refused to its rules
 let LA_TEST_LAST = 103
 
@@ -93,7 +93,7 @@ def lua_of_json(v:JV) -> int:
 
 // The functions that change the sim: not while it's only being read (the view's calls, and can_place).
 let LA_WRITE_NAMES = [ "lay_foundation", "plant", "approach_cell", "set_u_task", "set_u_target", "set_u_work", "set_u_stuck", "set_u_moving", "set_pop", "want", "hold_take", "hold_put", "stock_take", "stock_put", "hurt",
-    "reveal", "hide_cell", "discover_cell", "heal", "freeze", "take_cell", "defeat", "build_site", "emit", "trained", "start_gather", "start_build", "approach_building", "clear_task", "unit_set", "building_set", "player_set" ]
+    "reveal", "hide_cell", "discover_cell", "heal", "freeze", "take_cell", "defeat", "build_site", "hurt_building", "emit", "trained", "start_gather", "start_build", "approach_building", "clear_task", "unit_set", "building_set", "player_set" ]
 let LA_WRITES = map(LA_WRITE_NAMES) n:
     let id = find(LA_NAMES) x: x == n
     assert id >= 0
@@ -614,6 +614,15 @@ def lua_api(id:int, a:[int]):
             if b >= 0 and not lfail:
                 if n < 0: lua_fail("build_site: {n} ticks: a site moves on by 0 or more")
                 elif b_done[b] == 0 and n > 0: site_work(b, n, -1)
+        case 128:  // hurt_building(b, n): building b takes n damage; at none left it falls, as one does to blows (slots after it move: keep ids, #258)
+            let b = lx_a_building(a, 0, id)
+            let n = lx_want_int(a, 1, "hurt_building")
+            if b >= 0 and not lfail:
+                if n < 0: lua_fail("hurt_building: {n} damage: a building is hurt by 0 or more")
+                else:
+                    b_hp[b] = max(0, b_hp[b] - n)
+                    lx_r_int(b_hp[b])
+                    if b_hp[b] == 0: fall(b)
         default: lua_fail("an unknown API function")
 
 // ------------------------------------------------------------------ the hook points
