@@ -230,6 +230,30 @@ def test_type_index():  // (#226: a building type by its buildings.json key, as 
     check(call("go", []) == "1\t0\t-1", "building_type_index finds a type by its key, -1 for none")
     bt_name = []
 
+def test_pooled_goods():  // (#222: a player's goods in a pooled economy, from Lua)
+    let names0 = resource_names
+    resource_names = [ "food", "gold" ]
+    pop = [ 0, 0 ]
+    stock = [ [ 10, 3 ], [ 0, 0 ] ]
+    r_stocked = 0
+    events_on = true
+    events = []
+    run("function go() print(stock_take(0, 0, 4), stock(0, 0), stock_take(0, 0, 100), stock_put(1, 1, 7), stock(1, 1)) end")
+    check(call("go", []) == "4\t6\t6\t7\t7", "stock_take takes what\'s there, stock_put adds, stock reads")
+    check(stock[0][0] == 0 and stock[1][1] == 7 and stock[0][1] == 3, "from the player named only")
+    check(events.length == 3 and events[0].kind == EV_STOCK_TAKEN and events[0].a == 0 and events[0].n == 4 and events[2].kind == EV_STOCK_PUT and events[2].a == 1 and events[2].c == 1, "each with its event, naming the player")
+    r_stocked = 1
+    run("function go() stock_take(0, 0, 1) end")
+    check(find_string(call("go", []), "the economy is stocked") >= 0, "a stocked economy\'s goods are in holds: stock_take says so")
+    run("function go() stock_put(2, 0, 1) end")
+    check(find_string(call("go", []), "no player 2") >= 0, "a player that isn\'t there is an error")
+    r_stocked = 0
+    events = []
+    events_on = false
+    stock = []
+    pop = []
+    resource_names = names0
+
 def test_events():  // (#187: a pack's own events, and reading this tick's)
     events_on = true
     events = []
@@ -530,6 +554,7 @@ test_check_source()
 test_crashes()
 test_view()
 test_type_index()
+test_pooled_goods()
 test_events()
 test_process()
 test_pack_tests()
