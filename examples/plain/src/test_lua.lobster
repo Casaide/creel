@@ -254,6 +254,21 @@ def test_pooled_goods():  // (#222: a player's goods in a pooled economy, from L
     pop = []
     resource_names = names0
 
+def test_hurt():  // (a unit hurt from Lua: starving, a fall, a poison; it dies in the tick's blows, as a blow kills)
+    u_id = [ 4 ]
+    u_x = [ 0 ]
+    u_y = [ 0 ]
+    u_hp = [ 10 ]
+    run("function go() print(hurt(0, 3), u_hp(0), hurt(0, 100)) end")
+    check(call("go", []) == "7\t7\t0", "hurt lowers a unit\'s hit points, to none at the least")
+    check(u_hp[0] == 0, "in the sim")
+    run("function go() hurt(0, -1) end")
+    check(find_string(call("go", []), "by 0 or more") >= 0, "a unit isn\'t healed by hurt")
+    u_id = []
+    u_x = []
+    u_y = []
+    u_hp = []
+
 def test_events():  // (#187: a pack's own events, and reading this tick's)
     events_on = true
     events = []
@@ -555,6 +570,7 @@ test_crashes()
 test_view()
 test_type_index()
 test_pooled_goods()
+test_hurt()
 test_events()
 test_process()
 test_pack_tests()
