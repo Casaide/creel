@@ -32,9 +32,9 @@ def vox_meshes(f:vox_file, size:float) -> VoxMeshes:
     if f.nodes.length:
         for(f.nodes) nd:
             if not nd.hidden and nd.model >= 0 and nd.model < f.models.length:
-                for(f.models[nd.model].xyz) _, n:
+                for(f.models[nd.model].idx) i, n:
                     at.push(vox_world(f, nd, n))
-                    ix.push(f.models[nd.model].idx[n])
+                    ix.push(i)
     elif f.models.length:
         let md = f.models[0]
         for(md.xyz) v, n:
