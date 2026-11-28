@@ -177,6 +177,8 @@ def muzzle_of(by:int, mount:int) -> float2:
         let part = if mount < ms.length: ms[mount].part else: ""
         let o, found = vx_point_px(b, "muzzle", part, hull_f, part_facing(i, part, hull_f))
         if found: return o * VX_DRAW_K / 1.5
+        let tip, held = vx_held_muzzle(vx_lks[vx_cur[u_kind[i]]].u, b)  // (none of its own: the gun in its hand, #247)
+        if held: return vx_spot_px(b, tip, hull_f) * VX_DRAW_K / 1.5
     return float2 { 0.0, -12.0 }
 
 // How far a part is kicked back from a shot just fired, drawn px along its facing.
