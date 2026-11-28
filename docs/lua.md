@@ -232,6 +232,10 @@ A game chains each of its hook points (`hooks/active.lobster`) on to `lua_<hook>
 `lua_declare()` from `hook_declare`. `examples/plain/src/hooks/active.lobster` does only that. A program that reads
 packs imports `lua.parse` before `gen.mods`; one that runs the sim imports `lua.lua` and `lua.api` after `gen.start`.
 
+A game also defines `pack_check(p:Pack) -> string` (`hooks/active.lobster`): called once Creel's own checks of a pack's data
+pass, it returns "" or why the pack is refused, for what the game's data contract has beyond Creel's (a building's
+look and the files it names, say). A refused pack is used not at all, as with Creel's own checks.
+
 ## Cost
 
 The interpreter walks the syntax tree: roughly 100 ns a simple statement and 300 ns an API call in a JIT build. Keep

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Creel's own check: its modules compile with nothing from a game but the hooks in examples/plain, edge scrolling's, Lua's, the invariants', the draw probe's, the delivery market's and the MCP's tests pass
+# Creel's own check: its modules compile with nothing from a game but the hooks in examples/plain, edge scrolling's, Lua's, the invariants', the draw probe's, the delivery market's, the .vox meshes' and the MCP's tests pass
 # (and agree with lua5.4, if it's installed: lua_diff.sh).
 #   ./check.sh        LOBSTER=<path to the lobster binary> (default ~/Dev/lobster/bin/lobster)
 LOBSTER="${LOBSTER:-$HOME/Dev/lobster/bin/lobster}"
@@ -35,6 +35,10 @@ echo "$out" | grep -q "test_market: .* 0 failed" || bad=1
 out="$("$LOBSTER" test_site_phase.lobster 2>&1)"
 echo "$out" | grep -v warning | tail -1
 echo "$out" | grep -q "test_site_phase: .* 0 failed" || bad=1
+# (and a .vox model as kit meshes, headless: only the faces that show, standing on the ground, a mesh a palette index)
+out="$("$LOBSTER" test_vox_mesh.lobster 2>&1)"
+echo "$out" | grep -v warning | tail -1
+echo "$out" | grep -q "test_vox_mesh: .* 0 failed" || bad=1
 # (and a site's stages as data, headless: each stage's goods asked for once it's reached)
 out="$("$LOBSTER" test_build_stages.lobster 2>&1)"
 echo "$out" | grep -v warning | tail -1

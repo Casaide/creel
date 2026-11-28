@@ -280,7 +280,8 @@ def mod_check_data(rec:Pack, eras:[string]) -> string:
                 if gstr(hit, "col", "").length != 7: return "shots.json {k}: its hit needs \'col\' as \"#rrggbb\""
                 let sound = gstr(hit, "sound", "")
                 if sound != "" and not has(gobj(data_merge(lib_data("audio.json"), gobj(d, "audio.json")), "sounds"), sound): return "shots.json {k}: its hit\'s sound \'{sound}\' isn\'t in audio.json"
-    return mod_check_match_data(d)
+    let why = mod_check_match_data(d)
+    return if why != "": why else: pack_check(rec)  // (then the game's own check of what its data contract has more: hooks/active)
 
 // Use exactly these mods (after lib_load): checked against the data before them, in load order.
 // Returns the ids in use; mods_refused says why the others weren't.
