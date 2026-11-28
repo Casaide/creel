@@ -339,6 +339,10 @@ def move():
     let wxs = u_wx
     let wys = u_wy
     for(n) i:
+        if frozen_ids.length and is_frozen(i):  // (held still by a pack: no step, no stuck count; its order waits, #251)
+            u_vx[i] = 0
+            u_vy[i] = 0
+            continue
         if mv[i] == 0:
             u_vx[i] = 0
             u_vy[i] = 0
