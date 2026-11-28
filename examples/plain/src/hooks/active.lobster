@@ -5,6 +5,10 @@
 // The packs are merged (gen/mods.lobster): the game's turn to work out what it derives from the data.
 def packs_loaded(root:string): return
 
+// A pack's data, once Creel's own checks of it pass (gen/mods): "" or why the pack is refused. A game checks here what its
+// data contract has beyond Creel's (a building's look and the files it names, say).
+def pack_check(p:Pack) -> string: return ""
+
 // The state the rules keep, declared at the match start (hook_declare_unit, hook_declare_player, hook_declare_building).
 def hook_declare(): lua_declare()
 

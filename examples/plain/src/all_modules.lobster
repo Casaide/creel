@@ -91,6 +91,7 @@ import model.flat
 import view.voxel_mesh
 import view.voxel_grid
 import view.vox
+import model.vox_mesh
 import view.voxel
 import game.voxel_units
 import hooks.view
