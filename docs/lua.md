@@ -116,7 +116,8 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
   Events aren't state: they're never saved or hashed.
   How a pack's own events look is its rules' `"event_fx"` (#243): per code, `"at"` (`a` or `b`: that unit's feet; `bc`: b and c as
   a point in sim units), `"ring"` (tiles a ring grows to, on the ground), `"colour"`, `"text"` (floating up; `{n}` is the
-  event's n) and `"to"` (`owner`: unit a's owner sees it; `seen`: whoever sees the spot). The view draws them; the sim never.
+  event's n), `"sound"` (a name in the packs' audio.json, played as it shows: #253) and `"to"` (`owner`: unit a's
+  owner sees it; `seen`: whoever sees the spot). The view draws them; the sim never.
 - **State:** `unit_column`, `building_column`, `player_column` (at load); `unit_get(col, i)`, `unit_set(col, i, v)`,
   `building_get`, `building_set`, `player_get`, `player_set`.
 - **Events by name:** `event_kind(name)` is the kind of an engine event (`pick`, `drop`, `built` ...), as `event_get`'s

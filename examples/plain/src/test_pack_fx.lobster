@@ -38,6 +38,9 @@ check(not ok, "nor does an engine event")
 events = [ Event { EV_PACK + 6, 5, 0, 0, 0, 0, 2 } ]
 pack_fx_events(0) x, y: float2 { float(x), float(y) }
 check(fx_rings.length == 1 and fx_texts.length == 1 and fx_texts[0].text == "Found 2", "this tick\'s events make their rings and texts")
+check(pack_fx_sound(Event { EV_PACK + 6, 5, 0, 0, 0, 0, 2 }) == "", "a look with no sound plays none")
+su_rules = parse_json("\{\"event_fx\": \{\"6\": \{\"at\": \"a\", \"sound\": \"chirp\"\}\}\}")
+check(pack_fx_sound(Event { EV_PACK + 6, 5, 0, 0, 0, 0, 2 }) == "chirp" and pack_fx_sound(Event { EV_HIT, 5, 0, 0, 0, 0, 2 }) == "", "a look\'s sound is read (#253), an engine event has none")
 fx_tick(5.0)
 check(fx_rings.length == 0 and fx_texts.length == 0, "and they fade")
 print "test_pack_fx: {passes} passed, {fails} failed"
