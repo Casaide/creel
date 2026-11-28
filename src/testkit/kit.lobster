@@ -191,6 +191,8 @@ def think(s:Side):
     if e: bot_think(e)
 
 def think_all(sides:[Side]):
+    lua_bots = map(num_players): 0  // (the players these sides play are the bots: is_bot, #255)
+    for(sides) s: if s.player < lua_bots.length: lua_bots[s.player] = 1
     for(sides) s: think(s)
 
 // ---- the bots' config: data/ai.json at a level, with a test's changes (Bot.new(p, cfg, level))

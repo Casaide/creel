@@ -703,6 +703,7 @@ def become_ground(b:int, i:int):
     let cells = footprint(b)
     let land = tr_walk[terrain[cells[0]]]
     make_pool(cells, if land: bt_land[k] else: bt_wet[k], bm_food[b_owner[b]][k])
+    if i < 0: return                                         // (built with no builder: nobody to farm it yet, #257)
     if not u_orders[i].length: start_gather(i, cells[0], 1)  // (food: resource index 0)
     else: clear_task(i)                                      // told what to do after (shift): that comes first, not farming forever
 
@@ -877,34 +878,39 @@ def build_job(i:int):
     if in_reach(i, x0, y0, x1, y1):
         u_moving[i] = 0
         u_stuck[i] = 0
-        let k = b_kind[b]
-        let max_hp = bm_hp[b_owner[b]][k]
         let pct = t_build_pct[u_kind[i]]
         var st = 1
         if pct != 0:
             u_work[i]++
             st += u_work[i] * pct / 100 - (u_work[i] - 1) * pct / 100
-        let cap = build_cap(b)
-        b_progress[b] = max(b_progress[b], min(cap, b_progress[b] + st))
-        b_hp[b] = max(1, max_hp * b_progress[b] / bt_build_ticks[k])
-        if b_progress[b] >= bt_build_ticks[k]:
-            b_done[b] = 1
-            b_hp[b] = max_hp
-            if sites_walk_over(k): set_walk_over(footprint(b), false)  // it stands: anyone inside steps out
-            if events_on: events.push(Event { EV_BUILT, 0, b_id[b], 0, b_cx[b] * TILE + b_sx[b] * TILE / 2, b_cy[b] * TILE + b_sy[b] * TILE / 2, 0 })
-            if b_site[b].length:  // its goods are used up
-                for(b_site[b]) c, r:
-                    b_hold[b][r] -= c
-                    if c > 0: ev_goods(EV_USED, 0, b, r, c)
-                b_site[b] = []
-            if bt_road[k] >= 0: become_road(b)
-            elif bt_ground[k] >= 0: become_terrain(b)
-            elif bt_farm[k]: become_ground(b, i)
-            elif bt_pen_animals[k] > 0: pen_opened(b)  // a pen: walked into
-            else: gather_after_camp(b)
+        site_work(b, st, i)
     elif u_moving[i] == 0:
         if u_stuck[i] >= GIVE_UP: clear_task(i)
         else: approach_building(i, b)
+
+// Site b moves on by st ticks of building (up to what its goods allow, build_cap), and stands when it reaches its build
+// time: the built event, its goods used, and what it becomes. i is the builder (-1: none, a pack's build_site, #257).
+def site_work(b:int, st:int, i:int):
+    let k = b_kind[b]
+    let max_hp = bm_hp[b_owner[b]][k]
+    let cap = build_cap(b)
+    b_progress[b] = max(b_progress[b], min(cap, b_progress[b] + st))
+    b_hp[b] = max(1, max_hp * b_progress[b] / bt_build_ticks[k])
+    if b_progress[b] >= bt_build_ticks[k]:
+        b_done[b] = 1
+        b_hp[b] = max_hp
+        if sites_walk_over(k): set_walk_over(footprint(b), false)  // it stands: anyone inside steps out
+        if events_on: events.push(Event { EV_BUILT, 0, b_id[b], 0, b_cx[b] * TILE + b_sx[b] * TILE / 2, b_cy[b] * TILE + b_sy[b] * TILE / 2, 0 })
+        if b_site[b].length:  // its goods are used up
+            for(b_site[b]) c, r:
+                b_hold[b][r] -= c
+                if c > 0: ev_goods(EV_USED, 0, b, r, c)
+            b_site[b] = []
+        if bt_road[k] >= 0: become_road(b)
+        elif bt_ground[k] >= 0: become_terrain(b)
+        elif bt_farm[k]: become_ground(b, i)
+        elif bt_pen_animals[k] > 0: pen_opened(b)  // a pen: walked into
+        else: gather_after_camp(b)
 
 // How much gatherer i carries home at once: the rule, its type's bonus, and at most the resource's carry_of.
 def carry_cap(i:int) -> int:

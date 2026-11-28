@@ -20,7 +20,7 @@ let LA_NAMES = [ "unit_count", "u_id", "u_x", "u_y", "u_kind", "u_owner", "u_tas
     "emit", "event_count", "event_get",
     "place", "give", "spawn", "wait", "wait_for", "expect", "keep", "kept",
     "delivery_count", "delivery_get", "site_phase", "build_stage", "event_kind", "building_type_index", "stock", "stock_take", "stock_put", "hurt",
-    "reveal", "hide_cell", "discover_cell", "cell_known", "heal", "freeze", "frozen", "t_tag", "t_ranged", "take_cell", "defeat", "defeated" ]
+    "reveal", "hide_cell", "discover_cell", "cell_known", "heal", "freeze", "frozen", "t_tag", "t_ranged", "take_cell", "defeat", "defeated", "is_bot", "build_site", "hurt_building" ]
 let LA_TEST_FIRST = 96  // place ... kept: a pack's tests' own (testkit/pack_tests, #190), refused to its rules
 let LA_TEST_LAST = 103
 
@@ -93,12 +93,14 @@ def lua_of_json(v:JV) -> int:
 
 // The functions that change the sim: not while it's only being read (the view's calls, and can_place).
 let LA_WRITE_NAMES = [ "lay_foundation", "plant", "approach_cell", "set_u_task", "set_u_target", "set_u_work", "set_u_stuck", "set_u_moving", "set_pop", "want", "hold_take", "hold_put", "stock_take", "stock_put", "hurt",
-    "reveal", "hide_cell", "discover_cell", "heal", "freeze", "take_cell", "defeat", "emit", "trained", "start_gather", "start_build", "approach_building", "clear_task", "unit_set", "building_set", "player_set" ]
+    "reveal", "hide_cell", "discover_cell", "heal", "freeze", "take_cell", "defeat", "build_site", "hurt_building", "emit", "trained", "start_gather", "start_build", "approach_building", "clear_task", "unit_set", "building_set", "player_set" ]
 let LA_WRITES = map(LA_WRITE_NAMES) n:
     let id = find(LA_NAMES) x: x == n
     assert id >= 0
     id
 var lua_read_only = false
+var lua_bots = []::int  // per player: 1 when a bot plays it this tick. The harness sets it before each step (match_loop's
+                        // sim_run by the rule it runs the bots by); derived, the same on every machine, never saved (#255)
 
 // A pack's tests (testkit/pack_tests): what the phase that's running asked for, read by the runner when it returns.
 var lua_testing = false          // a test's phase is running: the test functions answer
@@ -603,6 +605,24 @@ def lua_api(id:int, a:[int]):
                 if id == 124:
                     if defeated[p] == 0: defeated[p] = tick + 1
                 else: lx_r_bool(defeated[p] != 0)
+        case 126:  // is_bot(p): whether a bot plays player p this tick (lua_bots, set by the harness before each step, #255)
+            let p = lx_a_player(a, 0, id)
+            if p >= 0: lx_r_bool(p < lua_bots.length and lua_bots[p] != 0)
+        case 127:  // build_site(b, n): site b moves on by n ticks of building, as a builder's work would, and stands at its time (#257)
+            let b = lx_a_building(a, 0, id)
+            let n = lx_want_int(a, 1, "build_site")
+            if b >= 0 and not lfail:
+                if n < 0: lua_fail("build_site: {n} ticks: a site moves on by 0 or more")
+                elif b_done[b] == 0 and n > 0: site_work(b, n, -1)
+        case 128:  // hurt_building(b, n): building b takes n damage; at none left it falls, as one does to blows (slots after it move: keep ids, #258)
+            let b = lx_a_building(a, 0, id)
+            let n = lx_want_int(a, 1, "hurt_building")
+            if b >= 0 and not lfail:
+                if n < 0: lua_fail("hurt_building: {n} damage: a building is hurt by 0 or more")
+                else:
+                    b_hp[b] = max(0, b_hp[b] - n)
+                    lx_r_int(b_hp[b])
+                    if b_hp[b] == 0: fall(b)
         default: lua_fail("an unknown API function")
 
 // ------------------------------------------------------------------ the hook points

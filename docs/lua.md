@@ -107,8 +107,14 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
   there is a walk), and `nearest_resource` and the bots pass over it. `heal(i, n)` gives unit i back up to n hit points,
   never past its type's (its hit points then). `take_cell(c, n)` takes up to n of cell c's resource as gathering
   takes it (the last turns the cell into its depleted terrain, #245); how many it took. `defeat(p)` puts player p out of the
-  match as a surrender does (an earlier defeat stands; the match's own end and winner follow), `defeated(p)` asks (#249). `freeze(i, ticks)` holds unit i still, no moves and no blows, for `ticks`
-  (the longer of two); `frozen(i)` is how many are left. `t_tag(k, name)` says whether type k's line carries a tag (its
+  match as a surrender does (an earlier defeat stands; the match's own end and winner follow), `defeated(p)` asks (#249).
+  `is_bot(p)` says whether a bot plays player p this tick, as the harness that runs the bots says (match_loop's `sim_run`
+  sets `lua_bots`; #255): a rule that helps the bots with a pack's own mechanics can leave people's sides alone.
+  `build_site(b, n)` moves site b on by n ticks of building, as a builder's work would, and it stands at its build time with
+  the same `built` event (#257): a rule can raise a building with nobody hammering at it.
+  `hurt_building(b, n)` takes n hit points from building b (its hit points left); at none it falls as it would to blows, and
+  the slots after it move (#258).
+  `freeze(i, ticks)` holds unit i still, no moves and no blows, for `ticks` (the longer of two); `frozen(i)` is how many are left. `t_tag(k, name)` says whether type k's line carries a tag (its
   row in the race's table), `t_ranged(k)` whether it shoots.
 - **Events (#187):** `emit(code, a, b, c, n)` puts the pack's own event in this tick's (kind 100 + code, code 0 to 899; the
   sim only), `event_count()` and `event_get(i, field)` read this tick's so far (field 0 kind, 1 a, 2 b, 3 c, 4 n, 5 x,
