@@ -43,6 +43,10 @@ echo "$out" | grep -q "test_build_stages: .* 0 failed" || bad=1
 out="$("$LOBSTER" test_edge_scroll.lobster 2>&1)"
 echo "$out" | grep -v warning | tail -1
 echo "$out" | grep -q "test_edge_scroll: .* 0 failed" || bad=1
+# (and a pack's own events as rings and floating text, headless: what event_fx makes of each)
+out="$("$LOBSTER" test_pack_fx.lobster 2>&1)"
+echo "$out" | grep -v warning | tail -1
+echo "$out" | grep -q "test_pack_fx: .* 0 failed" || bad=1
 # (and the MCP, driven as an agent would, where there's a Node: mcp/test/test.js)
 if command -v node >/dev/null; then
 	out="$(LOBSTER="$LOBSTER" node ../../../mcp/test/test.js 2>&1)"
