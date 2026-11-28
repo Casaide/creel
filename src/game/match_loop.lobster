@@ -34,6 +34,7 @@ def sim_run(bots_idle:bool, stepped):
         p_id = copy(u_id)
         p_x = copy(u_x)
         p_y = copy(u_y)
+        lua_bots = map(bots.length) p: if not bots_idle and (p != ME or watch) and not (net_on and contains(lockstep.players, p)): 1 else: 0  // (who the bots play: for packs' rules, #255)
         let t0 = seconds_elapsed()
         for(bots) bot, p:
             if not bots_idle and (p != ME or watch) and not (net_on and p != ME and contains(lockstep.players, p)):

@@ -20,7 +20,7 @@ let LA_NAMES = [ "unit_count", "u_id", "u_x", "u_y", "u_kind", "u_owner", "u_tas
     "emit", "event_count", "event_get",
     "place", "give", "spawn", "wait", "wait_for", "expect", "keep", "kept",
     "delivery_count", "delivery_get", "site_phase", "build_stage", "event_kind", "building_type_index", "stock", "stock_take", "stock_put", "hurt",
-    "reveal", "hide_cell", "discover_cell", "cell_known", "heal", "freeze", "frozen", "t_tag", "t_ranged", "take_cell", "defeat", "defeated" ]
+    "reveal", "hide_cell", "discover_cell", "cell_known", "heal", "freeze", "frozen", "t_tag", "t_ranged", "take_cell", "defeat", "defeated", "is_bot" ]
 let LA_TEST_FIRST = 96  // place ... kept: a pack's tests' own (testkit/pack_tests, #190), refused to its rules
 let LA_TEST_LAST = 103
 
@@ -99,6 +99,8 @@ let LA_WRITES = map(LA_WRITE_NAMES) n:
     assert id >= 0
     id
 var lua_read_only = false
+var lua_bots = []::int  // per player: 1 when a bot plays it this tick. The harness sets it before each step (match_loop's
+                        // sim_run by the rule it runs the bots by); derived, the same on every machine, never saved (#255)
 
 // A pack's tests (testkit/pack_tests): what the phase that's running asked for, read by the runner when it returns.
 var lua_testing = false          // a test's phase is running: the test functions answer
@@ -603,6 +605,9 @@ def lua_api(id:int, a:[int]):
                 if id == 124:
                     if defeated[p] == 0: defeated[p] = tick + 1
                 else: lx_r_bool(defeated[p] != 0)
+        case 126:  // is_bot(p): whether a bot plays player p this tick (lua_bots, set by the harness before each step, #255)
+            let p = lx_a_player(a, 0, id)
+            if p >= 0: lx_r_bool(p < lua_bots.length and lua_bots[p] != 0)
         default: lua_fail("an unknown API function")
 
 // ------------------------------------------------------------------ the hook points
