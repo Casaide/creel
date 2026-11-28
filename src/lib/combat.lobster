@@ -524,7 +524,7 @@ def apply_hits(n:int):
                 engage(j, c_hurt_by[j])
     // Bounties (Combat._bounties): a killer with kill_gold earns it for each enemy unit (not animals)
     // its last blow killed this tick. (Sticky hits: abilities, not ported, asserted by the exporter.)
-    let gold = resource_index("gold")
+    let gold = r_currency  // (economy.trade.currency: what a bounty is paid in, #189)
     for(n) jj:
         if c_hurt[jj] > 0 and u_hp[jj] > 0: hook_on_hurt(jj, c_hurt_by[jj])
         if c_hurt[jj] != 0 and u_hp[jj] <= 0 and t_animal[u_kind[jj]] == 0:

@@ -3,11 +3,6 @@
 // down). Trade carts walk between two markets for good, bringing gold home each round trip, more the
 // farther apart. Workers mend their side's hurt buildings and engines, paying a twentieth at a time.
 
-let LOT = 100
-let PRICE_STEP = 5
-let PRICE_LOW = 20
-let PRICE_HIGH = 500
-let SELL_PCT = 75
 let T_TRADE = 5
 let T_REPAIR = 7
 let TRADE_OUT = 0
@@ -27,7 +22,7 @@ def is_market(b:int) -> bool: return b_done[b] == 1 and has_role(b_kind[b], ROLE
 
 def quote(p:int, r:int, buy:bool) -> int:
     if buy: return market_price[r]
-    var fee = 100 - SELL_PCT
+    var fee = 100 - r_trade_sell_pct
     for(bt_roles.length) k:
         if has_role(k, ROLE_TRADE): fee = max(0, fee + bm_trade_fee[p][k])
     return market_price[r] * (100 - fee) / 100
@@ -35,24 +30,24 @@ def quote(p:int, r:int, buy:bool) -> int:
 def trade_barred(p:int, b:int, r:int, buy:bool) -> bool:
     if b < 0 or b_owner[b] != p or b_done[b] == 0 or not has_role(b_kind[b], ROLE_TRADE): return true
     if trade_lacked[p]: return true
-    let g = resource_index("gold")
+    let g = r_currency
     if r < 0 or r == g: return true
     if buy and stock[g][p] < quote(p, r, true): return true
-    if not buy and stock[r][p] < LOT: return true
+    if not buy and stock[r][p] < r_trade_lot: return true
     return false
 
 def cmd_trade(p:int, bid:int, r:int, buy:bool):
     let b = b_index_of(bid)
     if trade_barred(p, b, r, buy): return
-    let g = resource_index("gold")
+    let g = r_currency
     if buy:
         stock_take(g, p, quote(p, r, true))
-        stock_add(r, p, LOT)
-        market_price[r] = min(PRICE_HIGH, market_price[r] + PRICE_STEP)
+        stock_add(r, p, r_trade_lot)
+        market_price[r] = min(r_trade_high, market_price[r] + r_trade_step)
     else:
-        stock_take(r, p, LOT)
+        stock_take(r, p, r_trade_lot)
         stock_add(g, p, quote(p, r, false))
-        market_price[r] = max(PRICE_LOW, market_price[r] - PRICE_STEP)
+        market_price[r] = max(r_trade_low, market_price[r] - r_trade_step)
 
 // ---- trade carts
 
@@ -114,7 +109,7 @@ def trade_step(i:int):
         u_moving[i] = 0
         u_stuck[i] = 0
         if u_work[i] == TRADE_OUT:
-            u_carry_kind[i] = resource_index("gold") + 1
+            u_carry_kind[i] = r_currency + 1
             u_carry[i] = trip_gold(home, far)
             u_work[i] = TRADE_HOME
             approach_building(i, home)
