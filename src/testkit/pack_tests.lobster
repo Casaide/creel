@@ -85,6 +85,7 @@ def pack_test(name:string, make_world, one_tick) -> string:
         if again < 0: return "the tests didn\'t load"
         pk = l_packs[again]
         if pk.error != "": return pk.error
+    inv_stuck_limit = rules_stuck_limit()
     var phase = 1
     while true:
         let fname = if phase == 1: name else: "{name}_{phase}"
@@ -122,6 +123,7 @@ def pack_tests(id:string, files:[string], sources:[string], make_world, one_tick
     for(pack_test_names(sources)) name:
         let why = pack_test(name, make_world, one_tick)
         su_rules = pt_rules0
+        inv_stuck_limit = 0
         out.push(if why == "": "ok {name}" else: "FAIL {name}: {why}")
     lua_test_id = ""
     lua_test_files = []

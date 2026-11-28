@@ -339,6 +339,20 @@ var bt_wall = []::int        // a wall piece (`line`)
 var bt_over_trees = []::int  // sees over trees (fog)
 var r_fog_tower = 0
 var r_garrison_heal_every = 0
+// The market (rules economy.trade, #189): the good it's paid in (bounties too), how many make a lot, a price's step on
+// each trade and its bounds, and the share of the price a seller gets. Today's numbers are the defaults.
+let TRADE_LOT = 100
+let TRADE_STEP = 5
+let TRADE_LOW = 20
+let TRADE_HIGH = 500
+let TRADE_SELL_PCT = 75
+var r_currency = 0         // the good trade and bounties pay in (economy.trade.currency, "gold" by default; a resource)
+var r_trade_lot:int = TRADE_LOT
+var r_trade_step:int = TRADE_STEP
+var r_trade_low:int = TRADE_LOW
+var r_trade_high:int = TRADE_HIGH
+var r_trade_sell_pct:int = TRADE_SELL_PCT
+
 let DOCK_HOLDS = 8
 var r_dock_holds:int = DOCK_HOLDS  // how many a docking engine (a siege tower) carries (buildings.json garrison.dock_holds; lib/walls' riders)
 var r_call_range = 0
@@ -439,6 +453,7 @@ var r_inside_ticks = 0  // how long a carrier is inside a building at each pick-
 var r_door_step = 0  // rules economy "door_step": ticks a carrier takes stepping through a door, in and again out, seen (#164)
 var r_idle_aside = 0  // rules economy "idle_aside": an idle carrier steps off a doorway, or another's spot, to an open cell beside it (#164)
 var r_solid = 0  // rules economy "solid_bodies": units never walk through each other; one that would waits or steps to its right (#165)
+var r_workers_pass = 0  // rules economy "workers_pass": a side's workers on the move slip past each other (#102; a rule since #104: by default on in a stocked economy without solid bodies)
 var r_doors = 0  // rules economy "doors": units go in and out of a finished building by the tile in front of its door (#133)
 var r_carrier_load = 1  // rules economy.carrier_load: what a carrier takes on one trip (#49)
 var r_carrier_slots = []::string  // rules economy.carriers: the roster slots whose units carry (#61)
@@ -655,6 +670,15 @@ var tr_decay = 1
 var tr_trail = 30
 var tr_speed_pct = 0
 
+// The market's rules as they were before they were rules (a save from before #189 has none).
+def trade_rules_default():
+    r_currency = max(0, find(resource_names) n: n == "gold")
+    r_trade_lot = TRADE_LOT
+    r_trade_step = TRADE_STEP
+    r_trade_low = TRADE_LOW
+    r_trade_high = TRADE_HIGH
+    r_trade_sell_pct = TRADE_SELL_PCT
+
 // Saves outlive builds (D-141): a per-unit or per-building variable added since a save was made comes back from it
 // empty (flexbuffers give a missing field its empty value), so it's padded here with 0 for every unit and building.
 // Anything else whose empty value is wrong mid-match needs its own fix after loading.
@@ -663,6 +687,7 @@ def pad_saved_columns():
     while u_mount.length < u_id.length: u_mount.push([])
     while u_inside.length < u_id.length: u_inside.push([])
     if r_dock_holds == 0: r_dock_holds = DOCK_HOLDS  // (a save from before #157)
+    if r_trade_lot == 0: trade_rules_default()  // (a save from before #189)
     while b_hold.length < b_id.length: b_hold.push([])  // (a save from before #48: a pool economy's empty holds)
     while b_want.length < b_id.length: b_want.push([])
     while b_resv.length < b_id.length: b_resv.push([])

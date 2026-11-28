@@ -19,7 +19,7 @@ let LA_NAMES = [ "unit_count", "u_id", "u_x", "u_y", "u_kind", "u_owner", "u_tas
     "t_animal", "u_hp", "b_hp", "lay_foundation", "fits", "plant", "terrain_at", "terrain_type", "approach_cell", "b_making", "bt_drag", "entry_rect", "hold_put",
     "emit", "event_count", "event_get",
     "place", "give", "spawn", "wait", "wait_for", "expect", "keep", "kept",
-    "delivery_count", "delivery_get", "site_phase", "build_stage", "event_kind", "building_type_index", "stock", "stock_take", "stock_put" ]
+    "delivery_count", "delivery_get", "site_phase", "build_stage", "event_kind", "building_type_index", "stock", "stock_take", "stock_put", "hurt" ]
 let LA_TEST_FIRST = 96  // place ... kept: a pack's tests' own (testkit/pack_tests, #190), refused to its rules
 let LA_TEST_LAST = 103
 
@@ -91,7 +91,7 @@ def lua_of_json(v:JV) -> int:
     return t
 
 // The functions that change the sim: not while it's only being read (the view's calls, and can_place).
-let LA_WRITE_NAMES = [ "lay_foundation", "plant", "approach_cell", "set_u_task", "set_u_target", "set_u_work", "set_u_stuck", "set_u_moving", "set_pop", "want", "hold_take", "hold_put", "stock_take", "stock_put",
+let LA_WRITE_NAMES = [ "lay_foundation", "plant", "approach_cell", "set_u_task", "set_u_target", "set_u_work", "set_u_stuck", "set_u_moving", "set_pop", "want", "hold_take", "hold_put", "stock_take", "stock_put", "hurt",
     "emit", "trained", "start_gather", "start_build", "approach_building", "clear_task", "unit_set", "building_set", "player_set" ]
 let LA_WRITES = map(LA_WRITE_NAMES) n:
     let id = find(LA_NAMES) x: x == n
@@ -531,6 +531,14 @@ def lua_api(id:int, a:[int]):
                         stock[r][p] += put
                         if put > 0 and events_on: events.push(Event { EV_STOCK_PUT, p, 0, r, 0, 0, put })
                         lx_r_int(put)
+        case 113:  // hurt(i, n): unit slot i loses n hit points; at none left it dies in the tick's blows, as a blow kills (on_death with no killer: 0)
+            let i = lx_a_unit(a, 0, id)
+            let n = lx_want_int(a, 1, lx_la_name(id))
+            if i >= 0 and not lfail:
+                if n < 0: lua_fail("hurt: {n} hit points: a unit is hurt by 0 or more")
+                else:
+                    u_hp[i] = max(0, u_hp[i] - n)
+                    lx_r_int(u_hp[i])
         default: lua_fail("an unknown API function")
 
 // ------------------------------------------------------------------ the hook points

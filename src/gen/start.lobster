@@ -66,6 +66,7 @@ def setup_world(seed_value:int, map_id:string, sides:[JV], rules:JV, team_ids:[i
     r_door_step = gint(ec, "door_step", 0)
     r_idle_aside = if gbool(ec, "idle_aside", false): 1 else: 0
     r_solid = if gbool(ec, "solid_bodies", false): 1 else: 0
+    r_workers_pass = if gbool(ec, "workers_pass", r_stocked != 0 and r_solid == 0): 1 else: 0
     r_doors = if gbool(ec, "doors", false): 1 else: 0
     r_carrier_slots = gstrs(ec, "carriers")
     rd_names = map(glist(ec, "roads")): gstr(_, "name", "")
@@ -79,6 +80,13 @@ def setup_world(seed_value:int, map_id:string, sides:[JV], rules:JV, team_ids:[i
     r_trade_min = as_int(at(trc, "min_tiles"))
     r_trade_sq_div = as_int(at(trc, "sq_div"))
     r_trade_lin_pct = as_int(at(trc, "lin_pct"))
+    trade_rules_default()
+    r_currency = max(0, str_index(resource_names, gstr(trc, "currency", "gold")))
+    r_trade_lot = gint(trc, "lot", TRADE_LOT)
+    r_trade_step = gint(trc, "price_step", TRADE_STEP)
+    r_trade_low = gint(trc, "price_low", TRADE_LOW)
+    r_trade_high = gint(trc, "price_high", TRADE_HIGH)
+    r_trade_sell_pct = gint(trc, "sell_pct", TRADE_SELL_PCT)
     base_gather_ticks = map(resource_names) r: as_int(at(at(ec, "gather_ticks"), r))
     r_carry_of = map(resource_names) r: gint(gobj(ec, "carry_of"), r, 0)
     let ts = gobj(rules_part("movement"), "terrain_speed")
@@ -358,7 +366,7 @@ def setup_rest():
     let rp = gobj(bd, "repair")
     r_repair_speed = gint(rp, "speed_pct", 50)
     r_repair_cost = gint(rp, "cost_pct", 50)
-    market_price = map(resource_names) r: if r == "gold": 0 else: 100
+    market_price = map(resource_names) r, j: if j == r_currency: 0 else: 100
     let tc = rules_part("trails")
     tr_every = gint(tc, "every", 10)
     tr_add = gint(tc, "add", 1)

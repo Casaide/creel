@@ -59,7 +59,7 @@ Lua 5.4, cut to what lockstep needs:
 | `ai_train_score(p, slot, k, score)` | a bot weighs training type `k` | the score |
 | `delivery_level(b, r, level, kind)` | the delivery market (rules economy `deliveries`, #191) weighs a delivery of good `r`: kind 0 a want of building slot `b`, 1 a full workshop `b`'s goods out, 2 workshop `b`'s spare goods to a store | its level: higher goes first |
 | `task_name(i)` | the panel names what unit `i` is doing; may only read | a string, `""` for none |
-| `invariants()` | after a tick, when the testkit or the MCP checks the invariants (`src/testkit/invariants.lobster`); may only read, on the view's budget | `nil` while the pack's rules hold, else a string saying which broke and where |
+| `invariants()` | after a tick, when the testkit or the MCP checks the invariants (`src/testkit/invariants.lobster`); may only read, on the view's budget | `nil` while the pack's rules hold, else a string saying which broke and where. The engine's `stuck` check is on when the rules say how long a walker may be held up: `"invariants": {"stuck_limit": <ticks>}` |
 
 ## The API
 
@@ -69,7 +69,9 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
 
 - **Units:** `unit_count`, `u_id`, `u_x`, `u_y`, `u_kind`, `u_owner`, `u_task`, `u_target`, `u_carry`, `u_carry_kind`,
   `u_moving`, `u_stuck`, `u_work`, `u_hp`, `u_orders` (how many queued), `unit_index(id)`; `set_u_task`,
-  `set_u_target`, `set_u_work`, `set_u_stuck`, `set_u_moving`.
+  `set_u_target`, `set_u_work`, `set_u_stuck`, `set_u_moving`; `hurt(i, n)` takes n hit points from unit i (its hit
+  points left): at none it dies in that tick's blows as a blow would kill it, with `on_death(i, 0)` (no killer), so a
+  rule can starve, poison or drop a unit.
 - **Buildings:** `building_count`, `b_id`, `b_kind`, `b_owner`, `b_done`, `b_progress`, `b_hp`, `b_hold(b, r)`,
   `b_want(b, r)`, `b_coming(b, r)`, `offered(b, r)`, `b_is_site`, `site_permille`, `site_phase` (0 levelling, 1 waiting for goods, 2 building, 3 standing), `build_stage` (the stage of its type's `"stages"` it is at, from 0), `building_index(id)`,
   `building_rect(b)` (four values: x0, y0, x1, y1 in sim units, `TILE` a tile, both edges inside it), `entry_rect(b)` (where a unit stands to reach it: its door tile with economy `doors`, else the same as building_rect; #133), `mid_dist2(b, x, y)`.
