@@ -20,7 +20,7 @@ let LA_NAMES = [ "unit_count", "u_id", "u_x", "u_y", "u_kind", "u_owner", "u_tas
     "emit", "event_count", "event_get",
     "place", "give", "spawn", "wait", "wait_for", "expect", "keep", "kept",
     "delivery_count", "delivery_get", "site_phase", "build_stage", "event_kind", "building_type_index", "stock", "stock_take", "stock_put", "hurt",
-    "reveal", "hide_cell", "discover_cell", "cell_known", "heal", "freeze", "frozen", "t_tag", "t_ranged" ]
+    "reveal", "hide_cell", "discover_cell", "cell_known", "heal", "freeze", "frozen", "t_tag", "t_ranged", "take_cell" ]
 let LA_TEST_FIRST = 96  // place ... kept: a pack's tests' own (testkit/pack_tests, #190), refused to its rules
 let LA_TEST_LAST = 103
 
@@ -93,7 +93,7 @@ def lua_of_json(v:JV) -> int:
 
 // The functions that change the sim: not while it's only being read (the view's calls, and can_place).
 let LA_WRITE_NAMES = [ "lay_foundation", "plant", "approach_cell", "set_u_task", "set_u_target", "set_u_work", "set_u_stuck", "set_u_moving", "set_pop", "want", "hold_take", "hold_put", "stock_take", "stock_put", "hurt",
-    "reveal", "hide_cell", "discover_cell", "heal", "freeze", "emit", "trained", "start_gather", "start_build", "approach_building", "clear_task", "unit_set", "building_set", "player_set" ]
+    "reveal", "hide_cell", "discover_cell", "heal", "freeze", "take_cell", "emit", "trained", "start_gather", "start_build", "approach_building", "clear_task", "unit_set", "building_set", "player_set" ]
 let LA_WRITES = map(LA_WRITE_NAMES) n:
     let id = find(LA_NAMES) x: x == n
     assert id >= 0
@@ -588,6 +588,15 @@ def lua_api(id:int, a:[int]):
         case 122:  // t_ranged(k): whether unit type k shoots (its reach is a range, not a blow)
             let k = lx_a_utype(a, 0, id)
             if k >= 0: lx_r_bool(t_ranged[k] != 0)
+        case 123:  // take_cell(c, n): up to n of cell c's resource taken, as gathering takes it (the last turns it to its depleted terrain); how many (#245)
+            let c = lx_a_cell(a, 0, id)
+            let n = lx_want_int(a, 1, "take_cell")
+            if c >= 0 and not lfail:
+                if n < 0: lua_fail("take_cell: {n}: a cell gives 0 or more")
+                else:
+                    let got = min(n, max(0, left_at(c)))
+                    for(got): take(c)
+                    lx_r_int(got)
         default: lua_fail("an unknown API function")
 
 // ------------------------------------------------------------------ the hook points
