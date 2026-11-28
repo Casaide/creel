@@ -198,7 +198,7 @@ def order(m:float2, attack_move:bool = false):
         issue_cmd(ME, CMD_ATTACK, ids, u_id[mine], 0, 0, 0, q)  // slaughter one of our sheep for its food
     elif b >= 0 and is_enemy(b_owner[b], ME) and fog[ME][c] != 0:
         issue_cmd(ME, CMD_ATTACK, ids, b_id[b], 0, 0, 0, q)
-    elif res_at(c) != 0 and workers.length:
+    elif res_at(c) != 0 and cell_known(ME, c) and workers.length:
         issue_cmd(ME, CMD_GATHER, workers, c, 0, 0, 0, q)
         if others.length: issue_cmd(ME, CMD_MOVE, others, x, y, 0, 0, q)
     elif bridge >= 0 and br_up[bridge] == 0 and workers.length:

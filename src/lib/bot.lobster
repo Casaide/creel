@@ -176,7 +176,7 @@ def patch(bot:Bot, ax:int, ay:int, kind:int, away:int, own_side:bool) -> int:
     var best = -1
     var best_d2 = 1 << 62
     for(resource_cells) c:
-        if amount[c] > 0 and res_at(c) == kind:
+        if amount[c] > 0 and res_at(c) == kind and cell_known(bot.player, c):
             let d2 = dist2(ax, ay, c % W, c / W)
             if not (own_side and not ours_side(bot.player, ax, ay, c)):
                 if d2 >= away * away and d2 < best_d2 and reaches_cell(bot.eco.reach, bot.eco.wln, bot.eco.home, c):

@@ -70,6 +70,21 @@ def abilities_tick():
                     if dx * dx + dy * dy <= r * r:
                         ids_set(slow_ids, slow_pcts, u_id[i], min(ids_get(slow_ids, slow_pcts, u_id[i], 100), kept[m + 5]))
                 m += WEB
+    var f = 0
+    while f < frozen_ids.length:  // (held still by a pack: no moves at all, #239)
+        if frozen_until[f] <= tick:
+            frozen_ids.remove(f)
+            frozen_until.remove(f)
+        else:
+            ids_set(slow_ids, slow_pcts, frozen_ids[f], 0)
+            f++
+    let rv = []::int
+    var rq = 0
+    while rq < reveals.length:
+        if reveals[rq + 4] > tick:
+            for(REVEAL) q: rv.push(reveals[rq + q])
+        rq += REVEAL
+    reveals = rv
     var k = 0
     while k < slowed_ids.length:
         if slowed_until[k] <= tick:
@@ -91,11 +106,21 @@ def stick(j:int, ticks:int):
     let uid = u_id[j]
     ids_set(slowed_ids, slowed_until, uid, max(ids_get(slowed_ids, slowed_until, uid, 0), tick + ticks))
 
+// Unit j held still for `ticks` from now (the longer of two): no moves, no blows (a pack's freeze, #239).
+def freeze(j:int, ticks:int):
+    let uid = u_id[j]
+    ids_set(frozen_ids, frozen_until, uid, max(ids_get(frozen_ids, frozen_until, uid, 0), tick + ticks))
+
+def frozen_left(j:int) -> int: return max(0, ids_get(frozen_ids, frozen_until, u_id[j], 0) - tick)
+
 def abilities_hash(h0:int) -> int:
     var h = h0
     for(webs) v: h = mix(h, v)
     for(ready_ids) id, k: h = mix(mix(h, id), ready_at[k])
     for(slowed_ids) id, k: h = mix(mix(h, id), slowed_until[k])
+    for(frozen_ids) id, k: h = mix(mix(h, id), frozen_until[k])
+    for(reveals) v: h = mix(h, v)
+    for(secret_cells) c, k: h = mix(mix(h, c), secret_known[k])
     return h
 
 // The bot's web (AbilityAi): on the enemy soldier nearest one of our ready users, within its range,

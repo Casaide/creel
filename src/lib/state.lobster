@@ -660,6 +660,30 @@ var slow_ids = []::int  // this tick: unit id -> its speed pct (webs, sticky hit
 var slow_pcts = []::int
 var t_wade = []::int  // per unit type: the swamp folk's bonus (no terrain slows it)
 
+// Packs' rules (lua/api, #239): units held still, sight lent for a while, and cells kept secret until found.
+var frozen_ids = []::int    // unit id -> the tick it may move and strike again (ids ascending)
+var frozen_until = []::int
+let REVEAL = 5              // reveals, flat: player, x, y, radius in tiles, ends (tick)
+var reveals = []::int
+var secret_cells = []::int  // hidden cells, ascending, each with the players who know it (a bit each)
+var secret_known = []::int
+
+// Whether unit i is held still this tick (a pack's freeze): it neither moves nor strikes.
+def is_frozen(i:int) -> bool:
+    if not frozen_ids.length: return false
+    let found, at = binary_search(frozen_ids, u_id[i])
+    return found and frozen_until[at] > tick
+
+// Whether player p knows cell c: every cell but a secret one, and a secret one its team has found.
+def cell_known(p:int, c:int) -> bool:
+    if not secret_cells.length or p < 0: return true
+    let found, at = binary_search(secret_cells, c)
+    if not found: return true
+    let mask = secret_known[at]
+    for(num_players) q:
+        if teams[q] == teams[p] and (mask >> q) & 1: return true
+    return false
+
 // Worn trails (trails.gd), read by the moves.
 var wear = []::int
 var tr_every = 10
