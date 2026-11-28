@@ -510,6 +510,7 @@ def least_busy(cell:int, kind:int, except:int, i:int) -> int:
             let c = yy * W + xx
             xx++
             if c == except or amount[c] <= 0 or res_at(c) != kind or taken(c, i): continue
+            if i >= 0 and not cell_known(u_owner[i], c): continue  // (a secret its side hasn't found, #239)
             if spotted(c) and not open_beside(c, i): continue
             let nb = busy.get(c, 0)
             var score = nb * BUSY_COST + dist2(cx * 1000, cy * 1000, (xx - 1) * 1000, yy * 1000)
@@ -548,6 +549,7 @@ def nearest_resource_within(x:int, y:int, kind:int, i:int, farms:bool, roomy_onl
             if amount[c] <= 0 or res_at(c) != kind or (farms and pool[c] < 0): continue
             if d2 >= best_d2 or (i >= 0 and taken(c, i)) or (seen and not explored(u_owner[i], c)) or (spotted(c) and not open_beside(c, i)): continue
             if roomy_only and spotted(c) and free_spot(i, c) < 0: continue
+            if i >= 0 and not cell_known(u_owner[i], c): continue  // (a secret its side hasn't found, #239)
             best_d2 = d2
             best = c
         yy++
@@ -1070,7 +1072,7 @@ def train():
 def cmd_gather(player:int, ids:[int], cell:int):
     // A bot that found nothing sends cell -1: GDScript's arrays read that as the last cell (in practice
     // no resource there), so its gatherers walk to -1's tile: (-500, 500).
-    let kind = res_at(if cell < 0: cell + W * H else: cell)
+    let kind = if cell >= 0 and not cell_known(player, cell): 0 else: res_at(if cell < 0: cell + W * H else: cell)  // (a secret: a walk there, #239)
     assert cell >= 0 or kind <= 0
     for(ids) uid:
         let i = index_of(uid)

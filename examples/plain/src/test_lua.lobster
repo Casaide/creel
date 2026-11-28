@@ -269,6 +269,70 @@ def test_hurt():  // (a unit hurt from Lua: starving, a fall, a poison; it dies 
     u_y = []
     u_hp = []
 
+def test_effects():  // (#239: sight lent for a while, secret cells, healing, holding a unit still, a type's tags)
+    num_players = 2
+    teams = [ 0, 1 ]
+    pop = [ 0, 0 ]
+    W = 8
+    H = 8
+    tick = 10
+    u_id = [ 4, 9 ]
+    u_x = [ 0, 0 ]
+    u_y = [ 0, 0 ]
+    u_hp = [ 10, 5 ]
+    u_kind = [ 0, 1 ]
+    t_hp = [ 12, 40 ]
+    t_pop = [ 1, 1 ]
+    t_ranged = [ 1, 0 ]
+    run("function go() reveal(1, 3500, 2500, 4, 60) end")
+    call("go", [])
+    check(equal(reveals, [ 1, 3500, 2500, 4, 70 ]), "reveal lends a player sight round a point until a tick")
+    run("function go() reveal(1, 9000, 0, 4, 60) end")
+    check(find_string(call("go", []), "off the map") >= 0, "a reveal off the map is an error")
+    run("function go() reveal(0, 0, 0, 40, 60) end")
+    check(find_string(call("go", []), "radius") >= 0, "and so is a radius past 32 tiles")
+    tick = 70
+    abilities_tick()
+    check(reveals.length == 0, "a reveal wears off")
+    run("function go() hide_cell(9) hide_cell(3) print(cell_known(0, 9), cell_known(1, 9), cell_known(0, 4)) discover_cell(1, 9) print(cell_known(0, 9), cell_known(1, 9)) end")
+    check(call("go", []) == "false\tfalse\ttrue|false\ttrue", "a hidden cell is known to nobody until a player finds it, and then to that player")
+    check(equal(secret_cells, [ 3, 9 ]) and equal(secret_known, [ 0, 2 ]), "secrets are kept in cell order")
+    teams = [ 0, 0 ]
+    check(cell_known(0, 9), "a team shares what it has found")
+    teams = [ 0, 1 ]
+    run("function go() print(heal(1, 3), heal(1, 100), heal(0, 0)) end")
+    check(call("go", []) == "8\t40\t10", "heal gives hit points back, never past the type\'s")
+    run("function go() heal(0, -1) end")
+    check(find_string(call("go", []), "by 0 or more") >= 0, "a unit isn\'t hurt by heal")
+    run("function go() freeze(0, 30) freeze(0, 10) print(frozen(0), frozen(1)) end")
+    check(call("go", []) == "30\t0", "freeze holds a unit still, the longer of two")
+    check(is_frozen(0) and not is_frozen(1), "and the sim knows it")
+    abilities_tick()
+    check(equal(slow_ids, [ 4 ]) and equal(slow_pcts, [ 0 ]), "a frozen unit moves at none of its speed")
+    tick = 100
+    abilities_tick()
+    check(not is_frozen(0) and frozen_ids.length == 0 and slow_ids.length == 0, "and it wears off")
+    run("function go() print(t_ranged(0), t_ranged(1)) end")
+    check(call("go", []) == "true\tfalse", "t_ranged says which types shoot")
+    su_units = [ parse_json("\{\"tags\": [\"energy\", \"ranged\"]\}"), parse_json("\{\}") ]
+    run("function go() print(t_tag(0, \"energy\"), t_tag(0, \"melee\"), t_tag(1, \"energy\")) end")
+    check(call("go", []) == "true\tfalse\tfalse", "t_tag reads a type\'s tags")
+    su_units = []
+    tick = 0
+    secret_cells = []
+    secret_known = []
+    u_id = []
+    u_x = []
+    u_y = []
+    u_hp = []
+    u_kind = []
+    t_hp = []
+    t_pop = []
+    t_ranged = []
+    pop = []
+    teams = []
+    num_players = 0
+
 def test_events():  // (#187: a pack's own events, and reading this tick's)
     events_on = true
     events = []
@@ -571,6 +635,7 @@ test_view()
 test_type_index()
 test_pooled_goods()
 test_hurt()
+test_effects()
 test_events()
 test_process()
 test_pack_tests()

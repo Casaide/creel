@@ -240,7 +240,7 @@ def bot_nearest_resource(bot:EcoBot, x:int, y:int, kind:int, free:bool, area0:in
     var best = -1
     var best_d2 = 1 << 62
     for(resource_cells) c:
-        if amount[c] > 0 and tr_res[terrain[c]] == kind:
+        if amount[c] > 0 and tr_res[terrain[c]] == kind and cell_known(bot.player, c):  // (a secret: not till found, #239)
             let dx = (c % W) * 1000 + 500 - x
             let dy = (c / W) * 1000 + 500 - y
             let d2 = dx * dx + dy * dy

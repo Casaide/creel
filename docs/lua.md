@@ -100,6 +100,14 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
   starts with a `sent` event. What's still asked for is `b_want(b, r)`, what's on its way `b_coming(b, r)`, and what a
   building offers `offered(b, r)`. What goes first is the rules' (economy `deliveries`: `src/lib/carry.lobster`, "the
   delivery market") and `delivery_level`'s.
+- **Sight, secrets, healing and holding still (#239):** `reveal(p, x, y, r, ticks)` lends player p's team sight of `r`
+  tiles (0 to 32) round `x, y` (sim units) for `ticks`, stamped with its fog as a unit's sight is. `hide_cell(c)` makes
+  cell c a secret no player knows (again, if it was one), `discover_cell(p, c)` gives it to player p and its team, and
+  `cell_known(p, c)` asks: a resource on a cell its side doesn't know isn't drawn for it, isn't gathered (a gather order
+  there is a walk), and `nearest_resource` and the bots pass over it. `heal(i, n)` gives unit i back up to n hit points,
+  never past its type's (its hit points then). `freeze(i, ticks)` holds unit i still, no moves and no blows, for `ticks`
+  (the longer of two); `frozen(i)` is how many are left. `t_tag(k, name)` says whether type k's line carries a tag (its
+  row in the race's table), `t_ranged(k)` whether it shoots.
 - **Events (#187):** `emit(code, a, b, c, n)` puts the pack's own event in this tick's (kind 100 + code, code 0 to 899; the
   sim only), `event_count()` and `event_get(i, field)` read this tick's so far (field 0 kind, 1 a, 2 b, 3 c, 4 n, 5 x,
   6 y). The engine's kinds are `EV_*` in `src/lib/state.lobster`; `hold_take` and `hold_put` add `taken` and `put` events (a 0, b the building's id, c the good, n how many).

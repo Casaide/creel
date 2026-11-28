@@ -69,6 +69,10 @@ def fog_update_team(team:[int]):
             var r = (if bt_sight[k] > 0: bt_sight[k] elif bt_attacks[k] and bt_arrows[k] > 0: r_fog_tower else: r_fog_building) + bm_sight[b_owner[b]][k]
             if has_heights: r += level[b_cy[b] * W + b_cx[b]] * r_high_sight_building
             stamp(g, lit, b_cx[b] + b_sx[b] / 2, b_cy[b] + b_sy[b] / 2, r + max(b_sx[b], b_sy[b]) / 2, bt_over_trees[k] != 0)
+    var rv = 0
+    while rv < reveals.length:  // sight a pack lent the team for a while (reveal, #239)
+        if teams[reveals[rv]] == team_p: stamp(g, lit, reveals[rv + 1] / 1000, reveals[rv + 2] / 1000, reveals[rv + 3], false)
+        rv += REVEAL
     fog[p] = g
     fog_lit[p] = lit
     remember(p)

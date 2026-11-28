@@ -750,7 +750,7 @@ def combat_tick():
     for(n) i:
         let k = u_kind[i]
         if u_stance[i] == RETURN and u_moving[i] == 0: u_stance[i] = NONE
-        if t_healer[k] or t_harmless[k]: continue
+        if t_healer[k] or t_harmless[k] or is_frozen(i): continue
         if t_mounts[k].length: mounts_tick(i, k)
         let stance = u_stance[i]
         let posture = u_posture[i]

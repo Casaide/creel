@@ -19,7 +19,8 @@ let LA_NAMES = [ "unit_count", "u_id", "u_x", "u_y", "u_kind", "u_owner", "u_tas
     "t_animal", "u_hp", "b_hp", "lay_foundation", "fits", "plant", "terrain_at", "terrain_type", "approach_cell", "b_making", "bt_drag", "entry_rect", "hold_put",
     "emit", "event_count", "event_get",
     "place", "give", "spawn", "wait", "wait_for", "expect", "keep", "kept",
-    "delivery_count", "delivery_get", "site_phase", "build_stage", "event_kind", "building_type_index", "stock", "stock_take", "stock_put", "hurt" ]
+    "delivery_count", "delivery_get", "site_phase", "build_stage", "event_kind", "building_type_index", "stock", "stock_take", "stock_put", "hurt",
+    "reveal", "hide_cell", "discover_cell", "cell_known", "heal", "freeze", "frozen", "t_tag", "t_ranged" ]
 let LA_TEST_FIRST = 96  // place ... kept: a pack's tests' own (testkit/pack_tests, #190), refused to its rules
 let LA_TEST_LAST = 103
 
@@ -92,7 +93,7 @@ def lua_of_json(v:JV) -> int:
 
 // The functions that change the sim: not while it's only being read (the view's calls, and can_place).
 let LA_WRITE_NAMES = [ "lay_foundation", "plant", "approach_cell", "set_u_task", "set_u_target", "set_u_work", "set_u_stuck", "set_u_moving", "set_pop", "want", "hold_take", "hold_put", "stock_take", "stock_put", "hurt",
-    "emit", "trained", "start_gather", "start_build", "approach_building", "clear_task", "unit_set", "building_set", "player_set" ]
+    "reveal", "hide_cell", "discover_cell", "heal", "freeze", "emit", "trained", "start_gather", "start_build", "approach_building", "clear_task", "unit_set", "building_set", "player_set" ]
 let LA_WRITES = map(LA_WRITE_NAMES) n:
     let id = find(LA_NAMES) x: x == n
     assert id >= 0
@@ -539,6 +540,54 @@ def lua_api(id:int, a:[int]):
                 else:
                     u_hp[i] = max(0, u_hp[i] - n)
                     lx_r_int(u_hp[i])
+        case 114:  // reveal(p, x, y, r, ticks): player p's team sees r tiles round x, y (sim units) for ticks, as a unit there would (#239)
+            let p = lx_a_player(a, 0, id)
+            let x = lx_want_int(a, 1, "reveal")
+            let y = lx_want_int(a, 2, "reveal")
+            let r = lx_want_int(a, 3, "reveal")
+            let n = lx_want_int(a, 4, "reveal")
+            if p >= 0 and not lfail:
+                if x < 0 or y < 0 or x >= W * TILE or y >= H * TILE: lua_fail("reveal: {x}, {y} is off the map")
+                elif r < 0 or r > 32: lua_fail("reveal: a radius of 0 to 32 tiles, not {r}")
+                elif n > 0:
+                    for([ p, x, y, r, tick + n ]) v: reveals.push(v)
+        case 115, 116:  // hide_cell(c): no player knows cell c until it's found; discover_cell(p, c): player p (and its team) has found it (#239)
+            let c = lx_a_cell(a, if id == 115: 0 else: 1, id)
+            let p = if id == 116: lx_a_player(a, 0, id) else: 0
+            if c >= 0 and p >= 0 and not lfail:
+                let found, at = binary_search(secret_cells, c)
+                if id == 115:
+                    if not found:
+                        secret_cells.insert(at, c)
+                        secret_known.insert(at, 0)
+                    else: secret_known[at] = 0
+                elif found: secret_known[at] |= 1 << p
+        case 117:  // cell_known(p, c): whether player p (or its team) knows cell c: every cell but a secret not yet found
+            let p = lx_a_player(a, 0, id)
+            let c = lx_a_cell(a, 1, id)
+            if p >= 0 and c >= 0: lx_r_bool(cell_known(p, c))
+        case 118:  // heal(i, n): unit slot i regains up to n hit points, never past its type's; its hit points then
+            let i = lx_a_unit(a, 0, id)
+            let n = lx_want_int(a, 1, "heal")
+            if i >= 0 and not lfail:
+                if n < 0: lua_fail("heal: {n} hit points: a unit is healed by 0 or more")
+                else:
+                    if u_hp[i] > 0: u_hp[i] = min(t_hp[u_kind[i]], u_hp[i] + n)
+                    lx_r_int(u_hp[i])
+        case 119:  // freeze(i, ticks): unit slot i neither moves nor strikes for ticks from now (the longer of two)
+            let i = lx_a_unit(a, 0, id)
+            let n = lx_want_int(a, 1, "freeze")
+            if i >= 0 and not lfail and n > 0: freeze(i, n)
+        case 120:  // frozen(i): the ticks unit slot i is still held still (0: it isn't)
+            let i = lx_a_unit(a, 0, id)
+            if i >= 0: lx_r_int(frozen_left(i))
+        case 121:  // t_tag(k, name): whether unit type k's line carries that tag (its row in the race's table)
+            let k = lx_a_utype(a, 0, id)
+            let name = lx_want_str(a, 1, "t_tag")
+            if k >= 0 and not lfail: lx_r_bool(k < su_units.length and (find(gstrs(su_units[k], "tags")): _ == name) >= 0)
+        case 122:  // t_ranged(k): whether unit type k shoots (its reach is a range, not a blow)
+            let k = lx_a_utype(a, 0, id)
+            if k >= 0: lx_r_bool(t_ranged[k] != 0)
         default: lua_fail("an unknown API function")
 
 // ------------------------------------------------------------------ the hook points
