@@ -308,7 +308,7 @@ def test_effects():  // (#239: sight lent for a while, secret cells, healing, ho
     check(call("go", []) == "30\t0", "freeze holds a unit still, the longer of two")
     check(is_frozen(0) and not is_frozen(1), "and the sim knows it")
     abilities_tick()
-    check(equal(slow_ids, [ 4 ]) and equal(slow_pcts, [ 0 ]), "a frozen unit moves at none of its speed")
+    check(is_frozen(0) and slow_ids.length == 0, "a frozen unit is still frozen a tick on, and isn\'t a slowed one (the moves skip it, #251)")
     tick = 100
     abilities_tick()
     check(not is_frozen(0) and frozen_ids.length == 0 and slow_ids.length == 0, "and it wears off")

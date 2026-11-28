@@ -116,6 +116,10 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
   sim only), `event_count()` and `event_get(i, field)` read this tick's so far (field 0 kind, 1 a, 2 b, 3 c, 4 n, 5 x,
   6 y). The engine's kinds are `EV_*` in `src/lib/state.lobster`; `hold_take` and `hold_put` add `taken` and `put` events (a 0, b the building's id, c the good, n how many).
   Events aren't state: they're never saved or hashed.
+  How a pack's own events look is its rules' `"event_fx"` (#243): per code, `"at"` (`a` or `b`: that unit's feet; `bc`: b and c as
+  a point in sim units), `"ring"` (tiles a ring grows to, on the ground), `"colour"`, `"text"` (floating up; `{n}` is the
+  event's n), `"sound"` (a name in the packs' audio.json, played as it shows: #253) and `"to"` (`owner`: unit a's
+  owner sees it; `seen`: whoever sees the spot). The view draws them; the sim never.
 - **State:** `unit_column`, `building_column`, `player_column` (at load); `unit_get(col, i)`, `unit_set(col, i, v)`,
   `building_get`, `building_set`, `player_get`, `player_set`.
 - **Events by name:** `event_kind(name)` is the kind of an engine event (`pick`, `drop`, `built` ...), as `event_get`'s

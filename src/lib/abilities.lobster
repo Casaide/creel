@@ -71,13 +71,11 @@ def abilities_tick():
                         ids_set(slow_ids, slow_pcts, u_id[i], min(ids_get(slow_ids, slow_pcts, u_id[i], 100), kept[m + 5]))
                 m += WEB
     var f = 0
-    while f < frozen_ids.length:  // (held still by a pack: no moves at all, #239)
+    while f < frozen_ids.length:  // (held still by a pack, #239: the moves skip it, #251; here it wears off)
         if frozen_until[f] <= tick:
             frozen_ids.remove(f)
             frozen_until.remove(f)
-        else:
-            ids_set(slow_ids, slow_pcts, frozen_ids[f], 0)
-            f++
+        else: f++
     let rv = []::int
     var rq = 0
     while rq < reveals.length:

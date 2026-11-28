@@ -1462,6 +1462,28 @@ def vx_held(u:vx_unit_def, hand:int) -> vx_gear_spec?:
         if gs and gs.hand == hand: return gs
     return nil
 
+// Where the gun in the right hand fires from, in the body's frame (Casaide/creel#247): the hand where its hold puts it as
+// it fires (an aimed gun's aim, else the blow's hit), out along the hold's direction to the farthest point of the gear's
+// shapes on the hand. False for a body without arms, one holding nothing there, or a hold that neither aims nor strikes
+// (a bow).
+def vx_held_muzzle(u:vx_unit_def, b:vx_body_spec) -> float3, bool:
+    if not b.arms: return float3_0, false
+    let right = vx_held(u, 1)
+    if not right: return float3_0, false
+    let h = vx_holds.get(right.hold)
+    let k = find(b.pnames) n: n == b.sh_pt
+    if not h or k < 0: return float3_0, false
+    let L = b.arm * 2.0
+    let sh = b.pat[k] + b.sh
+    if not h.aims and not h.act: return float3_0, false  // (a bow's arrow leaves from its drawn string: not here)
+    let hand = sh + (if h.aims: h.aim else: h.hit) * L
+    let d = if h.aims: h.aim_dir else: h.hit_dir
+    var reach = 0.0
+    for(right.shapes) s:
+        if s.pa == "hand": reach = max(reach, s.a.x + s.ra)
+        if s.pb == "hand": reach = max(reach, s.b.x + s.rb)
+    return hand + normalize(d) * reach, true
+
 // The arms and what's in the hands, posed by the holds and the act. L: an arm bone's length (the reach is 2L).
 def vx_arms(out:[vx_prim], u:vx_unit_def, b:vx_body_spec, p:vx_points, swing:float, t:float, flags:[string]):
     let L = b.arm * 2.0

@@ -240,6 +240,25 @@ var fx_dusts = []::Dust
 var fx_stuck = []::Stuck
 var fx_heals = []::Heal
 
+// A pack's events shown (pack_fx_events, below): a ring on the ground, a text floating up (#243).
+let RING_TIME = 0.9
+let FLOAT_TIME = 1.8
+
+class Ring:
+    pos:float2  // canvas
+    r:float     // canvas px at its widest
+    col:float4
+    t:float
+
+class FloatText:
+    pos:float2  // canvas
+    text:string
+    col:float4
+    t:float
+
+var fx_rings = []::Ring
+var fx_texts = []::FloatText
+
 // A flash and a ring, short-lived, and the marks left on the ground, canvas units.
 class Flash:
     pos:float2
@@ -432,6 +451,8 @@ def fx_clear():
     fx_smokes = []
     fx_shake = 0.0
     fx_ruins = []
+    fx_rings = []
+    fx_texts = []
 
 def fx_tick(dt:float):
     tracers_tick(dt)
@@ -454,6 +475,10 @@ def fx_tick(dt:float):
     fx_heals = filter(fx_heals) h: h.t < HEAL_TIME
     for(fx_puffs) p: p.t += dt
     fx_puffs = filter(fx_puffs) p: p.t < PUFF_TIME
+    for(fx_rings) r: r.t += dt
+    fx_rings = filter(fx_rings) r: r.t < RING_TIME
+    for(fx_texts) s: s.t += dt
+    fx_texts = filter(fx_texts) s: s.t < FLOAT_TIME
 
 def fx_circle(at:float2, r:float, col:float4):
     gl.color(col):
@@ -462,6 +487,7 @@ def fx_circle(at:float2, r:float, col:float4):
 // ground_of(id): a live unit's feet on the canvas, or float2 { -1000000000.0, 0 } when it's gone or unseen.
 def fx_draw(ground_of):
     gl.set_shader("color")
+    draw_rings()
     for(fx_scorches) s:
         gl.color(float4 { 0.05, 0.04, 0.03, 0.5 * (1.0 - s.t / SCORCH_TIME) }):
             gl.translate(s.pos):
@@ -522,3 +548,72 @@ def fx_draw(ground_of):
         if d.t >= 0.0:
             let f = d.t / 1.6
             fx_circle(d.pos - float2 { 0.0, f * 10.0 }, d.size * (0.6 + f), float4 { 0.62, 0.56, 0.46, 0.5 * (1.0 - f) })
+
+// ------------------------------------------------------------------ a pack's own events (Casaide/creel#243)
+// A pack's Lua emits events of its own (emit, EV_PACK + code); its rules' "event_fx" says how each code looks: a ring
+// growing to "ring" tiles in "colour" at "at" (a: unit a's feet, b: unit b's, bc: b and c as a point in sim units), and
+// "text" floating up from there ({n} is the event's n), for "to": the owner of unit a, or anyone who sees the spot.
+// An optional "sound" (a name in the packs' audio.json) plays as it shows (#253).
+// The view's alone: read from each tick's events after the step, like fx_events.
+
+// The look of event e from its pack's event_fx (rules): whether ME sees it, where (sim units), the ring's tiles, its
+// colour and its text. ok is false for an event with no look, or one that isn't ME's to see.
+def pack_fx_of(e:Event, me:int) -> bool, int2, int, float4, string:
+    let none = int2 { 0, 0 }
+    if e.kind < EV_PACK: return false, none, 0, float4_1, ""
+    let fx = pack_fx_look(e)
+    if not fx: return false, none, 0, float4_1, ""
+    let at = gstr(fx, "at", "a")
+    var p = none
+    var who = -1
+    if at == "bc": p = int2 { e.b, e.c }
+    else:
+        let i = index_of(if at == "b": e.b else: e.a)
+        if i < 0: return false, none, 0, float4_1, ""
+        p = int2 { u_x[i], u_y[i] }
+    let ia = index_of(e.a)
+    if ia >= 0: who = u_owner[ia]
+    let to = gstr(fx, "to", "owner")
+    if p.x < 0 or p.y < 0 or p.x >= W * TILE or p.y >= H * TILE: return false, none, 0, float4_1, ""
+    let sees = if to == "owner": who == me else: fog[me][cell_of(p.x, p.y)] == 2
+    if not sees: return false, none, 0, float4_1, ""
+    let text = replace_string(gstr(fx, "text", ""), "\{n\}", string(e.n))
+    let hex = gstr(fx, "colour", "#ffffff")
+    return true, p, gint(fx, "ring", 0), hex_col(if hex.length == 7: hex.substring(1, 6) else: hex), text
+
+// The look the rules give event e (its event_fx entry), or nil.
+def pack_fx_look(e:Event) -> JV?: return if e.kind < EV_PACK: nil else: get(gobj(su_rules, "event_fx"), string(e.kind - EV_PACK))
+
+// The sound an event's look plays (its "sound", a name in the packs' audio.json), or "" (#253).
+def pack_fx_sound(e:Event) -> string:
+    let fx = pack_fx_look(e)
+    return if fx: gstr(fx, "sound", "") else: ""
+
+// This tick's pack events as rings and floating text (after_step).
+def pack_fx_events(me:int, ground_of):
+    if not has(su_rules, "event_fx"): return
+    for(events) e:
+        let ok, p, tiles, col, text = pack_fx_of(e, me)
+        if ok:
+            let at = ground_of(p.x, p.y)
+            if tiles > 0: fx_rings.push(Ring { at, float(tiles) * 1000.0 * RADIUS_PX, col, 0.0 })
+            if text != "": fx_texts.push(FloatText { at - float2 { 0.0, 18.0 }, text, col, 0.0 })
+            let snd = pack_fx_sound(e)
+            if snd != "": play_sound(snd, -6.0)
+
+// The rings, flat on the ground: a disc growing and fading (in fx_draw's canvas).
+def draw_rings():
+    for(fx_rings) r:
+        let k = r.t / RING_TIME
+        let c = r.col * float4 { 1.0, 1.0, 1.0, 0.45 * (1.0 - k) }
+        gl.color(c):
+            gl.translate(r.pos):
+                gl.scale(float2 { 1.0, 0.5 }):
+                    gl.circle(r.r * (0.25 + 0.75 * k), 32)
+
+// The floating texts, rising and fading, on the screen (the HUD's text batch): at is canvas to screen.
+def draw_float_texts(to_screen_of):
+    for(fx_texts) s:
+        let k = s.t / FLOAT_TIME
+        let p = to_screen_of(s.pos - float2 { 0.0, 14.0 * k })
+        tb_text_edged(p, s.text, 18, s.col * float4 { 1.0, 1.0, 1.0, clamp((1.0 - k) * 2.0, 0.0, 1.0) }, 1)
