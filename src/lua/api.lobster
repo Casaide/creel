@@ -20,7 +20,7 @@ let LA_NAMES = [ "unit_count", "u_id", "u_x", "u_y", "u_kind", "u_owner", "u_tas
     "emit", "event_count", "event_get",
     "place", "give", "spawn", "wait", "wait_for", "expect", "keep", "kept",
     "delivery_count", "delivery_get", "site_phase", "build_stage", "event_kind", "building_type_index", "stock", "stock_take", "stock_put", "hurt",
-    "reveal", "hide_cell", "discover_cell", "cell_known", "heal", "freeze", "frozen", "t_tag", "t_ranged", "take_cell" ]
+    "reveal", "hide_cell", "discover_cell", "cell_known", "heal", "freeze", "frozen", "t_tag", "t_ranged", "take_cell", "defeat", "defeated" ]
 let LA_TEST_FIRST = 96  // place ... kept: a pack's tests' own (testkit/pack_tests, #190), refused to its rules
 let LA_TEST_LAST = 103
 
@@ -93,7 +93,7 @@ def lua_of_json(v:JV) -> int:
 
 // The functions that change the sim: not while it's only being read (the view's calls, and can_place).
 let LA_WRITE_NAMES = [ "lay_foundation", "plant", "approach_cell", "set_u_task", "set_u_target", "set_u_work", "set_u_stuck", "set_u_moving", "set_pop", "want", "hold_take", "hold_put", "stock_take", "stock_put", "hurt",
-    "reveal", "hide_cell", "discover_cell", "heal", "freeze", "take_cell", "emit", "trained", "start_gather", "start_build", "approach_building", "clear_task", "unit_set", "building_set", "player_set" ]
+    "reveal", "hide_cell", "discover_cell", "heal", "freeze", "take_cell", "defeat", "emit", "trained", "start_gather", "start_build", "approach_building", "clear_task", "unit_set", "building_set", "player_set" ]
 let LA_WRITES = map(LA_WRITE_NAMES) n:
     let id = find(LA_NAMES) x: x == n
     assert id >= 0
@@ -597,6 +597,12 @@ def lua_api(id:int, a:[int]):
                     let got = min(n, max(0, left_at(c)))
                     for(got): take(c)
                     lx_r_int(got)
+        case 124, 125:  // defeat(p): player p is out, as if it had surrendered (an earlier defeat stands); defeated(p): whether it's out (#249)
+            let p = lx_a_player(a, 0, id)
+            if p >= 0:
+                if id == 124:
+                    if defeated[p] == 0: defeated[p] = tick + 1
+                else: lx_r_bool(defeated[p] != 0)
         default: lua_fail("an unknown API function")
 
 // ------------------------------------------------------------------ the hook points

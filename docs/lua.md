@@ -106,7 +106,8 @@ ids in columns. Every function checks its arguments: a bad one is an error in th
   `cell_known(p, c)` asks: a resource on a cell its side doesn't know isn't drawn for it, isn't gathered (a gather order
   there is a walk), and `nearest_resource` and the bots pass over it. `heal(i, n)` gives unit i back up to n hit points,
   never past its type's (its hit points then). `take_cell(c, n)` takes up to n of cell c's resource as gathering
-  takes it (the last turns the cell into its depleted terrain, #245); how many it took. `freeze(i, ticks)` holds unit i still, no moves and no blows, for `ticks`
+  takes it (the last turns the cell into its depleted terrain, #245); how many it took. `defeat(p)` puts player p out of the
+  match as a surrender does (an earlier defeat stands; the match's own end and winner follow), `defeated(p)` asks (#249). `freeze(i, ticks)` holds unit i still, no moves and no blows, for `ticks`
   (the longer of two); `frozen(i)` is how many are left. `t_tag(k, name)` says whether type k's line carries a tag (its
   row in the race's table), `t_ranged(k)` whether it shoots.
 - **Events (#187):** `emit(code, a, b, c, n)` puts the pack's own event in this tick's (kind 100 + code, code 0 to 899; the
