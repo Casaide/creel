@@ -163,6 +163,7 @@ def after_step():
         raze_mine()
     sounds_after_step()
     fx_events()
+    pack_fx_events(ME) x, y: ground_at(x, y)
     for(events) e:
         if e.kind == EV_SHOT: attack_t0.set(e.a, clock_s)
         elif e.kind == EV_HIT:
