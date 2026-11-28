@@ -348,6 +348,22 @@ def test_take_cell():  // (#245: a cell's resource drawn down by a pack's rule)
     W = 0
     H = 0
 
+def test_defeat():  // (#249: a pack's rule ends a player's game)
+    pop = [ 0, 0 ]
+    defeated = [ 0, 0 ]
+    tick = 40
+    run("function go() print(defeated(1)) defeat(1) print(defeated(1), defeated(0)) end")
+    check(call("go", []) == "false|true\tfalse", "defeat puts a player out, and defeated says so")
+    check(defeated[1] == 41 and defeated[0] == 0, "as a surrender does, this tick")
+    tick = 90
+    call("go", [])
+    check(defeated[1] == 41, "an earlier defeat stands")
+    run("function go() defeat(2) end")
+    check(find_string(call("go", []), "no player 2") >= 0, "a player that isn\'t there is an error")
+    tick = 0
+    defeated = []
+    pop = []
+
 def test_events():  // (#187: a pack's own events, and reading this tick's)
     events_on = true
     events = []
@@ -652,6 +668,7 @@ test_pooled_goods()
 test_hurt()
 test_effects()
 test_take_cell()
+test_defeat()
 test_events()
 test_process()
 test_pack_tests()
