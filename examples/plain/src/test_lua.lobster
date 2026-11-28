@@ -375,6 +375,31 @@ def test_is_bot():  // (#255: which players a bot plays, as the harness says)
     lua_bots = []
     pop = []
 
+def test_build_site():  // (#257: a site moved on by a pack's rule, no builder)
+    b_id = [ 3 ]
+    b_kind = [ 0 ]
+    b_owner = [ 0 ]
+    b_done = [ 0 ]
+    b_progress = [ 0 ]
+    b_hp = [ 1 ]
+    b_site = [ []::int ]
+    bt_build_ticks = [ 100 ]
+    bm_hp = [ [ 500 ] ]
+    run("function go() build_site(0, 40) print(b_progress(0), b_hp(0)) end")
+    check(call("go", []) == "40\t200", "build_site moves a site on, its hit points with it")
+    check(b_done[0] == 0, "and it isn\'t up yet")
+    run("function go() build_site(0, -1) end")
+    check(find_string(call("go", []), "0 or more") >= 0, "a site moves on by 0 or more")
+    b_id = []
+    b_kind = []
+    b_owner = []
+    b_done = []
+    b_progress = []
+    b_hp = []
+    b_site = []
+    bt_build_ticks = []
+    bm_hp = []
+
 def test_events():  // (#187: a pack's own events, and reading this tick's)
     events_on = true
     events = []
@@ -681,6 +706,7 @@ test_effects()
 test_take_cell()
 test_defeat()
 test_is_bot()
+test_build_site()
 test_events()
 test_process()
 test_pack_tests()
