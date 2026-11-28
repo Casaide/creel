@@ -13,7 +13,10 @@
 var inv_on = false        // the testkit checks every tick (wstep)
 var inv_broken = ""       // the first that broke, with its tick: "" while none has
 var inv_ticks = 0         // the ticks checked
-var inv_stuck_limit = 0   // "stuck": a walker held up this many ticks is a break (0: not checked; a pack's rules set it)
+var inv_stuck_limit = 0   // "stuck": a walker held up this many ticks is a break (0: not checked; the rules' invariants.stuck_limit, or the MCP's)
+
+// The rules' "invariants": {"stuck_limit": ticks} (a pack's rules file sets it: how long a walker may be held up), 0 if unset.
+def rules_stuck_limit() -> int: return gint(gobj(su_rules, "invariants"), "stuck_limit", 0)
 
 var inv_px = []::int      // inv_before: each unit's place, by slot, and its id
 var inv_py = []::int

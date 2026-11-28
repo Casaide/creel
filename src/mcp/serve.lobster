@@ -284,6 +284,7 @@ def mcp_handle(q:JV) -> string, JV:
         if err.length: return err, jnull()
         mcp_started = true
         events_on = true
+        inv_stuck_limit = rules_stuck_limit()  // (a step's stuck_limit overrides it)
         mcp_events = []
         mcp_event_ticks = []
         mcp_events_dropped = 0

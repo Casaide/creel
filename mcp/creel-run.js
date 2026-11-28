@@ -61,7 +61,8 @@ async function runScript (cfg, sim, script) {
           const tick = s ? s.tick : now
           let n = Math.min(left, STEP_MAX)
           if (hashEvery > 0) n = Math.min(n, hashEvery - (tick % hashEvery))
-          const q = { ticks: n, invariants: checked, stuck_limit: script.stuck_limit || 0 }
+          const q = { ticks: n, invariants: checked }
+          if (script.stuck_limit !== undefined) q.stuck_limit = script.stuck_limit  // (else the rules' invariants.stuck_limit)
           if (st.until) q.until = st.until
           s = await ask('step', q)
           left -= n

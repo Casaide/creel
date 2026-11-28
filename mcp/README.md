@@ -94,6 +94,8 @@ node creel/mcp/creel-run.js creel-mcp.json run.json [out.json]
   - **`save`** and **`load`** take a name.
 - **`hash_every`** (default 30) puts `[tick, hash]` in `hashes` every that many ticks.
 - **`invariants`** (default true) checks every invariant on every tick.
+- **`stuck_limit`** (ticks) breaks `stuck` when a walker is held up longer; left out, the rules' own
+  (`"invariants": {"stuck_limit": <ticks>}` in the pack's rules file), else not checked. `creel_step` takes it too.
 
 The run stops at the first step that fails, the first invariant that breaks, or an `until` that never came. The JSON
 holds `ok`, `start`, each step's result, `hashes` and the last `tick` and `hash`; when a run stops, it also holds
