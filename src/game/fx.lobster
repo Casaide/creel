@@ -553,6 +553,7 @@ def fx_draw(ground_of):
 // A pack's Lua emits events of its own (emit, EV_PACK + code); its rules' "event_fx" says how each code looks: a ring
 // growing to "ring" tiles in "colour" at "at" (a: unit a's feet, b: unit b's, bc: b and c as a point in sim units), and
 // "text" floating up from there ({n} is the event's n), for "to": the owner of unit a, or anyone who sees the spot.
+// An optional "sound" (a name in the packs' audio.json) plays as it shows (#253).
 // The view's alone: read from each tick's events after the step, like fx_events.
 
 // The look of event e from its pack's event_fx (rules): whether ME sees it, where (sim units), the ring's tiles, its
@@ -560,7 +561,7 @@ def fx_draw(ground_of):
 def pack_fx_of(e:Event, me:int) -> bool, int2, int, float4, string:
     let none = int2 { 0, 0 }
     if e.kind < EV_PACK: return false, none, 0, float4_1, ""
-    let fx = get(gobj(su_rules, "event_fx"), string(e.kind - EV_PACK))
+    let fx = pack_fx_look(e)
     if not fx: return false, none, 0, float4_1, ""
     let at = gstr(fx, "at", "a")
     var p = none
@@ -580,6 +581,14 @@ def pack_fx_of(e:Event, me:int) -> bool, int2, int, float4, string:
     let hex = gstr(fx, "colour", "#ffffff")
     return true, p, gint(fx, "ring", 0), hex_col(if hex.length == 7: hex.substring(1, 6) else: hex), text
 
+// The look the rules give event e (its event_fx entry), or nil.
+def pack_fx_look(e:Event) -> JV?: return if e.kind < EV_PACK: nil else: get(gobj(su_rules, "event_fx"), string(e.kind - EV_PACK))
+
+// The sound an event's look plays (its "sound", a name in the packs' audio.json), or "" (#253).
+def pack_fx_sound(e:Event) -> string:
+    let fx = pack_fx_look(e)
+    return if fx: gstr(fx, "sound", "") else: ""
+
 // This tick's pack events as rings and floating text (after_step).
 def pack_fx_events(me:int, ground_of):
     if not has(su_rules, "event_fx"): return
@@ -589,6 +598,8 @@ def pack_fx_events(me:int, ground_of):
             let at = ground_of(p.x, p.y)
             if tiles > 0: fx_rings.push(Ring { at, float(tiles) * 1000.0 * RADIUS_PX, col, 0.0 })
             if text != "": fx_texts.push(FloatText { at - float2 { 0.0, 18.0 }, text, col, 0.0 })
+            let snd = pack_fx_sound(e)
+            if snd != "": play_sound(snd, -6.0)
 
 // The rings, flat on the ground: a disc growing and fading (in fx_draw's canvas).
 def draw_rings():
