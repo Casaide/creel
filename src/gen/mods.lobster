@@ -7,7 +7,7 @@
 // key), as in GDScript. The models are the bake's (Godot's, until step 6c).
 
 let mod_roots = [ "../mods", "../mods_private" ]  // (a later folder's copy of a mod wins)
-let MOD_DATA_FILES = [ "parts.json", "creatures.json", "families.json", "palettes.json", "lexicon.json", "shots.json", "buildings.json", "tech.json", "ai.json", "audio.json", "atmosphere.json", "resources.json", "terrain.json" ]
+let MOD_DATA_FILES = [ "parts.json", "creatures.json", "families.json", "palettes.json", "lexicon.json", "shots.json", "buildings.json", "tech.json", "ai.json", "audio.json", "atmosphere.json", "resources.json", "terrain.json", "heroes.json" ]
 let MOD_DATA_DIRS = [ "rules", "maps", "voxel" ]
 let MOD_BASE_ERAS = [ "bronze", "medieval", "gunpowder" ]
 
