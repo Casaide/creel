@@ -333,6 +333,21 @@ def test_effects():  // (#239: sight lent for a while, secret cells, healing, ho
     teams = []
     num_players = 0
 
+def test_take_cell():  // (#245: a cell's resource drawn down by a pack's rule)
+    W = 4
+    H = 1
+    amount = [ 0, 7, 0, 0 ]
+    pool = [ -1, -1, -1, -1 ]
+    run("function go() print(take_cell(1, 3), amount(1), take_cell(0, 5)) end")
+    check(call("go", []) == "3\t4\t0", "take_cell takes what\'s asked, and nothing from a cell with none")
+    check(amount[1] == 4, "in the sim")
+    run("function go() take_cell(1, -1) end")
+    check(find_string(call("go", []), "0 or more") >= 0, "a cell gives 0 or more")
+    amount = []
+    pool = []
+    W = 0
+    H = 0
+
 def test_events():  // (#187: a pack's own events, and reading this tick's)
     events_on = true
     events = []
@@ -636,6 +651,7 @@ test_type_index()
 test_pooled_goods()
 test_hurt()
 test_effects()
+test_take_cell()
 test_events()
 test_process()
 test_pack_tests()
